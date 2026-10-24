@@ -1,0 +1,133 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vcsinstall"
+version = "0.1.0"
+description = "Install files into your repository from other repositories, with lockfile and push-back support."
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.12,<4.0"
+license = "BSD-3-Clause"
+authors = [
+    { name = "Aliaksei Yaletski", email = "a.eletsky@gmail.com" },
+]
+keywords = ["ai-agents", "cli", "files", "llm", "version-control"]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "llm-tool-cli==0.2.0",
+]
+
+# Uncomment to use the local shared-library checkout during development.
+# [tool.uv.sources]
+# llm-tool-cli = { path = "../llm-tool-cli", editable = true }
+
+[project.urls]
+Homepage = "https://github.com/Tiendil/vcsinstall"
+Repository = "https://github.com/Tiendil/vcsinstall"
+Issues = "https://github.com/Tiendil/vcsinstall/issues"
+Changelog = "https://github.com/Tiendil/vcsinstall/blob/main/CHANGELOG.md"
+
+[project.scripts]
+vcsinstall = "vcsinstall.cli.application:main"
+
+[dependency-groups]
+dev = [
+    "autoflake==2.4.*",
+    "black==26.10.*",
+    "changy==0.4.*",
+    "codespell==2.4.*",
+    "depmesh==0.2.0",
+    "donna==0.5.0",
+    "flake8==7.4.*",
+    "flake8-absolute-import==1.0.*",
+    "flake8-annotations-complexity==0.2.*",
+    "flake8-bandit==4.1.*",
+    "flake8-cognitive-complexity==0.1.*",
+    "flake8-docstrings==1.7.*",
+    "flake8-eradicate==1.5.*",
+    "flake8-functions==0.1.*",
+    "flake8-print==5.0.*",
+    "flake8-pyproject==1.2.*",
+    "flake8-pytest==1.4.*",
+    "isort==9.0.*",
+    "mypy==2.4.*",
+    "pytest==9.1.*",
+    "pytest-mock==3.17.*",
+    "tach==0.35.*",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.isort]
+profile = "black"
+line_length = 119
+
+[tool.black]
+line-length = 119
+
+[tool.flake8]
+ignore = [
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D106",
+    "D107",
+    "D200",
+    "D400",
+    "D401",
+    "S101",
+    "S113",
+    "S311",
+    "W503",
+    "CFQ004",
+    "E203",
+]
+max-line-length = 119
+exclude = [
+    "build",
+    "vcsinstall.egg-info",
+]
+
+[tool.autoflake]
+in_place = true
+remove_all_unused_imports = true
+remove_unused_variables = true
+recursive = true
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+strict = true
+implicit_reexport = true
+disallow_untyped_calls = true
+disallow_any_explicit = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/vcsinstall",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/README.md",
+    "/pyproject.toml",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["vcsinstall"]
