@@ -25,13 +25,12 @@ The following are out of scope:
 
 ## General principles
 
-Expected failures MUST cross boundaries as shared `Result[T]` environment-error values, except predicate matching as described below.
+Expected failures MUST cross boundaries as shared `Result[T]` environment-error values.
 Vcsinstall MUST use `llm_tool_cli` results/error foundations and preserve shared errors unless translation adds domain meaning or recovery.
 Package ownership alone MUST NOT trigger translation; raised shared exceptions MUST NOT become expected failures.
 Internal errors MUST be raised and MUST NOT become cells in normal CLI handling.
 
-Predicate matching is exempt from result conversion: it MUST return captures or `None`, MAY raise evaluation failures, and composites MUST propagate failures rather than treating them as non-matches.
-Result-returning callers MUST recover helper error values within their propagation scope; unrelated matching exceptions MAY propagate unchanged.
+Result-returning callers MUST recover helper error values within their propagation scope.
 
 Non-fatal problems MUST use warning cells submitted to scoped output, both provided by `llm_tool_cli`.
 Lower modules MUST NOT print diagnostics/JSON Lines or terminate.
@@ -104,11 +103,9 @@ They MUST NOT represent:
 
 - invalid arguments.
 - unloadable configuration.
-- dependency query failures preventing valid results.
+- failures preventing valid results.
 
 They MUST use warning cells and scoped delivery provided by `llm_tool_cli`, buffered until finalization after results or reported errors.
-
-Examples include unresolvable files patterns and command-source stderr or non-zero exits when usable dependencies remain available.
 
 ## Pydantic validation errors
 

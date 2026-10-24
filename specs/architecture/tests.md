@@ -61,7 +61,7 @@ Ordinary attribute replacement SHOULD NOT use `monkeypatch` when the standard fi
 
 Tests SHOULD live under the nearest owning package's `tests`, mirroring implementation structure where clearer and retaining nested component ownership.
 Files MUST use `test_<module>.py`.
-**Example:** `discovery/predicates/glob.py` maps to `discovery/predicates/tests/test_glob.py`, not a flattened discovery test package.
+**Example:** `package/submodule/component.py` maps to `package/submodule/tests/test_component.py`, not a flattened test package.
 Integration tests MAY belong to the exercised public boundary; CLI tests SHOULD live in `vcsinstall/cli/tests/`.
 
 Reusable utilities SHOULD use:
@@ -69,8 +69,6 @@ Reusable utilities SHOULD use:
 - `tests.make` — Small valid-data factories for:
 
   - Entities.
-  - Relations.
-  - Rules.
   - Other project data.
 
 - `tests.helpers`:
@@ -89,7 +87,7 @@ Tests SHOULD group by subject.
 Production functions MUST have test classes when they own non-trivial behavior; classes SHOULD have test classes when they own non-trivial behavior.
 Test classes MUST use `Test<PascalCaseSubject>` and group the subject's method tests.
 Method cases MUST use `test_<snake_case_method>__<snake_case_behavior>`; module-function cases MAY use `test_<case>`.
-**Example:** `TestLoadWorkspace.test_success` tests a function; `TestArtifact.test_parse__invalid_value` tests a method.
+**Example:** `TestLoadWorkspace.test_success` tests a function; `TestEntity.test_parse__invalid_value` tests a method.
 Test-only helpers need no test class.
 Standalone tests SHOULD be limited to module invariants/file checks without a natural function/class owner.
 
@@ -180,7 +178,7 @@ Tests SHOULD verify that the following survive until the CLI:
 - private causes.
 - callback propagation.
 
-They SHOULD distinguish no-match/warnings from fatal failure.
+They SHOULD distinguish warnings from fatal failure.
 
 CLI tests SHOULD verify:
 
@@ -214,7 +212,7 @@ Coverage SHOULD include:
   - `--config`.
   - TOML structure.
   - Defaults.
-  - Relation/rule/predicate/source validation.
+  - Schema validation.
   - Normalization.
   - Invalid configuration.
 
@@ -223,10 +221,7 @@ Coverage SHOULD include:
   - Command forms.
   - Options/protocols.
   - Cell shape.
-  - Relation lists.
-  - Dependency grouping/order.
-  - Relation filters.
-  - Configured reverse queries.
+  - Result ordering.
   - Warnings.
   - Errors/exits.
 

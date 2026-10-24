@@ -10,7 +10,6 @@ Python data structures representing project concepts; the following are out of s
 
 - exact entity names and constructor signatures.
 - CLI serialization formats.
-- dependency discovery algorithms.
 - behavioral validation rules.
 
 ## Dictionary
@@ -117,7 +116,7 @@ External and persisted values MUST remain exact.
 
 ## Semantic primitive types
 
-Distinct project primitive meanings, such as relation/artifact ids and template names, MUST use semantic Python types across boundaries, in entities, and in public signatures.
+Distinct project primitive meanings, such as template names, MUST use semantic Python types across boundaries, in entities, and in public signatures.
 `typing.NewType` SHOULD be used when runtime behavior matches the primitive.
 Small custom classes MAY add:
 
@@ -166,7 +165,6 @@ It MUST NOT contain narrower subsystem entities or depend on:
 Configuration entities MAY validate parsed TOML shape or reference validated domain entities.
 They SHOULD reject malformed input with Pydantic before lower layers and MUST preserve useful error context.
 Workspace entities MUST expose validated, file-shape-independent configuration concepts and shared concepts as domain entities.
-Configuration entities MUST NOT execute artifact sources.
 
 ## CLI entities
 
@@ -202,7 +200,6 @@ Metadata/logging/storage dictionaries MUST contain stable structured keys and MU
 
 Ordered user/configuration input SHOULD use ordered collections.
 Sets MAY deduplicate internally, but observable order MUST follow behavior specs explicitly.
-Relation grouping SHOULD use relation-id mappings.
 Semantic-id mappings SHOULD use semantic key types when possible.
 Optional values MUST use `None`, not sentinel strings.
 
@@ -212,7 +209,7 @@ Parsing layers SHOULD validate external input before constructing lower-layer en
 Model validation MAY enforce local invariants but MUST NOT perform:
 
 - filesystem access.
-- configuration or artifact discovery.
+- configuration discovery.
 - workspace loading.
 - subprocess or command execution.
 
