@@ -1,0 +1,50 @@
+source_roots = ["."]
+root_module = "ignore"
+ignore_type_checking_imports = true
+forbid_circular_dependencies = true
+layers_explicit_depends_on = true
+
+exclude = [
+    ".git/",
+    ".mypy_cache/",
+    ".pytest_cache/",
+    ".session/",
+    ".venv/",
+    "build/",
+    "dist/",
+    "**/__pycache__/",
+]
+
+layers = ["meta-tests", "cli", "support"]
+
+[[modules]]
+path = "vcsinstall"
+depends_on = []
+visibility = []
+
+[[modules]]
+path = "vcsinstall.**.tests"
+depends_on = ["vcsinstall.**", "vcsinstall.**.tests"]
+layer = "meta-tests"
+
+[[modules]]
+path = "vcsinstall.__main__"
+depends_on = ["vcsinstall.cli"]
+layer = "cli"
+
+[[modules]]
+path = "vcsinstall.cli"
+depends_on = ["vcsinstall.skills"]
+layer = "cli"
+
+[[modules]]
+path = "vcsinstall.skills"
+depends_on = []
+layer = "support"
+
+[external]
+exclude = ["pytest", "pytest_mock", "tach", "typer"]
+
+[rules]
+unused_ignore_directives = "warn"
+require_ignore_directive_reasons = "off"
