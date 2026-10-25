@@ -112,8 +112,13 @@ When a CLI repository argument was relative to the invocation's working director
 ### Version selection
 
 At most one of `branch`, `tag`, and `rev` MUST be present.
-When all three are absent, the dependency MUST follow the source repository's default version under the CLI source-version contract.
-A default selector MUST remain distinct from an explicitly named branch, even when both currently resolve to the same revision.
+When all three are absent, initial source selection MUST use the backend's default-version inference under the CLI source-version contract.
+For a Git declaration omitting all three fields and without a matching branch lock, the first locking operation MUST infer the remote's default branch name and record it as `branch` in the lockfile.
+While the configuration omits a selector, a matching Git branch lock MUST supply the dependency's effective branch selection for later operations.
+The recorded branch MUST remain selected when the remote's default branch changes.
+An explicitly configured branch with the same name MUST have the same effective selection as the inferred branch.
+CLI-generated Git declarations MUST write an inferred branch name into the configuration's `branch` field.
+Install and dependency update MUST preserve hand-written configuration under their existing command contracts.
 
 Branch and tag values MUST retain their literal spelling and case.
 They MUST select the same named branch or tag rather than a semantic-version range or the newest release.
@@ -164,12 +169,12 @@ Overlapping destinations and conflicts with the selected configuration or projec
 ## Configuration and locked state
 
 Configuration MUST describe requested dependencies and entry mappings.
-Resolved branch or tag commits and installed-content hashes MUST remain installation state under the CLI lockfile contract.
+Resolved branch or tag commits and installed-content hashes MUST remain installation state under `specs/behavior/lockfile.md`.
 A `rev` selector MUST represent the requested immutable pin rather than evidence that an entry has been installed or verified.
 
 A valid configuration MAY have no matching lock or no installed content.
-Editing a dependency definition or entry mapping MUST NOT make an old lock match the new declaration or acknowledge local changes as an accepted baseline.
-Lock matching, source freshness, and protection of prior installation baselines MUST follow the CLI command contracts.
+Editing a dependency definition or entry mapping MUST NOT make an old lock match a different effective binding or acknowledge local changes as an accepted baseline.
+Lock matching MUST follow `specs/behavior/lockfile.md`; source freshness and protection of prior installation baselines MUST follow the CLI command contracts.
 
 ## Configuration editing
 

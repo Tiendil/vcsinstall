@@ -17,7 +17,9 @@ The following topics are out of scope:
 ## Terms
 
 - `dependency` — a named installation unit binding one source repository and requested version selector to entries that share one locked immutable revision.
+- `effective selector` — the source version selection used by an operation, including an inferred branch retained in a matching dependency lock.
 - `entry` — a mapping from a path within a dependency's source repository to a destination in the target project; each entry belongs to one dependency.
+- `installation baseline` — the recorded content state of an entry at its dependency's shared locked revision.
 - `source repository` — a version-control repository from which files are installed.
 - `target repository` — the repository receiving installed files.
 - `project configuration file` — `vcsinstall.toml`, the tool's configuration for a project.

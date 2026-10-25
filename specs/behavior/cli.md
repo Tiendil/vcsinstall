@@ -81,6 +81,7 @@ The default project configuration filename MUST be `vcsinstall.toml`.
 The project lockfile filename MUST be `vcsinstall.lock`.
 The lockfile MUST belong to the selected configuration's directory, including when `--config` selects a differently named configuration file.
 Selected configurations MUST follow the schema and validation requirements in `specs/behavior/config.md`.
+Lockfile schema, content identity, and declaration matching MUST follow `specs/behavior/lockfile.md`.
 
 The following commands MUST select and validate existing project configuration before performing their requested operation:
 
@@ -148,7 +149,7 @@ Dependencies using different branches, tags, or revisions of the same normalized
 Different installed versions of one repository MUST remain independently usable through the same cache root.
 Any cached checkouts or snapshots for specific versions MUST remain distinguishable by their immutable revisions; using one MUST NOT cause another entry to read the wrong revision.
 Operations preparing source content MUST reuse valid cached repository data while obtaining the source freshness required by the command.
-Cache contents MUST be disposable; installation baselines and persistent push-tracking metadata MUST NOT depend on retaining cached checkouts.
+Cache contents MUST be disposable; installation baselines MUST NOT depend on retaining cached checkouts.
 
 Equivalent qualified and explicitly selected native locators MUST use the same cache identity.
 For example, dependencies declared with `git+https://example.com/shared.git#branch=main` and `git+https://example.com/shared.git#tag=v1.0` MUST select the same repository cache entry.
@@ -252,12 +253,16 @@ These options MUST NOT be required when the URL supplies the backend and version
 `--branch`, `--tag`, and `--rev` MUST be mutually exclusive and MUST NOT be combined with a version fragment, even when the selections appear equivalent.
 Equivalent URL-fragment and option forms MUST produce the same normalized declaration and selector semantics.
 
-Without a version fragment or option, the declaration MUST track the source repository's default version; for Git this MUST be the remote's default branch.
+Without a version fragment or option, `dependency add`, including with `--replace`, MUST infer the source repository's default version for the new definition.
+For Git, it MUST resolve the remote's default branch name and record that name as `branch` in both configuration and the dependency lock.
+Failure to identify an unambiguous Git default branch MUST cause an operational failure before project mutation.
+Later Git operations reusing that dependency lock MUST use the recorded branch name; changing the remote's default branch or clearing the cache MUST NOT switch that selection.
+Selector-less hand-written configuration MUST follow the inference and lock-reuse contracts in `specs/behavior/config.md` and `specs/behavior/lockfile.md`.
 Every successful `dependency add` MUST lock the selected version to an immutable revision.
 For a revision pin, any accepted abbreviation MUST resolve unambiguously, and the declaration MUST retain the resolved immutable identifier.
 Dependency declarations MUST record the backend, normalized native locator, and requested selector separately; version fragments MUST NOT become part of stored repository identity.
 
-`dependency update` MUST follow the configured default version or named branch, or resolve the same named tag again.
+`dependency update` MUST resolve the current target of the effective selector, including a previously inferred Git branch or the same named tag.
 It MUST NOT select a different tag by release ordering or change an immutable revision pin.
 Explicit source options without source arguments MUST be rejected.
 
@@ -358,7 +363,7 @@ For a new name, `--replace` MUST still create the dependency normally.
 
 Branch, tag, and default references MUST be refreshed before resolution for this invocation; immutable revisions MAY use valid cached data.
 The selected version MUST be resolved once for the dependency and used for every affected entry.
-Refreshing existing entries MUST follow `dependency update`'s baseline-verification and accepted-contribution reconciliation rules.
+Refreshing existing entries MUST follow `dependency update`'s baseline-verification and source-content equality rules.
 `--replace` MUST NOT override local-content protection or other validation.
 Validation or source-preparation failure MUST leave the previous configuration, lockfile, and installed content unchanged.
 Dependency redefinition MUST NOT advance or rewrite unrelated dependencies, even when their repository and selector match.
@@ -378,7 +383,7 @@ vcsinstall dependency add --replace formatting 'git+https://example.com/team/sha
 ### `vcsinstall dependency list` command
 
 Dependency list MUST report every declared dependency, including dependencies without entries, ordered by name.
-It MUST include repository identity, requested selector, and the matching shared locked revision, or null when no matching lock exists.
+It MUST include repository identity, effective selector, and the matching shared locked revision, or null when no matching lock exists.
 It MUST inspect local entry content under `list`'s local-status rules and report the per-dependency entry counts defined under Dependency records below.
 A file mapping or directory mapping MUST each count as one entry regardless of how many files it contains.
 Dependencies without entries MUST report zero for every entry count.
@@ -402,7 +407,7 @@ Every selected dependency MUST have a shared lock matching its definition.
 A missing or mismatching dependency lock MUST cause an operational failure identifying the dependency and providing guidance to run `install` or `dependency update NAME`, without inventing a comparison baseline.
 Name and lock validation MUST complete before fetching sources.
 
-For each selected dependency, the command MUST compare the locked immutable revision with the current revision selected by its configured repository and version selector.
+For each selected dependency, the command MUST compare the locked immutable revision with the current revision selected by its configured repository and effective selector.
 The comparison MUST follow `add`'s source-refresh and selector-resolution requirements, including its named-tag and immutable-revision-pin semantics.
 Any differing revision MUST count as outdated, even if installed source paths have identical content or the current target is not a descendant of the locked revision.
 A required refresh or selector-resolution failure MUST cause an operational failure identifying the affected dependency rather than classify it as current or use stale cached references.
@@ -410,7 +415,7 @@ Immutable revision pins MUST NOT be reported as outdated merely because newer co
 
 The command MAY populate or refresh the selected repository cache under the existing cache rules.
 It MUST NOT modify project configuration or lockfiles.
-Installed content and persistent push-tracking metadata MUST remain unchanged.
+Installed content MUST remain unchanged.
 The command MUST NOT require installed entry content or local-change verification; modified, missing, or unlocked entry content MUST NOT prevent comparison when the dependency's shared lock matches.
 An outdated result MUST identify a difference in source revisions rather than promise that an update can be applied successfully or count entries whose source content would change.
 
@@ -455,8 +460,10 @@ It MUST preserve dependency repository locations and requested selectors.
 A new repository or selector MUST be requested explicitly through `dependency add --replace` or configuration changes.
 Assigning an entry to another dependency MUST use `add --replace` or explicit configuration changes.
 
-Before replacing installed content, the command MUST verify it against the recorded baseline.
-Missing or untrustworthy entry baselines and unaccounted-for local changes MUST cause an operational failure without overwriting those changes.
+Before replacing installed content, the command MUST verify it against the recorded baseline and the prepared source content under Updating baselines in `specs/behavior/lockfile.md`.
+Missing or untrustworthy entry baselines MUST cause an operational failure.
+Local content matching either the prior baseline or the selected source content MUST pass local-content verification.
+Content differing from both MUST cause an operational failure without overwriting those changes.
 After explicit configuration changes, a prior dependency binding MAY be used to verify the recorded old installation baseline; it MUST NOT be treated as a matching lock for the new definition.
 Each selected dependency's requested version MUST resolve once for this invocation, and that revision MUST apply to all its entries.
 Content checks and source preparation MUST complete for the entire selection before installed content is changed.
@@ -467,10 +474,10 @@ Source deletions within a selected mapping MUST be reflected without changing un
 Entries whose resolved revision and installed content require no change MUST succeed as unchanged.
 Unselected dependencies MUST retain their locked revisions and installed content, even when they follow the same repository and branch.
 
-Previously pushed changes accepted into the selected source MUST be reconciled so those changes alone do not cause a false local-change conflict.
-Reconciliation MUST work when acceptance changes commit identity, including rebasing and squash merging.
-Additional local edits and incompatible upstream changes MUST remain protected.
-Acceptance elsewhere MUST NOT silently change a configured tag or revision pin.
+When local content already matches the selected source content, update MUST leave it untouched and record the new revision and content identity in the lockfile, even if it differs from the previous baseline.
+Equality MUST include kind and hash for the complete entry, including the full tree of a directory entry.
+This rule MUST apply independently of whether changes were pushed, the machine used to push them, or how they reached upstream.
+Only content at the revision selected by the dependency's effective selector MUST be used for this equality check.
 Success MUST emit one dependency record for each selected dependency followed by installation records for their entries, using `dependency update` as the operation.
 
 Examples:
@@ -528,8 +535,7 @@ The command MUST NOT assume that pushing implies permission to merge into the tr
 
 Without `--branch`, a contribution branch name MUST be chosen automatically and reported.
 `--branch` MUST name the new contribution branch and MUST NOT affect dependency or source-version selection.
-An existing unrelated remote branch MUST NOT be overwritten.
-Retries MUST preserve already published work rather than duplicate an unchanged contribution or rewrite unrelated history.
+An existing remote branch MUST NOT be overwritten; a branch-name collision MUST cause an operational failure before publication.
 
 `--message` and `--file` MUST be mutually exclusive.
 Relative message-file paths MUST resolve against the invocation's working directory after home expansion.
@@ -544,8 +550,9 @@ When changes are published, the results MUST identify:
 - the pushed revision.
 - the affected destinations.
 
-The command MUST NOT change installed files, advance the installation baseline merely because a push succeeded, or report the contribution as accepted.
-Subsequent commands MUST retain enough knowledge of the contribution to support retries and update reconciliation.
+The command MUST leave installed files, project configuration, and the lockfile unchanged and MUST NOT report publication as acceptance.
+It MUST NOT maintain persistent publication history.
+Selections and change detection MUST use the installation baseline and current local content; a previous push MUST NOT make a locally changed entry appear unchanged.
 Hosted pull-request creation MUST NOT be required for this command to succeed.
 
 Examples:
@@ -581,9 +588,9 @@ A missing dependency lock or one that does not match the dependency definition M
 It MAY fetch the locked immutable revision if it is missing from the cache.
 A source path absent at that revision MUST fail rather than automatically update the dependency to obtain it.
 
-Before installing an entry, add MUST compare the dependency's locked revision with the current revision selected by its configured repository and version selector.
+Before installing an entry, add MUST compare the dependency's locked revision with the current revision selected by its configured repository and effective selector.
 For default, branch, and tag selectors, it MUST refresh source information and resolve the current target for this invocation; cached references alone MUST NOT establish freshness.
-The comparison MUST use the configured default version, the same named branch, or the same named tag rather than choose a different tag by release ordering.
+The comparison MUST use the effective selector, including the recorded branch for an inferred Git selection, without choosing a different tag by release ordering.
 Immutable revision pins MUST NOT be considered outdated merely because newer commits exist and MUST NOT require refreshing source information solely to check for newer commits.
 Any difference between the compared immutable revisions MUST require explicit permission under the rule below, even when the selected source content is unchanged or the current target is not a descendant of the locked revision.
 Resolving a current revision for comparison MUST NOT change the dependency lock or select that revision for installation.
@@ -653,7 +660,7 @@ Bare `remove` MUST fail as a usage error, including when removal options are sup
 Selections MAY span source repositories and versions.
 Unknown entries MUST fail as invalid arguments, and all selectors, existing project metadata, and applicable content checks MUST be validated before any files or project metadata are changed.
 
-Both removal modes MUST remove the selected declarations and their corresponding lock records and local push-tracking associations.
+Both removal modes MUST remove the selected declarations and their corresponding lock records.
 They MUST preserve dependency declarations and shared dependency locks, including after a dependency's last entry is removed.
 Unselected entries and their metadata MUST remain unchanged.
 Unselected project content MUST remain unchanged.
@@ -739,11 +746,10 @@ It MUST preserve:
 - installed content.
 - project configuration.
 - lockfiles.
-- persistent push-tracking metadata.
 
 Previously published remote contributions and original source repositories MUST remain unchanged.
 Later operations requiring source data MUST recreate the cache as needed and retrieve revisions under their existing installation and update rules, including failure when a required locked revision is unavailable.
-Clearing the cache MUST NOT advance locked revisions or alter local-change detection and push reconciliation.
+Clearing the cache MUST NOT advance locked revisions or alter local-content comparisons.
 
 An absent or already empty cache MUST succeed as unchanged without creating it.
 The cache root and coordination metadata MAY remain after cleanup, but disposable cached data MUST be removed on success.
@@ -817,8 +823,8 @@ Automation dependency records MUST expose:
 - `dependency` — The project-local dependency name.
 - `vcs` — The source backend.
 - `repository` — The normalized native repository locator, excluding its version fragment.
-- `ref_kind` — The requested selector kind, using the installation record values below.
-- `ref` — The requested selector value, or null for the VCS default.
+- `ref_kind` — The effective selector kind, using the installation record values below.
+- `ref` — The effective selector value, or null when no named or pinned selector is available.
 - `revision` — The matching shared locked revision, or null when no matching dependency lock exists.
 
 Mutating dependency records MUST also expose `outcome`, using:
@@ -832,6 +838,8 @@ For `install` and `dependency update`, a dependency MUST be reported as unchange
 Records from `dependency update` or dependency redefinition MUST include `previous_revision`, using the prior recorded revision or null when no previous trustworthy lock existed.
 Dependency removal records MUST describe the definition and matching revision observed before removal; they MUST NOT imply that the dependency remains declared.
 Dependency list MUST NOT require a lockfile or fabricate a revision from a cached branch or tag.
+Dependency and installation selector fields MUST use the explicitly configured selector or, for selector-less Git configuration with a matching lock, the recorded branch name with `ref_kind = branch`.
+An omitted Git selector without a matching lock MUST use `ref_kind = default` and null `ref` without fetching source information.
 
 Dependency list records MUST additionally expose these nonnegative integer counts:
 
@@ -844,7 +852,7 @@ Each entry MUST contribute to exactly one local-status category under `list`'s r
 The sum of `modified`, `missing`, and `unlocked` MUST NOT exceed `entries`; all remaining entries MUST be clean.
 These counts MUST describe local state without implying that upstream freshness has been checked.
 
-Dependency outdated records MUST additionally expose `current_revision`, containing the current immutable revision resolved under the dependency's requested selector.
+Dependency outdated records MUST additionally expose `current_revision`, containing the current immutable revision resolved under the dependency's effective selector.
 The existing `revision` field MUST retain the matching locked revision; both values MUST be present and MUST differ for each reported dependency.
 
 ### Installation records
@@ -859,14 +867,14 @@ Automation records MUST expose these common fields:
 - `vcs` — The source VCS name.
 - `repository` — The normalized native repository locator, excluding the version fragment; `vcs` identifies its backend.
 - `source_path` — The repository-relative source path.
-- `ref_kind` — The source-selector kind, with these values:
+- `ref_kind` — The effective source-selector kind, with these values:
 
   - `default`.
   - `branch`.
   - `tag`.
   - `revision`.
 
-- `ref` — The owning dependency's requested selector value, or null for the VCS default.
+- `ref` — The owning dependency's effective selector value, or null when no named or pinned selector is available.
 - `revision` — The dependency's shared locked immutable revision, or null when its lock or the entry baseline does not match.
 - `status` — The local status defined for `list`, observed after the command's effects.
 
@@ -881,7 +889,7 @@ Repository and selector fields MUST describe the owning dependency rather than i
 Entry records for one dependency MUST agree on the shared revision when their baselines match.
 Push records MUST include `push_repository` identifying the named dependency's publication repository, including for unchanged entries.
 Every push record from one invocation MUST identify the same publication repository.
-Push records MUST also include `branch` and `push_revision`, using nulls when no contribution exists for an unchanged entry.
+Push records MUST also include `branch` and `push_revision` describing publication by this invocation, using nulls for unchanged entries.
 Every pushed entry in an invocation MUST identify the same contribution branch and pushed revision.
 The `revision` field MUST continue to identify the installation baseline rather than the newly pushed commit.
 
