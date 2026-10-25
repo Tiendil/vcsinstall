@@ -35,6 +35,7 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/architecture/modules_layout.md` — Ownership boundaries between project modules.
 - `./specs/architecture/naming.md` — Project and code naming conventions.
 - `./specs/architecture/tests.md` — Requirements for project tests.
+- `./specs/behavior/cache.md` — The shared repository cache contract.
 - `./specs/behavior/cli.md` — The tool's command-line interface contract.
 - `./specs/behavior/config.md` — The project configuration contract.
 - `./specs/behavior/locking.md` — The dependency locking contract.

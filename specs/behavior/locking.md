@@ -164,11 +164,9 @@ Modified, missing, or unlocked status MUST NOT by itself make inspection fail.
 
 When source content is retrieved to reproduce an existing baseline, its kind and hash MUST agree with that baseline before installation.
 A mismatch MUST fail rather than rewrite the expected hash, accept the cache's content, or select a newer revision.
-Operations requiring source data MUST recreate missing cache data as needed and retrieve required revisions under the applicable operation contract.
-Inability to retrieve a required immutable revision MUST cause an operational failure.
+Required source retrieval, including rebuilding missing cache data, MUST follow Repository reuse and revision isolation in `specs/behavior/cache.md`.
 Cache contents MUST remain disposable without changing locked revisions, baselines, or local-content comparisons.
-`cache clean` MUST preserve lock state under this contract.
-Preparation MAY populate the cache without making the project operation successful.
+Cache reuse and cleanup MUST preserve this contract under `specs/behavior/cache.md`.
 
 ## Source freshness
 

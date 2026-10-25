@@ -125,44 +125,8 @@ Configuration-independent commands MUST remain usable with an unusable `--config
 ### `--cache-dir DIRECTORY`
 
 This option MUST override the vcsinstall cache root for the invocation without changing project configuration or the lockfile.
-The supplied directory MUST be the complete application cache root; vcsinstall MUST NOT append another `vcsinstall` component to it.
-Home markers MUST be expanded, and relative directories MUST resolve against the invocation's working directory rather than the project root.
-
-Without this option, the cache root MUST use the platform's per-user cache location followed by `vcsinstall`.
-When the platform provides no usable default cache location, the fallback MUST be `<user-home>/.cache/vcsinstall`.
-If no default or home-based fallback can be resolved, operations requiring a cache MUST fail with guidance to provide `--cache-dir`.
-
-Cached repositories MUST reside under `<cache-root>/repos/<vcs-name>/<repo-name>`.
-The VCS component MUST identify the source backend, such as `git`, rather than the complete transport scheme, such as `git+https`.
-Repository cache identity MUST consist of the backend and normalized native repository locator defined below.
-The repository-name component MUST be derived deterministically from that complete identity and MUST distinguish repositories sharing a basename.
-It MAY combine a readable name with a digest of the normalized locator.
-
-Dependency names and version selectors MUST NOT contribute to repository cache identity.
-Source paths and local destinations MUST NOT create separate repository cache identities.
-Dependencies using different branches, tags, or revisions of the same normalized repository MUST share its repository cache entry while retaining independent locks.
-Different installed versions of one repository MUST remain independently usable through the same cache root.
-Any cached checkouts or snapshots for specific versions MUST remain distinguishable by their immutable revisions; using one MUST NOT cause another entry to read the wrong revision.
-Operations preparing source content MUST reuse valid cached repository data while obtaining the source freshness required by the command.
-Use of cached source data for locking MUST follow Source integrity and cache independence in `specs/behavior/locking.md`.
-
-Equivalent qualified and explicitly selected native locators MUST use the same cache identity.
-For example, dependencies declared with `git+https://example.com/shared.git#branch=main` and `git+https://example.com/shared.git#tag=v1.0` MUST select the same repository cache entry.
-Different native transports MUST remain separate identities; HTTPS and SSH locators MUST NOT be merged merely because they appear to address the same repository.
-The backend namespace MUST also separate an ordinary HTTP source from a Git source with the same underlying HTTPS address if HTTP source support is introduced.
-
-Cache-path validation and creation MUST occur only when an operation needs the cache.
-An explicit unusable cache path MUST fail without falling back to the default.
-Help and completion MUST ignore unavailable cache directories.
-The following commands MUST also remain usable without a cache:
-
-- `init`.
-- `list`.
-- `remove`.
-- `dependency list`.
-- `dependency remove`.
-- `skill`.
-- `version`.
+Cache-root selection and Cache-independent operations in `specs/behavior/cache.md` MUST govern path interpretation, defaults, and deferred cache access.
+Repository identity and layout and Repository reuse and revision isolation in that specification MUST govern cached repositories and their source content.
 
 ## Dependency definitions and source arguments
 
@@ -580,27 +544,9 @@ The required subcommand MUST be `clean`.
 
 ### `vcsinstall cache clean` command
 
-Cache clean MUST remove all disposable vcsinstall data from the effective cache root selected by the global `--cache-dir` rules.
-This MUST include all cached repositories, across VCS types and cached versions, rather than only repositories referenced by the current project.
+Cache clean MUST follow Cleanup in `specs/behavior/cache.md` for the effective cache root selected by the global `--cache-dir` rules.
 It MUST NOT accept repository or entry path selectors, positional arguments, or command-specific options.
 No confirmation prompt or `--force` option MUST be required.
-
-Cleanup MUST operate locally without network access or a VCS client.
-It MUST preserve:
-
-- installed content.
-- project configuration.
-- lockfiles.
-
-Previously published remote contributions and original source repositories MUST remain unchanged.
-Later source operations MUST follow Source integrity and cache independence in `specs/behavior/locking.md`.
-
-An absent or already empty cache MUST succeed as unchanged without creating it.
-The cache root and coordination metadata MAY remain after cleanup, but disposable cached data MUST be removed on success.
-Only vcsinstall-owned disposable cache data MAY be deleted; unrelated content in a directory selected by `--cache-dir` MUST be preserved.
-Cleanup MUST NOT follow symlinks within cached data to delete content outside the effective cache root.
-If another vcsinstall invocation is using the cache, cleanup MUST fail with an operational diagnostic before deleting cached data.
-Other cache-access or deletion failures MUST fail explicitly rather than report complete cleanup or fall back to another cache root.
 
 Success MUST emit one cache result record, including for an absent or already empty cache.
 
