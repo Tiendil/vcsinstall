@@ -10,7 +10,7 @@ This specification covers configuration-file behavior and the declarative projec
 The following are out of scope:
 
 - CLI invocation and output.
-- lockfile schemas and content-hash algorithms.
+- revision locking, lockfile schemas, and content-hash algorithms.
 - source fetching and installation algorithms.
 - cache and checkout organization.
 - module ownership and Python interfaces.
@@ -81,7 +81,7 @@ destination = "@/licenses/shared.txt"
 
 ## Dependencies
 
-Each key in `dependencies` MUST be the dependency's project-local name under the Named dependencies and shared locks contract in `specs/behavior/cli.md`.
+Each key in `dependencies` MUST be the dependency's project-local name, matching `[a-z][a-z0-9_-]*`.
 Each value MUST be a table with these fields:
 
 - `vcs` — Required nonempty string identifying the source backend.
@@ -112,23 +112,13 @@ When a CLI repository argument was relative to the invocation's working director
 ### Version selection
 
 At most one of `branch`, `tag`, and `rev` MUST be present.
-When all three are absent, initial source selection MUST use the backend's default-version inference under the CLI source-version contract.
-For a Git declaration omitting all three fields and without a matching branch lock, the first locking operation MUST infer the remote's default branch name and record it as `branch` in the lockfile.
-While the configuration omits a selector, a matching Git branch lock MUST supply the dependency's effective branch selection for later operations.
-The recorded branch MUST remain selected when the remote's default branch changes.
-An explicitly configured branch with the same name MUST have the same effective selection as the inferred branch.
-CLI-generated Git declarations MUST write an inferred branch name into the configuration's `branch` field.
-Install and dependency update MUST preserve hand-written configuration under their existing command contracts.
+Selector meaning, omitted-selector inference, and reuse of inferred branches MUST follow Version selection in `specs/behavior/locking.md`.
 
 Branch and tag values MUST retain their literal spelling and case.
-They MUST select the same named branch or tag rather than a semantic-version range or the newest release.
 `rev` MUST identify an immutable revision in the backend's complete representation; for Git it MUST be a full commit hash.
-CLI revision abbreviations MUST be resolved before being written as `rev`.
 Selector fields MUST be supported by the selected backend under the CLI native-semantics contract.
 
-CLI bare-reference inference MUST be recorded using the resolved selector field rather than repeated on later commands.
 Configuration selector strings MUST NOT undergo URL-fragment or percent decoding.
-Resolving branch and tag targets and checking source availability MUST belong to commands requiring that source information rather than configuration loading.
 
 ## Entries
 
@@ -139,7 +129,7 @@ Each item in `entries` MUST be a table containing these required nonempty string
 - `destination` — The final local path of the installed entry.
 
 Each entry MUST refer to an existing dependency declaration.
-Repository and version selection MUST come from that declaration under the CLI shared-lock contract.
+Repository and version selection MUST follow State and shared revisions in `specs/behavior/locking.md`.
 The CLI's `dependency://NAME/PATH` source argument MUST be represented by separate `dependency` and `source_path` fields.
 Configuration order MUST NOT alter dependency membership or entry identity.
 
@@ -168,20 +158,15 @@ Overlapping destinations and conflicts with the selected configuration or projec
 
 ## Configuration and locked state
 
-Configuration MUST describe requested dependencies and entry mappings.
-Resolved branch or tag commits and installed-content hashes MUST remain installation state under `specs/behavior/lockfile.md`.
-A `rev` selector MUST represent the requested immutable pin rather than evidence that an entry has been installed or verified.
-
-A valid configuration MAY have no matching lock or no installed content.
-Editing a dependency definition or entry mapping MUST NOT make an old lock match a different effective binding or acknowledge local changes as an accepted baseline.
-Lock matching MUST follow `specs/behavior/lockfile.md`; source freshness and protection of prior installation baselines MUST follow the CLI command contracts.
+Separation of declarations from installation state, declaration matching, and prior-baseline protection MUST follow State and shared revisions and Matching configuration in `specs/behavior/locking.md`.
+Persisted installation state MUST follow the representation in `specs/behavior/lockfile.md`.
 
 ## Configuration editing
 
 Commands MUST change configuration only when authorized by their contracts in `specs/behavior/cli.md`.
 Successful edits MUST leave valid configuration and preserve unrelated declarations and their meanings.
 Edits SHOULD preserve existing comments and declaration order.
-The effects of replacing or removing declarations, including failure guarantees, MUST follow those command contracts.
+The state effects of replacing or removing declarations and their failure guarantees MUST follow Operation contracts and Preparation and consistency in `specs/behavior/locking.md`.
 
 New or changed dependency declarations MUST use the separate normalized repository and selector fields defined above.
 New or changed entry declarations MUST use the separate dependency, source-path, and canonical-destination fields defined above.

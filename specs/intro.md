@@ -37,6 +37,7 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/architecture/tests.md` — Requirements for project tests.
 - `./specs/behavior/cli.md` — The tool's command-line interface contract.
 - `./specs/behavior/config.md` — The project configuration contract.
+- `./specs/behavior/locking.md` — The dependency locking contract.
 - `./specs/behavior/lockfile.md` — The project lockfile contract.
 - `./specs/behavior/skill_fixtures.md` — Requirements for built-in skill documentation.
 - `./specs/documentation/changelog.md` — Requirements for maintaining the project changelog.
