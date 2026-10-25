@@ -145,7 +145,7 @@ Runtime constructors and validators SHOULD remain preferred for untrusted primit
 
 ## Entity ownership
 
-Reusable entity infrastructure MUST belong to `llm_tool_cli.core`; domain entities shared across Vcsinstall modules MUST belong to `vcsinstall.domain`; other entities MUST belong to their responsibility's module.
+Reusable entity infrastructure MUST belong to `llm_tool_cli.core`; domain entities shared across vcsinstall modules MUST belong to `vcsinstall.domain`; other entities MUST belong to their responsibility's module.
 Public cross-module entity classes MUST be exported from, and imported through, the owning top-level package root.
 Re-exports MUST keep the defining owner clear.
 
@@ -213,5 +213,5 @@ Model validation MAY enforce local invariants but MUST NOT perform:
 - workspace loading.
 - subprocess or command execution.
 
-Such validation MUST live in behavior methods, runtime orchestration, or functions returning Vcsinstall-specific errors.
+Such validation MUST live in behavior methods, runtime orchestration, or functions returning vcsinstall-specific errors.
 Invalid input MUST follow the error architecture, never produce partially valid entities.

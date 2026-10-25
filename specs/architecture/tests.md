@@ -166,7 +166,7 @@ Optional `test_errors.py` SHOULD be omitted when producers cover all meaningful 
 ### Testing error-producing behavior
 
 Code propagation tests SHOULD compare against the owning error's declaration; literal code assertions MUST require an independently specified compatibility contract.
-Boundary tests SHOULD verify expected low-level failures, including external-input Pydantic failures, become returned Vcsinstall or `llm_tool_cli` errors, or warning cells.
+Boundary tests SHOULD verify expected low-level failures, including external-input Pydantic failures, become returned vcsinstall or `llm_tool_cli` errors, or warning cells.
 Result tests SHOULD inspect local/shared error values through result state, preserve mixed lists, and keep unexpected exceptions distinct from rendered expected failures.
 Propagation-boundary tests MUST verify retained shared diagnostic information.
 Producer tests SHOULD assert failure type and relevant context fields.
@@ -193,7 +193,7 @@ Tests SHOULD reuse automation payload/error assertions provided by `llm_tool_cli
 - parsing.
 - filtering.
 - stdout integration.
-- Vcsinstall policies.
+- vcsinstall policies.
 
 Output-producing domain tests MUST have a function-scoped fresh collecting emitter with restoration.
 CLI tests MUST use setup/finalization provided by `llm_tool_cli` without resetting application buffers themselves.

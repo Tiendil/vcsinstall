@@ -22,7 +22,7 @@ The following are out of scope:
 
 ## Modules
 
-All Vcsinstall code MUST belong under `vcsinstall/`.
+All vcsinstall code MUST belong under `vcsinstall/`.
 
 - `cli` — Command parsing, shared command registration, and application initialization.
 - `skills` — Document definitions and packaged Markdown.
@@ -33,7 +33,7 @@ Modules MUST have current responsibilities; empty placeholder subsystems MUST NO
 
 ## Shared infrastructure
 
-Vcsinstall MUST use application construction and shared skill/version command registration from `llm_tool_cli`, supplying its document definitions and distribution identity `vcsinstall`.
+vcsinstall MUST use application construction and shared skill/version command registration from `llm_tool_cli`, supplying its document definitions and distribution identity `vcsinstall`.
 Static application settings MUST be initialized before command-line parsing, using the tool label `VCSINSTALL`.
 Static settings MUST supply `vcsinstall.toml` as the default project configuration filename before parsing.
 

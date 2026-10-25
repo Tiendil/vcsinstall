@@ -26,7 +26,7 @@ The following are out of scope:
 ## General principles
 
 Expected failures MUST cross boundaries as shared `Result[T]` environment-error values.
-Vcsinstall MUST use `llm_tool_cli` results/error foundations and preserve shared errors unless translation adds domain meaning or recovery.
+vcsinstall MUST use `llm_tool_cli` results/error foundations and preserve shared errors unless translation adds domain meaning or recovery.
 Package ownership alone MUST NOT trigger translation; raised shared exceptions MUST NOT become expected failures.
 Internal errors MUST be raised and MUST NOT become cells in normal CLI handling.
 
@@ -42,7 +42,7 @@ Messages SHOULD diagnose problems without stack details.
 
 ## Error ownership
 
-Vcsinstall bases MUST belong to `vcsinstall.core.errors`.
+vcsinstall bases MUST belong to `vcsinstall.core.errors`.
 Shared errors MUST retain their:
 
 - hierarchy.
@@ -50,7 +50,7 @@ Shared errors MUST retain their:
 - messages.
 - records.
 
-Top-level error owners SHOULD define `errors` hierarchies with an `InternalError` root inheriting Vcsinstall's core internal base and an `EnvironmentError` root inheriting Vcsinstall's core environment base.
+Top-level error owners SHOULD define `errors` hierarchies with an `InternalError` root inheriting vcsinstall's core internal base and an `EnvironmentError` root inheriting vcsinstall's core environment base.
 Category roots MUST explicitly use `EnvironmentError`/`InternalError`, not an ambiguous `Error` or boundary-only name.
 Specific errors MUST belong where useful context can be added.
 Unique cases SHOULD have subclasses.
@@ -59,7 +59,7 @@ Production errors MUST NOT live in tests; test-only errors MAY verify handling.
 
 ## Error models and internal exceptions
 
-Vcsinstall's environment-error base MUST inherit shared `EnvironmentError`, identify Vcsinstall-owned failures for policy, and inherit the shared default exit status without overriding it.
+vcsinstall's environment-error base MUST inherit shared `EnvironmentError`, identify vcsinstall-owned failures for policy, and inherit the shared default exit status without overriding it.
 Errors MUST remain presentation-independent Pydantic models, define `code`/`message`, and MUST NOT inherit `Exception`.
 They MAY add guidance and typed context.
 Leaf classes SHOULD declare messages/guidance; call sites SHOULD supply only varying context.
@@ -74,7 +74,7 @@ Internal errors MUST NOT provide environment codes or diagnostic serialization.
 
 ## Results
 
-Fallible functions SHOULD return `Result[T]`; failures MUST use shared `EnvironmentErrors`, which MAY mix shared/Vcsinstall values.
+Fallible functions SHOULD return `Result[T]`; failures MUST use shared `EnvironmentErrors`, which MAY mix shared/vcsinstall values.
 Success MUST use `Ok(value)`; failure MUST use `Err(errors)`.
 Independent validation failures SHOULD be collected in one result.
 Compatible propagation SHOULD preserve the original result/list without rewrapping.
@@ -139,7 +139,7 @@ After protocol installation, command handling provided by `llm_tool_cli` MUST ow
 - stdout delivery.
 - exit.
 
-Vcsinstall MUST NOT maintain another error-rendering/exit path.
+vcsinstall MUST NOT maintain another error-rendering/exit path.
 Errors MUST remain typed shared cells until shared projection of content/guidance/metadata.
 Shared error handling MUST NOT submit journal records or require workspace setup.
 Non-CLI errors MAY declare shared-core exit overrides; termination MUST remain at the shared CLI boundary.

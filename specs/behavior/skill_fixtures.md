@@ -18,7 +18,7 @@ The following are out of scope:
 
 Built-in skill documentation MUST be included in the installed distribution and be available without project configuration.
 Every document offered by the skill command MUST have packaged Markdown content.
-Each fixture MUST start with one h1 identifying Vcsinstall and the document's subject.
+Each fixture MUST start with one h1 identifying vcsinstall and the document's subject.
 
 ## Usage fixture
 

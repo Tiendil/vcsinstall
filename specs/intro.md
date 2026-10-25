@@ -33,7 +33,7 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/architecture/entities.md` — Conventions for modeling project data.
 - `./specs/architecture/errors.md` — Conventions for representing and propagating diagnostics.
 - `./specs/architecture/modules_layout.md` — Ownership boundaries between project modules.
-- `./specs/architecture/naming.md` — Code naming conventions.
+- `./specs/architecture/naming.md` — Project and code naming conventions.
 - `./specs/architecture/tests.md` — Requirements for project tests.
 - `./specs/behavior/cli.md` — The tool's command-line interface contract.
 - `./specs/behavior/skill_fixtures.md` — Requirements for built-in skill documentation.
@@ -49,4 +49,4 @@ The corresponding specifications in `llm-tool-cli` own the generic contracts for
 - globs.
 - output.
 
-Vcsinstall's specs define their application and tool-specific behavior.
+vcsinstall's specs define their application and tool-specific behavior.

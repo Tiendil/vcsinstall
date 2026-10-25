@@ -21,7 +21,7 @@ The README MUST primarily address humans discovering `vcsinstall`.
 It MAY discuss coding agents but MUST NOT duplicate the full built-in agent skills.
 It SHOULD quickly explain:
 
-- the problem and Vcsinstall's role.
+- the problem and vcsinstall's role.
 - the current development status.
 - how to try available commands.
 - where to find detailed documentation.
@@ -61,7 +61,7 @@ Helpful lower-level subsections MAY appear; deep implementation details SHOULD b
 
 ### Purpose and status
 
-The README MUST explain that Vcsinstall's intended purpose is installing files into a target repository from source repositories, with a lockfile and support for pushing local changes back to their source.
+The README MUST explain that vcsinstall's intended purpose is installing files into a target repository from source repositories, with a lockfile and support for pushing local changes back to their source.
 The rationale SHOULD explain why tracking the source of copied files and preserving a path for returning local changes are useful.
 It MUST NOT imply support for particular version-control systems, source hosts, or synchronization policies without corresponding behavior specifications.
 
