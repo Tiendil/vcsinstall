@@ -80,6 +80,7 @@ LLM cell framing MUST use `VCSINSTALL`, including shared errors produced during 
 The default project configuration filename MUST be `vcsinstall.toml`.
 The project lockfile filename MUST be `vcsinstall.lock`.
 The lockfile MUST belong to the selected configuration's directory, including when `--config` selects a differently named configuration file.
+Selected configurations MUST follow the schema and validation requirements in `specs/behavior/config.md`.
 
 The following commands MUST select and validate existing project configuration before performing their requested operation:
 
@@ -323,6 +324,7 @@ Entry result records MUST be ordered by canonical destination path.
 
 Init MUST follow the Initialization command contract in `specs/behavior/cli.md` in `llm-tool-cli`, using invocation cwd, optional `--config`, and default filename `vcsinstall.toml`.
 It MUST create a valid starter configuration with no dependencies or installed entries.
+Starter contents MUST follow the Starter configuration contract in `specs/behavior/config.md`.
 It MUST NOT fetch repositories or create a lockfile.
 No positional arguments or command-specific options MUST be accepted.
 
