@@ -10,6 +10,7 @@ This specification covers command invocation, output, and observable effects at 
 The following are out of scope:
 
 - configuration and lockfile schemas.
+- shared repository identity and source-path semantics.
 - revision locking, content hashing, and baseline state transitions.
 - internal cache lifecycle and checkout organization.
 - adapter architecture.
@@ -125,7 +126,9 @@ Repository identity and layout and Repository reuse and revision isolation in th
 Dependency names and declarations MUST follow `specs/behavior/config.md`, and terminology MUST follow `specs/dictionary.md`.
 Shared revision and baseline semantics MUST follow State and shared revisions in `specs/behavior/locking.md`.
 
-### Repository locators and identity
+### Repository arguments
+
+Repository argument normalization MUST follow Repository locators and identity in `specs/behavior/vcs-interaction.md` and the selected backend's contract.
 
 `REPOSITORY` MUST accept VCS-qualified URLs of the form `<vcs>+<transport>://...`, including `git+https`, `git+ssh`, and `git+file` for Git.
 The VCS prefix MUST select the backend, and the remainder MUST identify the native repository locator using that backend's transport semantics.
@@ -140,16 +143,10 @@ HTTP backend support MAY be introduced separately; until supported, HTTP source 
 A `.git` suffix or a familiar hosting domain MUST NOT override this distinction.
 For example, `git+file:///home/user/shared` MUST identify a Git repository, while plain `file:///home/user/shared` MUST identify ordinary filesystem content.
 
-Client invocations MUST use locator syntax supported by the selected installed client and preserve its native transport meaning.
 For example, Git's `git+ssh://...` MUST normalize to native `ssh://...`, while an SVN `svn+ssh://...` locator MUST retain the native SVN-over-SSH scheme when passed to its client.
-vcsinstall's version fragment MUST NOT become part of the repository address passed to the client.
+URL normalization MUST separate vcsinstall's source-version fragment from the native repository locator.
 
 Relative native repository paths MUST resolve against the invocation's working directory; the recorded location MUST retain that meaning on later invocations from other directories.
-Normalization MUST preserve the locator's native meaning, including transport and authority.
-Repository identity MUST be the backend together with that normalized native locator, independent of URL selector spelling or equivalent option syntax.
-Different locators MUST NOT be equated merely through matching basenames or assumed equivalence between HTTPS and SSH addresses.
-Native query parameters MUST retain their transport meaning; vcsinstall MUST NOT interpret them as source-version selectors.
-`@` in a transport address MUST NOT be interpreted as a vcsinstall version suffix.
 
 ### Source-version fragments and option aliases
 
@@ -196,7 +193,7 @@ Each source backend MUST follow its contract for selectors and extraction from a
 Repository acquisition, refresh, and outgoing workflows MUST follow the hosting contracts and selection rules in `specs/behavior/vcs-interaction.md`.
 Unversioned-source behavior MUST NOT silently weaken the locking and publication contracts of VCS-backed dependencies.
 
-### Source paths
+### Source arguments
 
 `SOURCE` MUST use `dependency://NAME/PATH`, resolving `NAME` only against declared project dependencies.
 Unknown names MUST fail before fetching sources or changing project files.
@@ -205,14 +202,8 @@ Query parameters and fragments MUST NOT be accepted.
 Raw repository URLs and per-entry version options MUST NOT be accepted by `add`.
 The path after the authority separator MUST be percent-decoded exactly once as `SOURCE_PATH`, preserving literal `+` characters.
 An empty path, as in `dependency://ci/`, MUST select the repository content root, equivalent to `.`.
-Malformed escapes and decoded paths escaping the repository root MUST fail explicitly.
-
-`SOURCE_PATH` MUST name a literal repository-relative path at the selected revision, using `/` separators.
-It MUST NOT imply hosting-specific package discovery or modify the dependency's repository locator or version selector.
-It MUST NOT be interpreted as a package name or expanded as a glob.
-`.` MUST select the repository's content root.
-Absolute source paths and paths escaping that root MUST be rejected.
-Source paths MUST NOT undergo local home expansion or interpretation relative to the invocation's working directory.
+Malformed escapes MUST fail explicitly.
+The decoded `SOURCE_PATH` MUST satisfy Source paths in `specs/behavior/vcs-interaction.md`.
 
 ## Local path arguments and entry selection
 

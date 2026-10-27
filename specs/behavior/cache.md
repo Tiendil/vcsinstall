@@ -68,7 +68,7 @@ Whether acquisition, source inspection, or delivery needs cached data MUST follo
 
 Cached repositories MUST reside under `<cache-root>/repos/<vcs-name>/<repo-name>`.
 The VCS component MUST identify the source backend, such as `git`, rather than its transport scheme, such as `git+https`.
-Repository identity MUST consist of the backend and normalized native repository locator under Repository locators and identity in `specs/behavior/cli.md`, with configured filesystem paths interpreted under `specs/behavior/config.md`.
+Repository identity MUST follow Repository locators and identity in `specs/behavior/vcs-interaction.md`, with configured filesystem paths interpreted under `specs/behavior/config.md`.
 The repository-name component MUST be a single filesystem component derived deterministically from that complete identity and MUST distinguish repositories sharing a basename.
 It MAY combine a readable name with a digest of the normalized locator.
 Repository-entry locations MUST satisfy the Filesystem containment contract in `specs/behavior/paths.md` in `llm-tool-cli`, using the effective cache root as the supplied root.

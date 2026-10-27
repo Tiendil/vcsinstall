@@ -20,7 +20,7 @@ The following are out of scope:
 The backend name MUST be `git`.
 The common contract MUST follow `specs/behavior/vcs-interaction.md`.
 Repository acquisition, refresh, and outgoing changes MUST follow `specs/behavior/hosting/git.md` or `specs/behavior/hosting/github.md` for the selected hosting implementation.
-Repository locators MUST follow Repository locators and identity in `specs/behavior/cli.md`, including qualified URLs, native Git schemes, local paths, and scp-style addresses.
+Repository locators MUST support native Git URLs, local paths, and scp-style addresses under Repository locators and identity in `specs/behavior/vcs-interaction.md`.
 Configured locators MUST retain Git's native form under `specs/behavior/config.md`.
 
 Client execution MUST follow External integrations in `specs/architecture/modules_layout.md`.
@@ -74,7 +74,6 @@ Local object inspection MUST NOT trigger an implicit fetch of missing objects.
 Revision consistency across entries MUST follow Version resolution and anchoring in `specs/behavior/vcs-interaction.md`.
 
 The content root MUST be the committed tree, excluding Git administrative data belonging to the original repository or cache.
-Source `.` MUST select that tree, and literal source paths MUST be interpreted relative to its root independently of a client's current directory.
 Ordinary and executable Git blobs MUST extract as regular files, and trees MUST extract as directories.
 Committed executable-file metadata SHOULD be preserved where the destination filesystem supports it; local permission-only changes MUST remain outside the content identity defined by `specs/behavior/locking.md`.
 

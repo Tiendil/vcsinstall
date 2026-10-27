@@ -2,11 +2,11 @@
 
 ## Goal of the document
 
-This document describes repository acquisition and refresh, source interpretation and extraction, and explicit delivery of installed changes.
+This document describes the common source and hosting contract for identifying repositories and accessing or delivering their content.
 
 ## Scope
 
-This specification covers inputs, source data, revision resolution, external effects, and failures at source and hosting boundaries.
+This specification covers shared repository and source-path semantics and the observable guarantees at source and hosting boundaries.
 The following are out of scope:
 
 - CLI parsing and result serialization.
@@ -20,7 +20,7 @@ The following are out of scope:
 
 Terminology MUST follow `specs/dictionary.md`.
 Architectural responsibilities and integration choices MUST follow `specs/architecture/modules_layout.md`.
-Repository arguments and source paths MUST follow `specs/behavior/cli.md`; persisted declarations MUST follow `specs/behavior/config.md`.
+CLI argument syntax and input decoding MUST follow `specs/behavior/cli.md`; persisted declarations MUST follow `specs/behavior/config.md`.
 Revision selection, baseline verification, and project state changes MUST follow `specs/behavior/locking.md`.
 Persisted revision and content identities MUST follow `specs/behavior/lockfile.md`.
 Source and hosting access using the repository cache MUST follow `specs/behavior/cache.md`.
@@ -28,6 +28,29 @@ Source and hosting access using the repository cache MUST follow `specs/behavior
 Test-only adapters MUST be available only when explicitly supplied by a test environment under `specs/architecture/tests.md`.
 Normal application execution MUST reject them as unsupported, without a production CLI option that enables them.
 They MUST be supplied independently; selecting one MUST NOT implicitly enable another source or hosting adapter.
+
+## Repository locators and identity
+
+Repository identity MUST consist of the source backend and its normalized native repository locator, independently of equivalent input syntax.
+Version selectors and resolved revisions MUST NOT form part of repository identity.
+Normalization MUST preserve the locator's native meaning, including transport and authority, under the selected backend's contract.
+Different locators MUST NOT be equated merely through matching basenames or assumed equivalence between HTTPS and SSH addresses.
+
+Normalized native locators MUST exclude vcsinstall's source-version fragments.
+Native query parameters MUST retain their transport meaning; vcsinstall MUST NOT interpret them as source-version selectors.
+`@` in a transport address MUST NOT be interpreted as a vcsinstall version suffix.
+Relative filesystem locators MUST use the directory base established by their input contract in `specs/behavior/cli.md` or `specs/behavior/config.md`.
+
+## Source paths
+
+A source path MUST name a literal repository-relative path at the selected revision, using `/` separators.
+It MUST NOT imply hosting-specific package discovery or modify the dependency's repository locator or version selector.
+It MUST NOT be interpreted as a package name or expanded as a glob.
+`.` MUST select the repository's content root.
+Absolute source paths and paths escaping that root MUST be rejected.
+Source paths MUST NOT undergo local home expansion, project-path interpretation, or resolution against a local working directory.
+
+The backend MUST identify its content root, including which repository data belongs to the content tree and which administrative data is excluded.
 
 ## Backend selection and capabilities
 
@@ -38,7 +61,7 @@ The supported production source backends MUST be:
 
 Tests MAY explicitly supply the test-only `noop` source under `specs/behavior/vcs/noop.md`, independently of hosting selection.
 
-Backend selection MUST be explicit through the normalized declaration produced under the CLI repository-locator rules.
+Backend selection MUST be explicit in the normalized repository identity under Repository locators and identity.
 An unknown or unsupported backend MUST fail explicitly without falling back to Git or ordinary filesystem access.
 Creating a backend specification MUST NOT by itself advertise an unimplemented command or capability as available.
 
@@ -107,7 +130,7 @@ A required but unavailable client MUST cause an operational failure; vcsinstall 
 Authentication and commit-identity failures MUST remain operational diagnostics.
 Filesystem and noop source or hosting access MUST NOT require or invoke a VCS executable.
 
-Client invocations MUST preserve native locator, transport, and authority semantics under Repository locators and identity in `specs/behavior/cli.md`.
+Client invocations MUST use locator syntax supported by the selected installed client, preserving locator meaning under Repository locators and identity.
 Repository locators, selectors, and paths MUST be passed as data without allowing them to become shell commands or unintended client options.
 Paths MUST retain their literal meaning even when a native client ordinarily interprets them as patterns or revision syntax.
 Native client output MUST follow the CLI's protocol-delivery contract rather than be copied directly into the result stream.
@@ -164,10 +187,9 @@ Extraction MUST distinguish:
 An inspection or retrieval failure MUST NOT be reported as source-path absence.
 Whether absence can establish or update an entry MUST follow `specs/behavior/locking.md`.
 Extraction MUST preserve literal names and file bytes without applying package discovery or application-specific layout rules.
-The backend MUST identify which repository data belongs to the content tree and which administrative data is excluded.
 
 Unsupported source objects or names that cannot be represented safely at the destination MUST fail before project mutation rather than be omitted, followed, or renamed silently.
-Source paths MUST remain within the selected content root; symbolic links MUST NOT bypass source or destination containment.
+Symbolic links MUST NOT bypass source or destination containment.
 Prepared source content MUST satisfy Content identity and Source integrity and cache independence in `specs/behavior/locking.md`.
 
 ## Contribution publication

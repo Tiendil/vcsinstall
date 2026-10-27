@@ -64,7 +64,7 @@ If the remote's default later becomes `stable`, `dependency update` continues fo
 ## Matching configuration
 
 A dependency lock MUST match a declaration only when its name, effective repository identity, and effective selector agree.
-Repository identity MUST follow the Repository locators and identity contract in `specs/behavior/cli.md`, with configured filesystem paths interpreted under `specs/behavior/config.md`.
+Repository identity MUST follow Repository locators and identity in `specs/behavior/vcs-interaction.md`, with configured filesystem paths interpreted under `specs/behavior/config.md`.
 A Git declaration omitting a selector MUST match a branch lock for the same dependency name and repository identity, using that recorded branch as its effective selector.
 An explicit branch selection MUST match a recorded inferred branch with the same branch name when dependency name and repository identity agree.
 A tag or revision lock MUST NOT satisfy an omitted Git selector.

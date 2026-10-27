@@ -98,7 +98,7 @@ Dependencies without entries MUST remain valid declarations.
 ### Repository identity
 
 Backend support MUST follow Backend selection and capabilities in `specs/behavior/vcs-interaction.md`.
-Effective repository identity MUST follow Repository locators and identity in `specs/behavior/cli.md` and the selected backend's contract.
+Effective repository identity MUST follow Repository locators and identity in `specs/behavior/vcs-interaction.md` and the selected backend's contract.
 The explicit `vcs` field MUST select the backend for `repository`; a transport such as HTTPS MUST NOT override it.
 
 New or changed dependency declarations written by vcsinstall MUST record the selected backend and normalized native repository locator separately.
@@ -134,7 +134,7 @@ Configuration order MUST NOT alter dependency membership or entry identity.
 
 ### Source paths
 
-`source_path` MUST follow the Source paths contract in `specs/behavior/cli.md`.
+`source_path` MUST follow Source paths in `specs/behavior/vcs-interaction.md`.
 Configuration source-path strings MUST NOT undergo URL or percent decoding.
 The same source path MAY appear in multiple entries with different destinations.
 

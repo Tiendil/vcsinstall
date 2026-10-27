@@ -23,7 +23,7 @@ Acquisition of the source directory and outgoing changes MUST follow `specs/beha
 The supplied repository view MUST expose the existing readable source directory for local inspection.
 An unavailable or invalid directory view MUST remain an operational failure rather than be treated as an empty repository.
 
-Backend selection for plain `file://` repository URLs MUST follow Repository locators and identity in `specs/behavior/cli.md`.
+Backend selection for plain `file://` repository URLs MUST follow Repository arguments in `specs/behavior/cli.md`.
 File URLs MUST support an empty authority or `localhost`, decode their filesystem path exactly once, and preserve literal `+` characters.
 Other authorities MUST fail explicitly as unsupported locators; mounted filesystem locations MAY be addressed through their native paths.
 Query components MUST fail as unsupported rather than be interpreted as filesystem path data.
@@ -67,7 +67,7 @@ All content prepared for one dependency operation MUST agree with its one select
 Source changes that prevent consistent preparation MUST cause operational failure before project mutation.
 Unreadable or unsupported objects MUST fail rather than be skipped while fingerprinting or extracting.
 
-Source `.` MUST select the source directory's contents, including empty directories and hidden content.
+The content root MUST be the source directory, including empty directories and hidden content.
 Files and directories MUST be treated as ordinary content without VCS ignore rules or special treatment of files named after VCS metadata.
 Symbolic links below the resolved source root MUST be rejected under Filesystem containment in `specs/behavior/paths.md` in `llm-tool-cli`; the root itself MAY be selected through a resolved symlink.
 Source and installed destination locations MUST NOT overlap in either direction; operations creating such an overlap MUST fail before mutation.
