@@ -29,9 +29,10 @@ Each stage's final checkbox includes all of the following:
 - Add tests alongside the changed behavior under [the test architecture](../architecture/tests.md). Prefer real temporary files and local repositories; use independently supplied source and hosting collaborators for orchestration tests. Do not add tests merely for passive fields or inherited shared-library behavior.
 - Check the affected specifications, code, and tests together. Preserve shared diagnostics and use shared results, command contexts, logic cells, and output delivery directly. Runtime constructs complete command payloads; the CLI passes parsed intent.
 - Maintain package exports and the module restrictions in [module structure](../architecture/modules_layout.md). Extend `tach.toml` and applicable `depmesh.toml` mappings as real responsibilities appear, without creating empty packages or weakening dependency checks.
-- Update help, `README.md`, and packaged usage documentation in the same stage when available behavior changes. Remove the scaffold's obsolete claim that the configuration and lockfile formats are undecided when first aligning those documents with the completed specs. Record notable changes through the existing Changy sources and generation workflow.
+- Update help, `README.md`, and packaged usage documentation in the same stage when available behavior changes. Remove the scaffold's obsolete claim that the configuration and lockfile formats are undecided when first aligning those documents with the completed specs.
+- Agents MUST NOT update `changes/unreleased.md` or `CHANGELOG.md` while executing this refactoring plan, including during research, implementation, and final review. Changelog regeneration MUST NOT be part of these stages.
 - Run `donna -p llm run @/workflows/polish.donna.md` for implementation stages, with development operations executed through repository container helpers. Run `./bin/dev-check-runtime.sh` when packaged resources, runtime dependencies, entry points, or installed-package behavior change. Research and documentation stages may omit runtime tests when no runtime behavior changes, but must leave the existing implementation consistent.
-- Record review evidence: implemented scope, checks and results, remaining limitations, and any concrete follow-up stages. Mark a stage complete only after its own work and this gate are complete.
+- Record detailed review evidence in a linked `.session/` report, including implemented scope, checks and results, remaining limitations, and concrete follow-up stages. Keep only the actionable summary and completion status in the plan. Mark a stage complete only after its own work and this gate are complete.
 
 Before adding rich domain entities, obtain the explicit approval required by [Domain entities](../architecture/entities.md#domain-entities); data entities with pure policy functions remain an available design.
 Dependency, lockfile, Docker, and tool-installation changes require the authorization described in `AGENTS.md`; a research finding must become a concrete prerequisite task before dependent implementation proceeds.
@@ -40,7 +41,7 @@ Product specification changes require a separate explicit request and an index u
 ## Maintaining the plan
 
 Research stages produce concrete decisions, experiments, and revised checklists rather than speculative production abstractions.
-Task-local supporting artifacts may live under `.session/` and be linked from the relevant stage, but decisions needed to execute the plan must also be summarized here because session storage is temporary.
+Detailed research notes, API inventories, experiments, source references, and validation logs MUST be stored under `.session/` and linked from the relevant stage. The plan MUST retain only actionable decisions, prerequisites, and checklist progress; decisions needed to execute later stages must remain understandable if session storage is cleared.
 Split a stage before implementation if its concrete design contains several independently reviewable features.
 Update later stages when a completed slice establishes a clearer interface or reveals a prerequisite, preserving a working review boundary after every replacement stage.
 
@@ -48,11 +49,29 @@ Update later stages when a completed slice establishes a clearer interface or re
 
 Relevant contracts: [module structure](../architecture/modules_layout.md), [entities](../architecture/entities.md), [errors](../architecture/errors.md), [cache](../behavior/cache.md), and the adopted `llm-tool-cli` contracts.
 
-- [ ] Compare the pinned `llm-tool-cli==0.2.0` API with the sibling checkout and the Donna/Depmesh integrations; identify the public APIs for project loading, initialization, paths, results, command scopes, output, and test fixtures.
-- [ ] Resolve how to add invocation-local `--cache-dir` while retaining shared application construction and shared ownership of `--protocol` and `--config`. The inspected shared constructor currently accepts only application help and declares the two shared options; identify an extension or a separately authorized shared-library prerequisite instead of copying its callback infrastructure.
-- [ ] Choose a configuration/lockfile TOML-writing approach and cache-lock mechanism, including comment-preservation tradeoffs, unchanged-byte guarantees, concurrent metadata changes, and ordering of file and metadata effects. Identify any required direct dependencies or Docker/native-client changes without applying them in this research stage.
-- [ ] Record the proposed project-model style, approval needs for any rich domain entities, and native Git/`gh` capabilities needed for the specified object formats and hosted workflows. Keep network-free test strategies explicit.
-- [ ] Update this plan with concrete prerequisite stages and decisions; complete the common review gate with the existing scaffold still working.
+- [x] Compare the pinned `llm-tool-cli==0.2.0` API with the sibling checkout and the Donna/Depmesh integrations; identify the public APIs for project loading, initialization, paths, results, command scopes, output, and test fixtures.
+- [x] Resolve how to add invocation-local `--cache-dir` while retaining shared application construction and shared ownership of `--protocol` and `--config`. The inspected shared constructor currently accepts only application help and declares the two shared options; identify an extension or a separately authorized shared-library prerequisite instead of copying its callback infrastructure.
+- [x] Choose a configuration/lockfile TOML-writing approach and cache-lock mechanism, including comment-preservation tradeoffs, unchanged-byte guarantees, concurrent metadata changes, and ordering of file and metadata effects. Identify any required direct dependencies or Docker/native-client changes without applying them in this research stage.
+- [x] Record the proposed project-model style, approval needs for any rich domain entities, and native Git/`gh` capabilities needed for the specified object formats and hosted workflows. Keep network-free test strategies explicit.
+- [x] Update this plan with concrete prerequisite stages and decisions; complete the common review gate with the existing scaffold still working.
+
+### Research outcome
+
+Detailed findings, API inventory, experiments, source references, and validation evidence are in the [Stage 1 research report](../../.session/implementation-stage-1/research.md).
+
+- Reuse shared APIs directly; add the public global-option extension before Stage 22.
+- Use immutable data entities and pure project-policy functions.
+- Use TOML Kit for persisted edits, Portalocker for persistent OS-backed locks, and Platformdirs for cache-location lookup; declare direct dependencies in their prerequisite stages.
+- Complete metadata-writer coordination research in Stage 11b and subprocess cache-lease research in Stage 22a before implementing their dependent operations.
+
+## Stage 1a — Direct modeling and CLI dependencies
+
+Prerequisite for Stage 2 and later consumer imports; the working CLI scaffold remains the review boundary.
+
+- [ ] Declare `pydantic>=2.12,<3` and `typer~=0.25.1` as direct runtime requirements, preserving the compatible shared-library requirement and avoiding reliance on transitive imports.
+- [ ] Update `uv.lock` through the repository helper and rebuild the development image, without adding unrelated packages or changing runtime parameters.
+- [ ] Verify the existing scaffold and installed wheel with the declared runtime dependency closure.
+- [ ] Record the dependency change and validation evidence; complete the common review gate before starting Stage 2.
 
 ## Stage 2 — Technical foundations and semantic values
 
@@ -144,13 +163,31 @@ Relevant contracts: [dependency list](../behavior/cli.md#vcsinstall-dependency-l
 - [ ] Include dependencies without entries, preserve independent dependency names, and avoid upstream-freshness claims or installation records.
 - [ ] Test counts and ordering, empty projects, inferred/default selectors, stale locks, unsupported arguments, and project/cache/client independence of group help; complete the common review gate.
 
+## Stage 11a — Workspace persistence dependencies
+
+Prerequisite for Stages 11b–13 and the later cache lock; no project mutation behavior is exposed in this dependency stage.
+
+- [ ] Add direct runtime requirements for `tomlkit>=0.15.1,<0.16` and a compatible Portalocker 4.x release; resolve and lock the concrete versions rather than importing development-only packages.
+- [ ] Update `uv.lock` through the repository helper and rebuild the development image.
+- [ ] Verify TOML 1.1 edits with comments, literal strings, and array-of-table layouts, and verify that Portalocker contention/release preserves the coordination file; retain these as bounded dependency experiments until their behavior is exercised by owned implementation tests.
+- [ ] Check the existing scaffold and installed wheel and record platform limits for the selected lock implementation; complete the common review gate.
+
+## Stage 11b — Research project metadata writer coordination
+
+Prerequisite for Stages 12, 13, and 29; serialization and replacement alone do not complete the concurrency contract.
+
+- [ ] Choose and demonstrate one stable per-project writer guard, independent of cache location and of the replaceable metadata inode. Account for read-only configuration and legal entry destinations before introducing any new coordination path.
+- [ ] Demonstrate two participating processes preparing the same generation: after the first commits, the second must detect stale captured state before changing installed content or metadata. Define lock ordering so project coordination and cache access cannot deadlock.
+- [ ] Document exactly which writers are excluded and what external edits can be detected. Resolve any stronger nonparticipating-writer requirement explicitly before implementation; do not label a separate read/check/rename sequence atomic compare-and-swap or relax the owning specification.
+- [ ] Add the small guard implementation stage(s) and failure tests needed by the proven design, including partial-effect ordering and stable coordination through metadata replacement; complete the common review gate with existing operations unchanged.
+
 ## Stage 12 — Configuration editing
 
 Relevant contracts: [configuration editing](../behavior/config.md#configuration-editing) and [preparation and consistency](../behavior/locking.md#preparation-and-consistency).
 
 - [ ] Implement workspace edits of supplied dependency and entry declarations without making project-policy decisions or performing source access.
 - [ ] Preserve unrelated meanings and, using the researched approach, comments/order where practical; write normalized repository fields and canonical destinations for changed declarations.
-- [ ] Preserve bytes for logical no-ops and protect existing configuration against serialization, replacement, and detected concurrent-edit failures.
+- [ ] Preserve bytes for logical no-ops and protect existing configuration against serialization, replacement, and detected concurrent-edit failures using the coordination design completed after Stage 11b.
 - [ ] Test add/replace/remove edit batches, literal-string round trips, custom configuration filenames, unchanged bytes, and failure preservation; complete the common review gate.
 
 ## Stage 13 — Lockfile persistence
@@ -158,7 +195,7 @@ Relevant contracts: [configuration editing](../behavior/config.md#configuration-
 Relevant contracts: [lockfile writes and failures](../behavior/lockfile.md#writes-and-failures).
 
 - [ ] Serialize validated project state to the prescribed version-1 lockfile with stable record ordering and no cache paths, timestamps, or incidental machine state.
-- [ ] Implement atomically visible replacement with concurrent-change protection and preservation of an existing file on serialization or replacement failure.
+- [ ] Implement atomically visible replacement with the writer coordination and generation checks completed after Stage 11b, preserving an existing file on serialization or replacement failure; a separate byte check is not an atomic conditional replacement.
 - [ ] Keep lockfile bytes unchanged for logical no-ops, and support record-only operations that must leave an absent lockfile absent.
 - [ ] Test read/write round trips, deterministic manifests, concurrent replacement, first-write failure, existing-file failure, and no-op preservation; complete the common review gate.
 
@@ -234,21 +271,40 @@ Relevant contracts: [external integrations](../architecture/modules_layout.md#ex
 - [ ] Keep client stdout/stderr out of the protocol stream and ensure locators, literal paths, and selectors cannot become shell commands or unintended client options.
 - [ ] Test unavailable executables, failed/successful invocations, literal unusual arguments, retained causes/context, and protocol-stream isolation; complete the common review gate.
 
+## Stage 21a — Shared application option extension prerequisite
+
+Prerequisite for Stage 22; this is a separate implementation task spanning the sibling `llm-tool-cli` project and its adoption here, subject to that project's instructions and authorization for dependency/configuration changes.
+
+- [ ] Add an opt-in public shared factory extension for composing consumer-supplied typed root options with shared protocol/configuration options, preserving existing consumer behavior and shared ownership of parsing/setup.
+- [ ] Test custom-option help/completion and parsing, invalid-protocol identity before callbacks, unusable custom/config paths for project-independent commands, and repeated invocation isolation in the shared library.
+- [ ] Adopt an available compatible shared-library build/version in vcsinstall and update its lockfile/image; any local-source/Docker integration must be explicit, and release publication remains a separate task. Keep existing Donna/Depmesh-style callers compatible.
+- [ ] Verify vcsinstall's existing entry points and installed-package behavior through repository helpers, without introducing cache access or copying/replacing the shared callback; complete the common review gate.
+
 ## Stage 22 — Cache roots and owned repository storage
 
 Relevant contracts: [cache-root selection](../behavior/cache.md#cache-root-selection), [repository identity](../behavior/cache.md#repository-identity-and-layout), and [cache ownership](../behavior/cache.md#cache-ownership).
 
-- [ ] Add invocation-local `--cache-dir` through the integration decided in Stage 1, deferring resolution and validation until an operation needs the cache.
+- [ ] Add invocation-local `--cache-dir` through the public integration completed in Stage 21a, deferring resolution and validation until an operation needs the cache.
+- [ ] Declare the direct runtime requirement `platformdirs>=4,<5`, update the lockfile through the repository helper, and rebuild the image before importing its noncreating per-user cache-base lookup.
 - [ ] Implement explicit/default/fallback root selection, home expansion, invocation-relative resolution, and one stable effective absolute root per invocation.
 - [ ] Establish repository storage identity and ownership under `repos/<vcs>/<repo-name>`, distinguishing complete normalized locators while sharing storage across dependencies, selectors, projects, and hosting choices.
 - [ ] Test absent roots, unusable explicit/default roots without fallback, basename collisions, unrelated content conflicts, containment, incomplete owned data, and cache-independent commands with unusable overrides; complete the common review gate.
+
+## Stage 22a — Research cache lock lifetime through native processes
+
+Prerequisite for Stage 23; Portalocker's API portability does not establish child-process lease retention.
+
+- [ ] Verify the selected Portalocker wrapper's timeout, persistent-file, and normal/exception release behavior on the development platform, without changing the required 10-second contract.
+- [ ] Prove lock retention while a cache-using child remains alive after abrupt parent termination; exercise actual Git process behavior as well as a controlled child, and account for cache-using descendants.
+- [ ] Define normal failure cleanup that terminates or waits for children before explicit unlock, and verify any non-POSIX implementation separately before claiming equivalent support. Record concrete platform limits or required implementation prerequisites without weakening the cache contract.
+- [ ] Record the proven native-process/lease interface and required integration tests for Stage 23; insert any needed native-runner follow-up stage before it rather than reopening a completed Stage 21. Complete the common review gate with current commands unchanged.
 
 ## Stage 23 — Exclusive cache access
 
 Relevant contracts: [cache access locking](../behavior/cache.md#cache-access-locking).
 
 - [ ] Implement one exclusive `<cache-root>/cache.lock` boundary used by every cached read/write, with independent roots and the specified 10-second acquisition timeout.
-- [ ] Hold protection through native subprocess access and release it on normal completion, failure, and process termination without treating a persistent lock file as a held lock.
+- [ ] Hold protection through native subprocess access using the lifecycle design proven in Stage 22a, releasing it on normal completion, failure, and process termination without treating a persistent lock file as a held lock.
 - [ ] Preserve the lock file and existing root across release; do not create or acquire them for cache-independent operations.
 - [ ] Test contention with independent processes, acquisition after another owner exits, timeout with no protected mutation, failure/termination release, and stable coordination-file identity; complete the common review gate.
 
@@ -429,7 +485,7 @@ Relevant contracts: [Git patch delivery](../behavior/hosting/git.md#patch-delive
 Relevant contracts: [Git branch delivery](../behavior/hosting/git.md#branch-delivery), [local safeguards](../behavior/hosting/git.md#local-publication-safeguards), and [push results](../behavior/cli.md#installation-records).
 
 - [ ] Add native Git branch delivery to the source or explicit recipient, using a valid explicit/generated name and conditional ref creation that cannot advance any existing branch.
-- [ ] Enforce the resolved recipient/ref despite client push defaults and preserve local recipients' worktrees, indexes, configuration, and checked-out branches; reject the target project's own Git repository.
+- [ ] Enforce the resolved recipient/ref despite client push defaults and preserve local recipients' worktrees, indexes, configuration, and checked-out branches; reject the target project's own Git repository. Treat an up-to-date porcelain response as an existing-branch collision even when Git exits zero.
 - [ ] Expose branch mode and extend noop delivery with persistent fixture branches, collision injection, and known/uncertain publication effects; report actual recipient, branch, and contribution revision.
 - [ ] Test real local bare/non-bare recipients, different publication repositories, concurrent branch creation, explicit and automatic names, permission failures without fork fallback, and project-state byte preservation; complete the common review gate.
 
@@ -449,7 +505,7 @@ Relevant contracts: [direct completion](../behavior/hosting/git.md#commit-and-co
 - [ ] Publish a prepared direct commit with parent B only if the existing destination branch still equals B, allowing only that branch's fast-forward advancement and no silent retry at a different head.
 - [ ] Reject branches checked out in any worktree of a local recipient and preserve local/target repository safeguards without bypassing native receiving policies.
 - [ ] Expose direct mode and extend noop simulations for concurrent movement, conflicts, and already-present content; report verified already-present delivery as pushed at B without creating a commit.
-- [ ] Test real local ref races, deleted/recreated destinations, no-write retries, receiving failures, correct outcomes, and unchanged project files/baselines; complete the common review gate.
+- [ ] Test real local ref races, deleted/recreated destinations, no-write retries, receiving failures, correct outcomes, and unchanged project files/baselines. Distinguish a confirmed conditional advancement from Git's zero-exit up-to-date response; complete the common review gate.
 
 ## Stage 46 — Explicit filesystem overwrite delivery
 
@@ -499,10 +555,10 @@ Relevant contracts: [review creation and retry](../behavior/hosting/github.md#re
 
 ## Stage 51 — Final specification and installed-package review
 
-Relevant contracts: [CLI](../behavior/cli.md), [test architecture](../architecture/tests.md), [README](../documentation/readme.md), [skill fixtures](../behavior/skill_fixtures.md), and [changelog](../documentation/changelog.md).
+Relevant contracts: [CLI](../behavior/cli.md), [test architecture](../architecture/tests.md), [README](../documentation/readme.md), and [skill fixtures](../behavior/skill_fixtures.md).
 
 - [ ] Audit every owning specification against implemented boundaries and tests, recording any uncovered contract as its own small follow-up stage before declaring the plan complete.
 - [ ] Review all exposed commands, help/completion, supported backend/hosting/mode combinations, default/explicit protocols, deterministic ordering, null effect fields, warnings/errors, and repeated invocation isolation; retain the absence of root `update`/`push` aliases and production noop access.
-- [ ] Reconcile README and packaged usage with the completed scope, including directory ownership versus complete-tree contribution selection, filesystem history limits, locked restoration, and noninteractive contribution modes; regenerate the changelog from its maintained sources.
+- [ ] Reconcile README and packaged usage with the completed scope, including directory ownership versus complete-tree contribution selection, filesystem history limits, locked restoration, and noninteractive contribution modes.
 - [ ] Run the full Donna polish workflow and installed-wheel runtime check through repository helpers; verify packaged initialization and a temporary-project installation/inspection workflow outside the source tree.
 - [ ] Provide the final human-review handoff with stage completion, validation evidence, and any explicitly remaining limitations; complete the common review gate.
