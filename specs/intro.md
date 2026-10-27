@@ -23,6 +23,8 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/` — all specifications.
 - `./specs/architecture/` — system architecture.
 - `./specs/behavior/` — observable tool behavior.
+- `./specs/behavior/vcs/` — source backend behavior.
+- `./specs/behavior/hosting/` — outgoing delivery and hosted-service behavior.
 - `./specs/documentation/` — documentation artifacts.
 - `./specs/meta/` — specification-writing requirements.
 
@@ -30,23 +32,30 @@ The index MUST be kept complete and accurate when specifications are added, remo
 
 - `./specs/intro.md` — Index of project specifications.
 - `./specs/dictionary.md` — Shared project terminology.
-- `./specs/architecture/entities.md` — Conventions for modeling project data.
+- `./specs/architecture/entities.md` — Conventions for typed project data and boundary models.
 - `./specs/architecture/errors.md` — Conventions for representing and propagating diagnostics.
-- `./specs/architecture/modules_layout.md` — Ownership boundaries between project modules.
-- `./specs/architecture/naming.md` — Code naming conventions.
+- `./specs/architecture/modules_layout.md` — Project module responsibilities and dependency boundaries.
+- `./specs/architecture/naming.md` — Project and code naming conventions.
 - `./specs/architecture/tests.md` — Requirements for project tests.
-- `./specs/behavior/cli.md` — The tool's command-line interface contract.
+- `./specs/behavior/cache.md` — The shared repository cache contract.
+- `./specs/behavior/cli.md` — The command invocation, selection, and result contract.
+- `./specs/behavior/config.md` — The project declaration and configuration contract.
+- `./specs/behavior/files-and-directories.md` — The file and directory management contract.
+- `./specs/behavior/locking.md` — The dependency revision and installation state contract.
+- `./specs/behavior/lockfile.md` — The persisted installation state format and file I/O contract.
 - `./specs/behavior/skill_fixtures.md` — Requirements for built-in skill documentation.
+- `./specs/behavior/vcs-interaction.md` — The shared repository access and change delivery contract.
+- `./specs/behavior/vcs/git.md` — The Git source contract.
+- `./specs/behavior/vcs/filesystem.md` — The filesystem source contract.
+- `./specs/behavior/vcs/noop.md` — The test-only noop source contract.
+- `./specs/behavior/hosting/git.md` — The native Git delivery contract.
+- `./specs/behavior/hosting/github.md` — The GitHub contribution and review contract.
+- `./specs/behavior/hosting/filesystem.md` — The filesystem delivery contract.
+- `./specs/behavior/hosting/noop.md` — The test-only noop hosting contract.
 - `./specs/documentation/changelog.md` — Requirements for maintaining the project changelog.
 - `./specs/documentation/readme.md` — The root README's documentation contract.
 - `./specs/meta/general.md` — Requirements for specification content and presentation.
 - `./specs/meta/behavior.md` — Rules for expressing observable behavior in specifications.
 
-The corresponding specifications in `llm-tool-cli` own the generic contracts for:
-
-- configuration.
-- paths.
-- globs.
-- output.
-
-Vcsinstall's specs define their application and tool-specific behavior.
+Shared CLI and infrastructure contracts adopted by vcsinstall belong to the corresponding specifications in `llm-tool-cli`.
+This index lists vcsinstall's specifications, which define their application and tool-specific behavior.

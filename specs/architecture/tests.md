@@ -10,7 +10,7 @@ Python test organization and architectural expectations; the following are out o
 
 - framework/CI configuration.
 - exact fixture names.
-- publishing checks.
+- package release checks.
 - performance benchmarks.
 
 ## Dictionary
@@ -27,14 +27,7 @@ Tests MUST belong to the Python project and run through development containers, 
 They SHOULD be deterministic for the same repository/filesystem state.
 Required shared state MUST be prepared at test start or via class/module autouse fixtures.
 
-Tests SHOULD prefer public-boundary end-to-end coverage where practical, using:
-
-- real code.
-- temporary files.
-- explicit fixtures.
-- small fakes.
-
-Mocks, stubs, and patching SHOULD be minimal.
+Tests SHOULD prefer public-boundary end-to-end coverage where practical, using the alternatives to mocking under Mocking below.
 
 Tests MUST NOT use networks, user-specific files outside test-created temporary directories, or alter Docker configuration/runtime parameters.
 They SHOULD verify observable behavior/local validation, not declarations, and separate orthogonal cases.
@@ -44,6 +37,7 @@ Boolean assertions MUST use `assert condition` or `assert not condition` rather 
 
 ## Mocking
 
+Mocks, stubs, and patching SHOULD be minimal.
 The following SHOULD be preferred:
 
 - real code.
@@ -57,11 +51,22 @@ Use `mocker.patch("<import.path>", ...)` for imported names/settings when `pytes
 Direct `MagicMock` is only for local fakes passed into subjects.
 Ordinary attribute replacement SHOULD NOT use `monkeypatch` when the standard fixture is available.
 
+## Adapter integration boundaries
+
+Source and hosting adapters MUST be independently replaceable by controlled test collaborators through the boundaries in `specs/architecture/modules_layout.md`.
+The noop source and hosting adapters MUST follow their respective contracts in `specs/behavior/vcs/noop.md` and `specs/behavior/hosting/noop.md`.
+Tests of acquisition and delivery orchestration MAY combine a controlled source backend and separate noop hosting without native clients or network effects.
+They MAY also combine a real Git source with noop hosting, using test-prepared local repository views and the real Git client for local inspection; acquisition, refresh, and publication MUST remain simulated in that combination.
+Tests of native Git source semantics MUST exercise the real Git source adapter against available local views.
+Tests of native Git acquisition, refresh, and publication MUST exercise Git hosting, using the real Git client with test-created local repositories.
+Tests of GitHub workflows MAY compose real Git hosting with controlled service responses at the GitHub API boundary without network access.
+Noop results MUST NOT substitute for native-client or service-specific integration coverage.
+
 ## Test module layout
 
 Tests SHOULD live under the nearest owning package's `tests`, mirroring implementation structure where clearer and retaining nested component ownership.
 Files MUST use `test_<module>.py`.
-**Example:** `discovery/predicates/glob.py` maps to `discovery/predicates/tests/test_glob.py`, not a flattened discovery test package.
+**Example:** `package/submodule/component.py` maps to `package/submodule/tests/test_component.py`, not a flattened test package.
 Integration tests MAY belong to the exercised public boundary; CLI tests SHOULD live in `vcsinstall/cli/tests/`.
 
 Reusable utilities SHOULD use:
@@ -69,8 +74,6 @@ Reusable utilities SHOULD use:
 - `tests.make` — Small valid-data factories for:
 
   - Entities.
-  - Relations.
-  - Rules.
   - Other project data.
 
 - `tests.helpers`:
@@ -89,7 +92,7 @@ Tests SHOULD group by subject.
 Production functions MUST have test classes when they own non-trivial behavior; classes SHOULD have test classes when they own non-trivial behavior.
 Test classes MUST use `Test<PascalCaseSubject>` and group the subject's method tests.
 Method cases MUST use `test_<snake_case_method>__<snake_case_behavior>`; module-function cases MAY use `test_<case>`.
-**Example:** `TestLoadWorkspace.test_success` tests a function; `TestArtifact.test_parse__invalid_value` tests a method.
+**Example:** `TestLoadWorkspace.test_success` tests a function; `TestEntity.test_parse__invalid_value` tests a method.
 Test-only helpers need no test class.
 Standalone tests SHOULD be limited to module invariants/file checks without a natural function/class owner.
 
@@ -168,7 +171,7 @@ Optional `test_errors.py` SHOULD be omitted when producers cover all meaningful 
 ### Testing error-producing behavior
 
 Code propagation tests SHOULD compare against the owning error's declaration; literal code assertions MUST require an independently specified compatibility contract.
-Boundary tests SHOULD verify expected low-level failures, including external-input Pydantic failures, become returned Vcsinstall or `llm_tool_cli` errors, or warning cells.
+Boundary tests SHOULD verify expected low-level failures, including external-input Pydantic failures, become returned vcsinstall or `llm_tool_cli` errors, or warning cells.
 Result tests SHOULD inspect local/shared error values through result state, preserve mixed lists, and keep unexpected exceptions distinct from rendered expected failures.
 Propagation-boundary tests MUST verify retained shared diagnostic information.
 Producer tests SHOULD assert failure type and relevant context fields.
@@ -180,7 +183,7 @@ Tests SHOULD verify that the following survive until the CLI:
 - private causes.
 - callback propagation.
 
-They SHOULD distinguish no-match/warnings from fatal failure.
+They SHOULD distinguish warnings from fatal failure.
 
 CLI tests SHOULD verify:
 
@@ -195,9 +198,9 @@ Tests SHOULD reuse automation payload/error assertions provided by `llm_tool_cli
 - parsing.
 - filtering.
 - stdout integration.
-- Vcsinstall policies.
+- vcsinstall policies.
 
-Output-producing domain tests MUST have a function-scoped fresh collecting emitter with restoration.
+Output-producing runtime tests MUST have a function-scoped fresh collecting emitter with restoration.
 CLI tests MUST use setup/finalization provided by `llm_tool_cli` without resetting application buffers themselves.
 
 ## Behavior coverage
@@ -214,7 +217,7 @@ Coverage SHOULD include:
   - `--config`.
   - TOML structure.
   - Defaults.
-  - Relation/rule/predicate/source validation.
+  - Schema validation.
   - Normalization.
   - Invalid configuration.
 
@@ -223,10 +226,7 @@ Coverage SHOULD include:
   - Command forms.
   - Options/protocols.
   - Cell shape.
-  - Relation lists.
-  - Dependency grouping/order.
-  - Relation filters.
-  - Configured reverse queries.
+  - Result ordering.
   - Warnings.
   - Errors/exits.
 

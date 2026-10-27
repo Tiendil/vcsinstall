@@ -12,7 +12,7 @@ The following are out of scope:
 - exact messages.
 - code inventories.
 - terminal formatting.
-- discovery algorithms.
+- source protocols.
 - coverage requirements.
 
 ## Dictionary
@@ -25,15 +25,14 @@ The following are out of scope:
 
 ## General principles
 
-Expected failures MUST cross boundaries as shared `Result[T]` environment-error values, except predicate matching as described below.
-Vcsinstall MUST use `llm_tool_cli` results/error foundations and preserve shared errors unless translation adds domain meaning or recovery.
+Expected failures MUST cross boundaries as shared `Result[T]` environment-error values.
+vcsinstall MUST use `llm_tool_cli` results/error foundations and preserve shared errors unless translation adds domain meaning or recovery.
 Package ownership alone MUST NOT trigger translation; raised shared exceptions MUST NOT become expected failures.
 Internal errors MUST be raised and MUST NOT become cells in normal CLI handling.
 
-Predicate matching is exempt from result conversion: it MUST return captures or `None`, MAY raise evaluation failures, and composites MUST propagate failures rather than treating them as non-matches.
-Result-returning callers MUST recover helper error values within their propagation scope; unrelated matching exceptions MAY propagate unchanged.
+Result-returning callers MUST recover helper error values within their propagation scope.
 
-Non-fatal problems MUST use warning cells submitted to scoped output, both provided by `llm_tool_cli`.
+Non-fatal problems MUST follow Warnings below.
 Lower modules MUST NOT print diagnostics/JSON Lines or terminate.
 The CLI MUST own fatal-error protocol delivery and shared exit-based termination.
 
@@ -43,7 +42,8 @@ Messages SHOULD diagnose problems without stack details.
 
 ## Error ownership
 
-Vcsinstall bases MUST belong to `vcsinstall.core.errors`.
+Error ownership MUST follow `specs/architecture/modules_layout.md`.
+Project-wide error bases MUST belong to `vcsinstall.core.errors`.
 Shared errors MUST retain their:
 
 - hierarchy.
@@ -51,7 +51,8 @@ Shared errors MUST retain their:
 - messages.
 - records.
 
-Top-level error owners SHOULD define `errors` hierarchies with an `InternalError` root inheriting Vcsinstall's core internal base and an `EnvironmentError` root inheriting Vcsinstall's core environment base.
+Outside `core`, top-level error owners SHOULD define `errors` hierarchies with an `InternalError` root inheriting vcsinstall's core internal base and an `EnvironmentError` root inheriting vcsinstall's core environment base.
+Submodule roots MAY inherit their parent module's corresponding root.
 Category roots MUST explicitly use `EnvironmentError`/`InternalError`, not an ambiguous `Error` or boundary-only name.
 Specific errors MUST belong where useful context can be added.
 Unique cases SHOULD have subclasses.
@@ -60,22 +61,24 @@ Production errors MUST NOT live in tests; test-only errors MAY verify handling.
 
 ## Error models and internal exceptions
 
-Vcsinstall's environment-error base MUST inherit shared `EnvironmentError`, identify Vcsinstall-owned failures for policy, and inherit the shared default exit status without overriding it.
+vcsinstall's environment-error base MUST inherit `llm_tool_cli.core.errors.EnvironmentError`, identify vcsinstall-owned failures for policy, and inherit the shared default exit status without overriding it.
+Module environment-error categories MUST derive from that project base, directly or through a parent module's category.
 Errors MUST remain presentation-independent Pydantic models, define `code`/`message`, and MUST NOT inherit `Exception`.
 They MAY add guidance and typed context.
 Leaf classes SHOULD declare messages/guidance; call sites SHOULD supply only varying context.
 Messages and guidance MAY use `{error.<field>}` formatting.
 Diagnostic data MUST follow the shared contract in `specs/architecture/errors.md` in `llm-tool-cli`.
-Core error bases MUST NOT depend on cells, formatters, or CLI output.
+Error bases MUST NOT depend on cells, formatters, or CLI output.
 
-Project technical exceptions MUST inherit `vcsinstall.core.errors.InternalError`, itself inheriting `llm_tool_cli.core.errors.InternalError`.
+The project internal base MUST inherit `llm_tool_cli.core.errors.InternalError` and use its shared message and details facilities.
+Project technical exceptions MUST inherit `vcsinstall.core.errors.InternalError`, directly or through module-specific internal-error categories.
 They MUST NOT become environment errors merely through common ancestry or dependency origin.
 Models and exceptions MUST remain separate.
 Internal errors MUST NOT provide environment codes or diagnostic serialization.
 
 ## Results
 
-Fallible functions SHOULD return `Result[T]`; failures MUST use shared `EnvironmentErrors`, which MAY mix shared/Vcsinstall values.
+Fallible functions SHOULD return `Result[T]`; failures MUST use shared `EnvironmentErrors`, which MAY mix shared/vcsinstall values.
 Success MUST use `Ok(value)`; failure MUST use `Err(errors)`.
 Independent validation failures SHOULD be collected in one result.
 Compatible propagation SHOULD preserve the original result/list without rewrapping.
@@ -86,7 +89,7 @@ Changing a function to return errors MUST update callers to handle/propagate/ren
 
 Fallible callbacks/interchangeable components MUST expose result-aware interfaces.
 Framework callbacks MAY adapt results when ordinary values/control-flow exceptions are required.
-Pydantic validators MAY raise required validation exceptions internally; external-input boundaries MUST convert resulting failures to returned errors.
+Pydantic validators MAY raise required validation exceptions internally; their boundary handling MUST follow Pydantic validation errors below.
 
 ## `unwrap_to_error`
 
@@ -104,17 +107,15 @@ They MUST NOT represent:
 
 - invalid arguments.
 - unloadable configuration.
-- dependency query failures preventing valid results.
+- failures preventing valid results.
 
 They MUST use warning cells and scoped delivery provided by `llm_tool_cli`, buffered until finalization after results or reported errors.
-
-Examples include unresolvable files patterns and command-source stderr or non-zero exits when usable dependencies remain available.
 
 ## Pydantic validation errors
 
 Raw external-input Pydantic errors MUST NOT cross high-level boundaries.
 The nearest useful boundary MUST convert `pydantic.ValidationError` into returned errors or warning cells; shared loading MAY own conversion.
-Low-level entity tests MAY assert Pydantic errors directly.
+Tests of validation and conversion MUST follow Entity tests and Error tests in `specs/architecture/tests.md`.
 
 ## Exception boundaries
 
@@ -135,16 +136,9 @@ Translation SHOULD add application meaning or recovery and SHOULD retain useful 
 `llm_tool_cli` MUST own skill failures and protocol-option validation/diagnostics.
 Before result-based execution, Typer parsing MAY use standard invalid-argument behavior, including `typer.BadParameter`, `click.UsageError`, or `typer.Exit`.
 
-After protocol installation, command handling provided by `llm_tool_cli` MUST own every environment error's:
-
-- order.
-- presentation.
-- stdout delivery.
-- exit.
-
-Vcsinstall MUST NOT maintain another error-rendering/exit path.
-Errors MUST remain typed shared cells until shared projection of content/guidance/metadata.
-Shared error handling MUST NOT submit journal records or require workspace setup.
+After protocol installation, command handling provided by `llm_tool_cli` MUST own environment-error delivery under Command error handling and Exit statuses in `specs/behavior/cli.md` in `llm-tool-cli`.
+vcsinstall MUST NOT maintain another error-rendering/exit path.
+Projection MUST follow Environment-error cells in `specs/behavior/protocol.md` in `llm-tool-cli`.
 Non-CLI errors MAY declare shared-core exit overrides; termination MUST remain at the shared CLI boundary.
 
 ## Naming error classes

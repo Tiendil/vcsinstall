@@ -26,9 +26,9 @@ Agents MUST NOT delete or significantly change existing specifications without e
 
 ## Development Environment
 
-All development-related operations MUST be performed in Docker Compose containers through the repository helpers.
+All development-related operations MUST be performed in Docker Compose containers through the repository helpers, except for the host-side tools explicitly required below.
 
-Agents MUST NOT perform development-related operations directly on the host machine.
+Agents MUST NOT perform other development-related operations directly on the host machine.
 
 Allowed development commands:
 
@@ -85,11 +85,14 @@ Use Donna to run project-local deterministic workflows when the developer, these
 
 Donna controls workflow state only. Agents remain responsible for reading project instructions, using `depmesh` where applicable, editing files, running checks, and reporting results.
 
+Run the host-installed `donna` executable directly from the project root, without Docker, development-helper, or `uv run` wrappers.
+Development commands executed by Donna workflows MUST still use the repository's container helpers.
+
 Before using Donna for the first time in a session, read its usage and list workflows:
 
 ```bash
-./bin/dev.sh uv run -- donna -p llm skill usage
-./bin/dev.sh uv run -- donna -p llm list
+donna -p llm skill usage
+donna -p llm list
 ```
 
 Use Donna's `llm` protocol for agent-facing commands unless a human explicitly asks for another protocol.
@@ -101,7 +104,7 @@ Special workflows to use:
 - `@/workflows/polish.donna.md` — format, fix architecture, lint, and test errors. Run it after making changes to the codebase at the moments when the project is expected to be in a working state: between significant implementation steps, before reporting completion of a task, etc. Run this workflow instead of running individual operations, unless a specific operation is needed for a particular reason.
 
 ```bash
-./bin/dev.sh uv run -- donna -p llm run @/workflows/polish.donna.md
+donna -p llm run @/workflows/polish.donna.md
 ```
 
 Do not run `donna -p llm new-session` unless the developer explicitly asks to reset or start a fresh Donna session.
@@ -112,11 +115,11 @@ Use `depmesh` to discover dependencies between project artifacts.
 
 Agents MUST use `depmesh` for dependency types supported by its configuration.
 
-Run `depmesh` through the development container.
+Run the host-installed `depmesh` executable directly from the project root, without Docker, development-helper, or `uv run` wrappers.
 At the start of each work session, read its usage instructions:
 
 ```bash
-./bin/dev.sh uv run -- depmesh -p llm skill usage
+depmesh -p llm skill usage
 ```
 
 Query affected files for governing specifications, related tests, imports, and reverse imports when those relationships are relevant.

@@ -2,17 +2,23 @@
 
 ## Goal of the document
 
-This document describes naming conventions for project symbols and modules.
+This document describes naming conventions for the project and its code.
 
 ## Scope
 
-This specification covers stable code naming rules.
+This specification covers the canonical project name and stable code naming rules.
 The following are out of scope:
 
 - private helper names.
 - exhaustive symbol lists.
 - external generated names.
 - tool-managed formatting.
+
+## Project name
+
+The canonical project name MUST be `vcsinstall`.
+Prose and documentation headings MUST retain this lowercase spelling, including at the beginning of a sentence.
+Technical identifiers MUST retain their specified spelling; the tool label for protocol framing MUST remain `VCSINSTALL`.
 
 ## General principles
 
