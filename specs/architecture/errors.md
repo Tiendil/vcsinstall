@@ -12,7 +12,7 @@ The following are out of scope:
 - exact messages.
 - code inventories.
 - terminal formatting.
-- discovery algorithms.
+- source protocols.
 - coverage requirements.
 
 ## Dictionary
@@ -42,7 +42,8 @@ Messages SHOULD diagnose problems without stack details.
 
 ## Error ownership
 
-vcsinstall bases MUST belong to `vcsinstall.core.errors`.
+Error ownership MUST follow `specs/architecture/modules_layout.md`.
+Project-wide error bases MUST belong to `vcsinstall.core.errors`.
 Shared errors MUST retain their:
 
 - hierarchy.
@@ -50,7 +51,8 @@ Shared errors MUST retain their:
 - messages.
 - records.
 
-Top-level error owners SHOULD define `errors` hierarchies with an `InternalError` root inheriting vcsinstall's core internal base and an `EnvironmentError` root inheriting vcsinstall's core environment base.
+Outside `core`, top-level error owners SHOULD define `errors` hierarchies with an `InternalError` root inheriting vcsinstall's core internal base and an `EnvironmentError` root inheriting vcsinstall's core environment base.
+Submodule roots MAY inherit their parent module's corresponding root.
 Category roots MUST explicitly use `EnvironmentError`/`InternalError`, not an ambiguous `Error` or boundary-only name.
 Specific errors MUST belong where useful context can be added.
 Unique cases SHOULD have subclasses.
@@ -59,15 +61,17 @@ Production errors MUST NOT live in tests; test-only errors MAY verify handling.
 
 ## Error models and internal exceptions
 
-vcsinstall's environment-error base MUST inherit shared `EnvironmentError`, identify vcsinstall-owned failures for policy, and inherit the shared default exit status without overriding it.
+vcsinstall's environment-error base MUST inherit `llm_tool_cli.core.errors.EnvironmentError`, identify vcsinstall-owned failures for policy, and inherit the shared default exit status without overriding it.
+Module environment-error categories MUST derive from that project base, directly or through a parent module's category.
 Errors MUST remain presentation-independent Pydantic models, define `code`/`message`, and MUST NOT inherit `Exception`.
 They MAY add guidance and typed context.
 Leaf classes SHOULD declare messages/guidance; call sites SHOULD supply only varying context.
 Messages and guidance MAY use `{error.<field>}` formatting.
 Diagnostic data MUST follow the shared contract in `specs/architecture/errors.md` in `llm-tool-cli`.
-Core error bases MUST NOT depend on cells, formatters, or CLI output.
+Error bases MUST NOT depend on cells, formatters, or CLI output.
 
-Project technical exceptions MUST inherit `vcsinstall.core.errors.InternalError`, itself inheriting `llm_tool_cli.core.errors.InternalError`.
+The project internal base MUST inherit `llm_tool_cli.core.errors.InternalError` and use its shared message and details facilities.
+Project technical exceptions MUST inherit `vcsinstall.core.errors.InternalError`, directly or through module-specific internal-error categories.
 They MUST NOT become environment errors merely through common ancestry or dependency origin.
 Models and exceptions MUST remain separate.
 Internal errors MUST NOT provide environment codes or diagnostic serialization.

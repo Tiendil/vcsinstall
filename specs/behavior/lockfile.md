@@ -64,6 +64,7 @@ Every Git dependency lock MUST contain exactly one of `branch`, `tag`, and `rev`
 Branch and tag spellings MUST remain literal; they MUST NOT be replaced by resolved commits in their selector fields.
 
 `revision` MUST use the backend's complete immutable representation; Git MUST use a full commit hash.
+Backend-specific revision representations and availability MUST follow the contracts identified in `specs/behavior/vcs-interaction.md`.
 For an immutable `rev` selector, `revision` MUST identify that same pinned revision.
 Inference and shared-revision semantics MUST follow Version selection and State and shared revisions in `specs/behavior/locking.md`.
 

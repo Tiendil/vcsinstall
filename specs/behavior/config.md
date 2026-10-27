@@ -97,11 +97,13 @@ Dependencies without entries MUST remain valid declarations.
 
 ### Repository identity
 
-Backend support and effective repository identity MUST follow the Backend support and native semantics and Repository locators and identity contracts in `specs/behavior/cli.md`.
+Backend support MUST follow Backend selection and capabilities in `specs/behavior/vcs-interaction.md`.
+Effective repository identity MUST follow Repository locators and identity in `specs/behavior/cli.md` and the selected backend's contract.
 The explicit `vcs` field MUST select the backend for `repository`; a transport such as HTTPS MUST NOT override it.
 Native transport, authority, and query semantics MUST be preserved.
 
 CLI-generated declarations MUST record the selected backend and normalized native repository locator separately.
+Hosting implementation and publication-repository selections for change delivery MUST remain invocation-local under `specs/behavior/cli.md` rather than overwrite these source fields or add publication history.
 VCS-qualified CLI URLs and source-version fragments MUST be decomposed into the corresponding configuration fields rather than retained as a combined source argument.
 Native VCS schemes, such as `svn+ssh://` for SVN, MUST retain their native meaning.
 
@@ -116,7 +118,7 @@ Selector meaning, omitted-selector inference, and reuse of inferred branches MUS
 
 Branch and tag values MUST retain their literal spelling and case.
 `rev` MUST identify an immutable revision in the backend's complete representation; for Git it MUST be a full commit hash.
-Selector fields MUST be supported by the selected backend under the CLI native-semantics contract.
+Selector fields MUST be supported by the selected backend under Version resolution and anchoring in `specs/behavior/vcs-interaction.md`.
 
 Configuration selector strings MUST NOT undergo URL-fragment or percent decoding.
 

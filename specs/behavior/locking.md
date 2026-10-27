@@ -42,7 +42,7 @@ Loading configuration and running `init` MUST NOT create a lockfile or fetch rep
 
 ## Version selection
 
-Source selectors MUST preserve the selected backend's native semantics under the Backend support and native semantics contract in `specs/behavior/cli.md`.
+Source selectors MUST preserve the selected backend's native semantics under Version resolution and anchoring in `specs/behavior/vcs-interaction.md`.
 Branch and tag names MUST remain literal, including case, and MUST select the same named reference rather than a semantic-version range or the newest release.
 An immutable revision pin MUST keep selecting that revision even when newer commits exist.
 Accepted revision abbreviations MUST resolve unambiguously before the complete immutable identifier is recorded in a declaration.
@@ -51,8 +51,8 @@ Later operations MUST use that recorded selector rather than repeat inference.
 
 Establishing a dependency definition without a selector MUST infer the backend's default version.
 For Git, this MUST resolve the remote's default branch name; inability to identify an unambiguous default branch MUST cause an operational failure before project mutation.
-The inferred name MUST be recorded as the dependency lock's branch selection.
-When `dependency add` establishes or explicitly replaces the definition, it MUST also write that branch name into configuration.
+The inferred Git branch name MUST be recorded as the dependency lock's branch selection.
+When `dependency add` establishes or explicitly replaces the Git definition, it MUST also write that branch name into configuration.
 
 For hand-written Git configuration omitting a selector, a matching branch lock MUST supply the effective selector.
 Without such a lock, an operation establishing the lock MUST infer and record the default branch.
@@ -164,13 +164,15 @@ Modified, missing, or unlocked status MUST NOT by itself make inspection fail.
 
 When source content is retrieved to reproduce an existing baseline, its kind and hash MUST agree with that baseline before installation.
 A mismatch MUST fail rather than rewrite the expected hash, accept the cache's content, or select a newer revision.
-Required source retrieval, including rebuilding missing cache data, MUST follow Repository reuse and revision isolation in `specs/behavior/cache.md`.
+Required repository data MUST follow Repository acquisition and refresh in `specs/behavior/vcs-interaction.md`; content inspection MUST follow Source inspection and extraction in that specification, including backend-specific revision-availability limits.
+For backends using the repository cache, rebuilding missing cache data MUST follow Repository reuse and revision isolation in `specs/behavior/cache.md`.
 Cache contents MUST remain disposable without changing locked revisions, baselines, or local-content comparisons.
 Cache reuse and cleanup MUST preserve this contract under `specs/behavior/cache.md`.
 
 ## Source freshness
 
 Operations requiring the current target of a default, branch, or tag selector MUST refresh source information before resolving that target.
+Current-source observations MUST follow Repository acquisition and refresh in `specs/behavior/vcs-interaction.md`, with selector interpretation following its Version resolution and anchoring contract.
 Stale cached references MUST NOT substitute for a failed refresh or selector resolution.
 A required refresh or resolution failure MUST cause an operational failure identifying the affected dependency.
 Immutable pins MUST NOT require a refresh solely to search for newer commits and MUST NOT become outdated merely because newer commits or release tags exist.
@@ -252,12 +254,17 @@ Entries whose resolved revision and installed content require no change MUST suc
 
 ### `dependency push`
 
-Publication MUST use the dependency's matching lock and the existing entry baselines without resolving a new upstream version or advancing the lock.
+Publication MUST use the dependency's matching lock and the existing entry baselines without advancing the lock.
+Branch, PR, and patch preparation MUST use the locked revision as their base rather than resolve a newer source version for that purpose.
+PR target inspection MAY resolve a current review branch for validation without changing the contribution base or installation revision.
+Direct delivery MUST prepare against the current destination branch with the recorded baselines under `specs/behavior/hosting/git.md`, without requiring the old locked source content when those baselines are trustworthy.
+Filesystem overwrite MAY inspect the live source and resolve its resulting publication revision under `specs/behavior/hosting/filesystem.md`.
 Every entry inspected to determine the changed selection MUST have a matching, trustworthy baseline and inspectable local state.
-Unavailable or inconsistent baselines and unreadable content MUST fail before fetching sources or publishing changes.
+Unavailable or inconsistent baselines and unreadable content MUST fail before source fetching, hosting requests, or delivery effects.
 Change detection MUST compare current local content with the installation baseline; a previous push MUST NOT make a locally changed entry appear unchanged.
 Unselected entries MUST NOT require local-content verification or contribute changes.
 Publication MUST leave configuration, lockfile bytes, and installed content unchanged and MUST NOT maintain persistent publication history.
+Patch output MUST remain a separately requested artifact under the CLI contract rather than a change to installation state.
 
 ### `remove`
 

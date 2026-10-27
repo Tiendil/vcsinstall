@@ -10,7 +10,7 @@ Python test organization and architectural expectations; the following are out o
 
 - framework/CI configuration.
 - exact fixture names.
-- publishing checks.
+- package release checks.
 - performance benchmarks.
 
 ## Dictionary
@@ -56,6 +56,18 @@ Necessary Python replacements SHOULD use the standard pytest mocking tool, scope
 Use `mocker.patch("<import.path>", ...)` for imported names/settings when `pytest-mock` is available, and `mocker.patch.object(...)` for available objects/classes.
 Direct `MagicMock` is only for local fakes passed into subjects.
 Ordinary attribute replacement SHOULD NOT use `monkeypatch` when the standard fixture is available.
+
+## Adapter integration boundaries
+
+Source and hosting adapters MUST be independently replaceable by controlled test collaborators through the boundaries in `specs/architecture/modules_layout.md`.
+The noop source and hosting adapters MUST follow their respective contracts in `specs/behavior/vcs/noop.md` and `specs/behavior/hosting/noop.md`.
+They MUST be supplied independently; selecting either MUST NOT enable the other or a real hosting adapter implicitly.
+Tests of acquisition and delivery orchestration MAY combine a controlled source backend and separate noop hosting without native clients or network effects.
+They MAY also combine a real Git source with noop hosting, using test-prepared local repository views and the real Git client for local inspection; acquisition, refresh, and publication MUST remain simulated in that combination.
+Tests of native Git source semantics MUST exercise the real Git source adapter against available local views.
+Tests of native Git acquisition, refresh, and publication MUST exercise Git hosting, using the real Git client with test-created local repositories.
+Tests of GitHub workflows MAY compose real Git hosting with controlled service responses at the GitHub API boundary without network access.
+Noop results MUST NOT substitute for native-client or service-specific integration coverage.
 
 ## Test module layout
 
@@ -195,7 +207,7 @@ Tests SHOULD reuse automation payload/error assertions provided by `llm_tool_cli
 - stdout integration.
 - vcsinstall policies.
 
-Output-producing domain tests MUST have a function-scoped fresh collecting emitter with restoration.
+Output-producing runtime tests MUST have a function-scoped fresh collecting emitter with restoration.
 CLI tests MUST use setup/finalization provided by `llm_tool_cli` without resetting application buffers themselves.
 
 ## Behavior coverage

@@ -17,7 +17,7 @@ Python data structures representing project concepts; the following are out of s
 - `entity` — a typed object representing one project concept across modules.
 - `value entity` — an entity compared by data rather than identity.
 - `data entity` — validated data carried across boundaries or into serialization.
-- `domain entity` — an entity owning concept behavior, invariants, or transitions.
+- `domain entity` — an entity owning concept behavior, invariants, or transitions in its responsible module.
 - `boundary entity` — an entity crossing responsibility boundaries.
 - `serialized representation` — plain data for an external protocol such as JSON Lines.
 
@@ -116,7 +116,7 @@ External and persisted values MUST remain exact.
 
 ## Semantic primitive types
 
-Distinct project primitive meanings, such as template names, MUST use semantic Python types across boundaries, in entities, and in public signatures.
+Distinct project primitive meanings, such as dependency names and source revisions, MUST use semantic Python types across boundaries, in entities, and in public signatures.
 `typing.NewType` SHOULD be used when runtime behavior matches the primitive.
 Small custom classes MAY add:
 
@@ -135,7 +135,7 @@ Raw primitives MAY appear at these boundaries:
 - serialization.
 
 They MAY also appear in local helpers after validation or when semantic typing adds no boundary clarity.
-Shared semantic types SHOULD belong to the domain module; others SHOULD belong to their concept's owner.
+Universal semantic types SHOULD belong to `domain`; others SHOULD remain with their concept's owner.
 
 ## Static typing suppressions
 
@@ -145,7 +145,9 @@ Runtime constructors and validators SHOULD remain preferred for untrusted primit
 
 ## Entity ownership
 
-Reusable entity infrastructure MUST belong to `llm_tool_cli.core`; domain entities shared across vcsinstall modules MUST belong to `vcsinstall.domain`; other entities MUST belong to their responsibility's module.
+Reusable entity infrastructure MUST belong to `llm_tool_cli.core`.
+Entity ownership MUST follow the module responsibilities in `specs/architecture/modules_layout.md`.
+Crossing a module boundary MUST NOT by itself move an entity to `domain`.
 Public cross-module entity classes MUST be exported from, and imported through, the owning top-level package root.
 Re-exports MUST keep the defining owner clear.
 
@@ -162,20 +164,20 @@ It MUST NOT contain narrower subsystem entities or depend on:
 
 ## Configuration entities
 
-Configuration entities MAY validate parsed TOML shape or reference validated domain entities.
+Configuration and lockfile entities MAY validate parsed TOML shape or reference validated project and universal domain entities.
 They SHOULD reject malformed input with Pydantic before lower layers and MUST preserve useful error context.
-Workspace entities MUST expose validated, file-shape-independent configuration concepts and shared concepts as domain entities.
+Workspace conversion MUST expose the project model independently of persisted file shapes, preserving project-owned invariants under `specs/architecture/modules_layout.md`.
 
 ## CLI entities
 
 CLI entities MUST represent parsed selection/options before execution, independently of output, and MUST NOT contain rendered output or execute commands.
-Normalized or validated ids/paths SHOULD use domain semantic types.
+Normalized or validated ids/paths SHOULD use semantic types from their owning modules.
 
 ## Command results
 
-Logic cells MUST be the primary successful domain-to-CLI interface.
-Command-facing operations MAY submit cells to the scoped emitter provided by `llm_tool_cli` and return `Result[None]` when no other result is useful.
-Reusable computations MAY return typed values, including cells and ordered collections; internal discovery/workspace operations MAY retain ordinary entities.
+Logic cells MUST be the primary successful runtime-to-CLI interface.
+Command-facing runtime operations MUST assemble complete result payloads and MAY submit cells to the scoped emitter provided by `llm_tool_cli`, returning `Result[None]` when no other result is useful.
+Reusable computations MAY return typed values, including cells and ordered collections; internal model, workspace, and adapter operations MAY retain ordinary entities.
 Cells MAY hold typed projection data, but the CLI MUST NOT inspect it or assemble domain payloads.
 
 Cells MUST carry projection data without runtime reads or output writes.
@@ -190,7 +192,8 @@ Protocol entities MAY contain formatting metadata.
 The following entities SHOULD NOT depend on concrete record shapes:
 
 - domain entities.
-- discovery entities.
+- project entities.
+- source and hosting entities.
 - workspace entities.
 - CLI entities.
 

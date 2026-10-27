@@ -23,6 +23,8 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/` — all specifications.
 - `./specs/architecture/` — system architecture.
 - `./specs/behavior/` — observable tool behavior.
+- `./specs/behavior/vcs/` — source backend behavior.
+- `./specs/behavior/hosting/` — outgoing delivery and hosted-service behavior.
 - `./specs/documentation/` — documentation artifacts.
 - `./specs/meta/` — specification-writing requirements.
 
@@ -32,7 +34,7 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/dictionary.md` — Shared project terminology.
 - `./specs/architecture/entities.md` — Conventions for modeling project data.
 - `./specs/architecture/errors.md` — Conventions for representing and propagating diagnostics.
-- `./specs/architecture/modules_layout.md` — Ownership boundaries between project modules.
+- `./specs/architecture/modules_layout.md` — Project module responsibilities and dependency boundaries.
 - `./specs/architecture/naming.md` — Project and code naming conventions.
 - `./specs/architecture/tests.md` — Requirements for project tests.
 - `./specs/behavior/cache.md` — The shared repository cache contract.
@@ -41,6 +43,14 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/behavior/locking.md` — The dependency locking contract.
 - `./specs/behavior/lockfile.md` — The project lockfile contract.
 - `./specs/behavior/skill_fixtures.md` — Requirements for built-in skill documentation.
+- `./specs/behavior/vcs-interaction.md` — The common source and hosting interaction contract.
+- `./specs/behavior/vcs/git.md` — The Git source contract.
+- `./specs/behavior/vcs/filesystem.md` — The filesystem source contract.
+- `./specs/behavior/vcs/noop.md` — The test-only noop source contract.
+- `./specs/behavior/hosting/git.md` — The native Git delivery contract.
+- `./specs/behavior/hosting/github.md` — The GitHub contribution and review contract.
+- `./specs/behavior/hosting/filesystem.md` — The filesystem delivery contract.
+- `./specs/behavior/hosting/noop.md` — The test-only noop hosting contract.
 - `./specs/documentation/changelog.md` — Requirements for maintaining the project changelog.
 - `./specs/documentation/readme.md` — The root README's documentation contract.
 - `./specs/meta/general.md` — Requirements for specification content and presentation.
