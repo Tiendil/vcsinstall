@@ -82,6 +82,15 @@ The `Dictionary` section SHOULD be placed immediately after the `Scope` section.
 **Example:** Terms with definitions, or configuration fields with defaults and descriptions, ordinarily belong in lists.
 A comparison of supported capabilities across output formats may justify a table.
 
+## Contract ownership and references
+
+Each requirement MUST have one owning specification whose scope covers it.
+Other specifications MUST reference that owner when adopting its contract rather than repeat its detailed rules.
+References MUST identify the owning specification, the applicable contract, and where it applies.
+References MUST NOT implicitly require the contract's current implementation.
+
+Summaries and examples MAY repeat aspects needed to explain local behavior, but MUST remain consistent with the owning contract and MUST NOT establish competing definitions.
+
 ## Abstraction level
 
 Specifications MUST describe the following at the highest level that is still precise enough to guide implementation:

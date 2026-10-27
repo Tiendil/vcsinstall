@@ -32,7 +32,7 @@ Internal errors MUST be raised and MUST NOT become cells in normal CLI handling.
 
 Result-returning callers MUST recover helper error values within their propagation scope.
 
-Non-fatal problems MUST use warning cells submitted to scoped output, both provided by `llm_tool_cli`.
+Non-fatal problems MUST follow Warnings below.
 Lower modules MUST NOT print diagnostics/JSON Lines or terminate.
 The CLI MUST own fatal-error protocol delivery and shared exit-based termination.
 
@@ -89,7 +89,7 @@ Changing a function to return errors MUST update callers to handle/propagate/ren
 
 Fallible callbacks/interchangeable components MUST expose result-aware interfaces.
 Framework callbacks MAY adapt results when ordinary values/control-flow exceptions are required.
-Pydantic validators MAY raise required validation exceptions internally; external-input boundaries MUST convert resulting failures to returned errors.
+Pydantic validators MAY raise required validation exceptions internally; their boundary handling MUST follow Pydantic validation errors below.
 
 ## `unwrap_to_error`
 
@@ -115,7 +115,7 @@ They MUST use warning cells and scoped delivery provided by `llm_tool_cli`, buff
 
 Raw external-input Pydantic errors MUST NOT cross high-level boundaries.
 The nearest useful boundary MUST convert `pydantic.ValidationError` into returned errors or warning cells; shared loading MAY own conversion.
-Low-level entity tests MAY assert Pydantic errors directly.
+Tests of validation and conversion MUST follow Entity tests and Error tests in `specs/architecture/tests.md`.
 
 ## Exception boundaries
 
@@ -136,16 +136,9 @@ Translation SHOULD add application meaning or recovery and SHOULD retain useful 
 `llm_tool_cli` MUST own skill failures and protocol-option validation/diagnostics.
 Before result-based execution, Typer parsing MAY use standard invalid-argument behavior, including `typer.BadParameter`, `click.UsageError`, or `typer.Exit`.
 
-After protocol installation, command handling provided by `llm_tool_cli` MUST own every environment error's:
-
-- order.
-- presentation.
-- stdout delivery.
-- exit.
-
+After protocol installation, command handling provided by `llm_tool_cli` MUST own environment-error delivery under Command error handling and Exit statuses in `specs/behavior/cli.md` in `llm-tool-cli`.
 vcsinstall MUST NOT maintain another error-rendering/exit path.
-Errors MUST remain typed shared cells until shared projection of content/guidance/metadata.
-Shared error handling MUST NOT submit journal records or require workspace setup.
+Projection MUST follow Environment-error cells in `specs/behavior/protocol.md` in `llm-tool-cli`.
 Non-CLI errors MAY declare shared-core exit overrides; termination MUST remain at the shared CLI boundary.
 
 ## Naming error classes

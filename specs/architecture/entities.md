@@ -24,7 +24,6 @@ Python data structures representing project concepts; the following are out of s
 ## General principles
 
 Project concepts MUST cross boundaries as explicit typed entities, not untyped dictionaries except for serialized data.
-Structured entities SHOULD use Pydantic v2.
 
 ### Data entities
 
@@ -36,14 +35,7 @@ Data entities SHOULD limit behavior to:
 - serialization.
 - derivation from their fields.
 
-They MUST NOT perform:
-
-- invocation-context reads.
-- filesystem access.
-- process execution.
-- terminal output.
-- configuration discovery.
-- workspace loading.
+Their permitted behavior MUST obey the effect restrictions in Validation boundaries below.
 
 ### Domain entities
 
@@ -151,22 +143,11 @@ Crossing a module boundary MUST NOT by itself move an entity to `domain`.
 Public cross-module entity classes MUST be exported from, and imported through, the owning top-level package root.
 Re-exports MUST keep the defining owner clear.
 
-## Core domain entities
-
-The domain layer MUST contain only universal concepts shared by all or most modules, independent of creating/rendering interfaces.
-It MUST NOT contain narrower subsystem entities or depend on:
-
-- CLI protocol names.
-- option parsing.
-- protocol rendering.
-- workspace loading.
-- concrete configuration syntax.
-
 ## Configuration entities
 
 Configuration and lockfile entities MAY validate parsed TOML shape or reference validated project and universal domain entities.
 They SHOULD reject malformed input with Pydantic before lower layers and MUST preserve useful error context.
-Workspace conversion MUST expose the project model independently of persisted file shapes, preserving project-owned invariants under `specs/architecture/modules_layout.md`.
+Workspace conversion MUST follow Project state and operations in `specs/architecture/modules_layout.md`.
 
 ## CLI entities
 
@@ -182,7 +163,7 @@ Cells MAY hold typed projection data, but the CLI MUST NOT inspect it or assembl
 
 Cells MUST carry projection data without runtime reads or output writes.
 CLI initialization MUST establish delivery and protocol; the shared emitter MUST buffer and deliver cells.
-Expected failures MUST remain structured failed-result errors until the CLI error boundary.
+Failure handling MUST follow `specs/architecture/errors.md` through the CLI error boundary.
 Utility commands and help provided by `llm_tool_cli` retain their specified contracts.
 
 ## Protocol and serialization entities
@@ -209,12 +190,14 @@ Optional values MUST use `None`, not sentinel strings.
 ## Validation boundaries
 
 Parsing layers SHOULD validate external input before constructing lower-layer entities.
-Model validation MAY enforce local invariants but MUST NOT perform:
+Model validation MAY enforce local invariants.
+Data-entity behavior and model validation MUST NOT perform:
 
 - filesystem access.
 - configuration discovery.
 - workspace loading.
 - subprocess or command execution.
 
-Such validation MUST live in behavior methods, runtime orchestration, or functions returning vcsinstall-specific errors.
-Invalid input MUST follow the error architecture, never produce partially valid entities.
+Data entities MUST additionally avoid invocation-context reads and terminal output.
+Validation requiring external effects MUST live in behavior methods, runtime orchestration, or functions returning errors under `specs/architecture/errors.md`.
+Invalid input MUST follow `specs/architecture/errors.md`, never produce partially valid entities.

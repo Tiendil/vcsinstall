@@ -100,12 +100,10 @@ Dependencies without entries MUST remain valid declarations.
 Backend support MUST follow Backend selection and capabilities in `specs/behavior/vcs-interaction.md`.
 Effective repository identity MUST follow Repository locators and identity in `specs/behavior/cli.md` and the selected backend's contract.
 The explicit `vcs` field MUST select the backend for `repository`; a transport such as HTTPS MUST NOT override it.
-Native transport, authority, and query semantics MUST be preserved.
 
-CLI-generated declarations MUST record the selected backend and normalized native repository locator separately.
+New or changed dependency declarations written by vcsinstall MUST record the selected backend and normalized native repository locator separately.
 Hosting implementation and publication-repository selections for change delivery MUST remain invocation-local under `specs/behavior/cli.md` rather than overwrite these source fields or add publication history.
 VCS-qualified CLI URLs and source-version fragments MUST be decomposed into the corresponding configuration fields rather than retained as a combined source argument.
-Native VCS schemes, such as `svn+ssh://` for SVN, MUST retain their native meaning.
 
 Relative filesystem repository locators in configuration MUST resolve against the project root, independently of the invocation's working directory.
 Repository locations MAY be outside the target project; destination containment MUST NOT be imposed on source repository locations.
@@ -116,8 +114,7 @@ When a CLI repository argument was relative to the invocation's working director
 At most one of `branch`, `tag`, and `rev` MUST be present.
 Selector meaning, omitted-selector inference, and reuse of inferred branches MUST follow Version selection in `specs/behavior/locking.md`.
 
-Branch and tag values MUST retain their literal spelling and case.
-`rev` MUST identify an immutable revision in the backend's complete representation; for Git it MUST be a full commit hash.
+`rev` MUST identify an immutable revision in the backend's complete representation under its source contract in `specs/behavior/vcs-interaction.md`.
 Selector fields MUST be supported by the selected backend under Version resolution and anchoring in `specs/behavior/vcs-interaction.md`.
 
 Configuration selector strings MUST NOT undergo URL-fragment or percent decoding.
@@ -138,9 +135,6 @@ Configuration order MUST NOT alter dependency membership or entry identity.
 ### Source paths
 
 `source_path` MUST follow the Source paths contract in `specs/behavior/cli.md`.
-It MUST be repository-relative, use `/` separators, and remain within the repository content root.
-`.` MUST select the repository's content root.
-Paths MUST remain literal rather than undergo glob expansion, local home expansion, or project-path interpretation.
 Configuration source-path strings MUST NOT undergo URL or percent decoding.
 The same source path MAY appear in multiple entries with different destinations.
 
@@ -151,12 +145,11 @@ Their meaning MUST remain independent of the invocation's working directory.
 They MUST resolve strictly below the project root under the shared containment contract, including its symbolic-link rules, without requiring an existing target.
 
 New or changed entry declarations written by vcsinstall MUST store `destination` as a canonical `@/` identifier.
-That identifier MUST remain the entry's CLI identity under the Local path arguments and entry selection contract in `specs/behavior/cli.md`.
-Source-path names and destination names MAY differ under that contract.
+The canonical destination MUST identify the entry at the CLI boundary under Local path arguments and entry selection in `specs/behavior/cli.md`.
 
 Every canonical destination MUST be unique across all entries, including entries belonging to different dependencies.
 Repeated mappings MUST fail validation even when their other fields are identical.
-Overlapping destinations and conflicts with the selected configuration or project lockfile MUST fail under the CLI destination rules.
+Destinations MUST NOT overlap one another or conflict with the selected configuration or project lockfile.
 
 ## Configuration and locked state
 
@@ -170,16 +163,9 @@ Successful edits MUST leave valid configuration and preserve unrelated declarati
 Edits SHOULD preserve existing comments and declaration order.
 The state effects of replacing or removing declarations and their failure guarantees MUST follow Operation contracts and Preparation and consistency in `specs/behavior/locking.md`.
 
-New or changed dependency declarations MUST use the separate normalized repository and selector fields defined above.
-New or changed entry declarations MUST use the separate dependency, source-path, and canonical-destination fields defined above.
-
 ## Starter configuration
 
-Init MUST select and create its target under the shared initialization contract, using default filename `vcsinstall.toml` and the CLI's invocation cwd and optional `--config`.
-The created file MUST pass vcsinstall configuration validation before success is reported.
-Created files MUST remain after subsequent load or validation failure under the shared project-scope contract.
-
-The starter MUST contain active schema version `1` and no active dependency declarations or entry mappings.
+The starter created by `init` under `specs/behavior/cli.md` MUST contain active schema version `1` and no active dependency declarations or entry mappings.
 It MUST include a commented example of a named dependency and an entry referring to it, using this schema:
 
 ```toml
@@ -199,6 +185,5 @@ version = 1
 ## Validation and diagnostics
 
 Invalid configuration MUST fail as a whole rather than omit invalid declarations or treat malformed content as an empty project.
-Shared configuration diagnostics MUST retain their native information under `specs/behavior/config.md` in `llm-tool-cli`.
 Declaration-validation failures MUST identify the affected dependency or entry and the invalid field or conflicting mapping.
 Shared destination-normalization and containment failures MUST preserve the diagnostics defined in `specs/behavior/paths.md` in `llm-tool-cli`.

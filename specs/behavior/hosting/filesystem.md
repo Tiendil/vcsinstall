@@ -50,19 +50,14 @@ The live source MAY differ from the installation's locked fingerprint; selecting
 A selected directory MUST be replaced as a complete tree, including removal of source-only children within that selected tree.
 Existing source content outside the selected mappings MUST remain unchanged by the invocation.
 Missing parent directories MAY be created where required to apply a selected mapping, subject to source containment.
-Selected edits proposing conflicting content at the same source path MUST fail before any source write.
 
 The source root itself MUST remain a directory; a mapping of `.` MUST NOT authorize deleting that root or replacing it with a file.
-Matching locks, trustworthy entry baselines, and local-state inspection MUST remain required under the common publication contract.
 Overwrite authorization MUST NOT bypass containment, permissions, or unsupported-object failures.
-Validation and preparation for every selected change MUST complete before the first source write.
-Failure after writes begin MUST report partial source effects under Failures and completed effects in `specs/behavior/vcs-interaction.md`.
+Validation, preparation, and partial failures MUST follow Contribution publication and Failures and completed effects in `specs/behavior/vcs-interaction.md`.
 
 Mode-specific options MUST follow the applicability rules in `specs/behavior/cli.md`.
-Publication-repository overrides MUST NOT redirect these writes to another directory; the source declaration MUST remain the recipient.
 Successful writes MUST be verified against the selected local content and identify the resulting complete source fingerprint.
-Publication records MUST use null `branch` and that fingerprint as `push_revision`, while `revision` MUST retain the unchanged installation baseline.
-Configuration, lockfile bytes, and installed content MUST remain unchanged; a later dependency update MUST acknowledge equal source content through the ordinary baseline-update rules.
+Results MUST follow Installation records in `specs/behavior/cli.md`; installation-state preservation and later baseline acknowledgement MUST follow `specs/behavior/locking.md`.
 
 ## Example
 

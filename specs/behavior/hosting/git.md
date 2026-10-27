@@ -21,7 +21,7 @@ The hosting implementation name MUST be `git`, compatible with source backend `g
 It MUST support `branch`, `direct`, and `patch` modes.
 PR and overwrite modes MUST fail as unsupported under the CLI's invalid-argument contract before payload reads or source access.
 The common hosting contract MUST follow `specs/behavior/vcs-interaction.md`.
-Client selection and integration MUST follow `specs/architecture/modules_layout.md`; native Git acquisition and delivery MUST NOT require a hosted-service client or API authentication.
+Client selection and integration MUST follow `specs/architecture/modules_layout.md`.
 
 Source revisions and content MUST retain `specs/behavior/vcs/git.md` semantics.
 Required Git object retrieval and preparation MUST follow `specs/behavior/cache.md`.
@@ -30,14 +30,11 @@ Publication MUST use the selected recipient's native transport and authenticatio
 
 ## Repository acquisition and refresh
 
-Git hosting MUST support obtaining repository data and refreshing source-reference observations independently of delivery modes and publication permissions.
 Git's supported native transports and configured authentication facilities MUST retain their native meaning for both acquisition and delivery.
 Acquisition MUST make required local Git objects and source metadata available under Repository acquisition and refresh in `specs/behavior/vcs-interaction.md`, reusing or rebuilding repository data under `specs/behavior/cache.md`.
 Valid available objects MAY satisfy requests for immutable revisions without refreshing unrelated source references.
-Missing required objects MUST be retrieved from the declared source or reported as unavailable without substituting another revision.
 
 When freshness is required, observations MUST reflect the declared source's actual branch and tag targets, including moved or deleted refs.
-Stale cached refs MUST NOT satisfy a failed refresh or hide source deletion.
 Default-version discovery MUST provide the source's advertised symbolic `HEAD` and branch metadata without assuming `main` or `master`.
 Version interpretation, selector ambiguity, commit verification, and extraction MUST follow `specs/behavior/vcs/git.md` using the supplied view.
 
@@ -58,7 +55,7 @@ Publication to a local repository MUST preserve its:
 
 Authorized publication MAY create or advance refs only under the selected mode's rules and Git's normal receiving policies.
 Direct delivery to a branch checked out in any worktree of a local recipient MUST fail before publication.
-A local publication destination resolving to the target project's own Git repository MUST be rejected under the CLI's target-repository protection.
+A local publication destination resolving to the target project's own Git repository MUST be rejected under the target-repository protection in General behavior in `specs/behavior/cli.md`.
 
 ## Change application and commit metadata
 
@@ -136,24 +133,19 @@ A failed conditional update MUST NOT be silently retried against a different bra
 
 If every locally changed selected entry already equals its destination content, direct delivery MUST succeed without creating a commit or updating a ref.
 That verified result MUST identify the observed B as its delivery revision.
-Completed direct delivery, including this already-present case, MUST use `outcome = pushed` and the actual recipient and target branch under the CLI output contract.
-This outcome MUST NOT imply that a new commit was created.
+Completed direct delivery, including this already-present case, MUST follow Installation records in `specs/behavior/cli.md`.
 
 Direct delivery MUST NOT create a fork or hosted review or fall back to another recipient on permission failure.
-Configuration, lockfile bytes, and installed content MUST remain unchanged.
-A later dependency update MUST acknowledge matching upstream content under Updating baselines in `specs/behavior/locking.md`.
 
 ## Patch delivery
 
 Patch mode MUST export the prepared contribution as one Git `format-patch` mailbox message.
 The artifact MUST include the commit message and author information, selected file changes, and the locked base commit information.
 It MUST support binary changes and complete blob identifiers, preserving the selected contribution's applicable content and file modes.
-Artifact paths MUST be the original repository paths rather than installed destination names.
 The format MUST be suitable for native Git patch application, including `git am`, without a vcsinstall-specific patch format.
 
 The artifact MUST follow Patch artifacts in `specs/behavior/vcs-interaction.md` and the CLI's `--output` contract.
-Generating it MUST NOT push a branch, create a fork or review, or send the artifact to another person.
-No hosted-service client, service authentication, or writable remote MUST be required.
+Generating it MUST NOT send the artifact to another person.
 Unavailable locked source content MUST remain a retrieval failure rather than be reconstructed from installed files.
 
 The [Git format-patch contract](https://git-scm.com/docs/git-format-patch) defines the mailbox format, binary support, complete object identifiers, and base-commit information used here.

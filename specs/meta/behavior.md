@@ -36,7 +36,6 @@ Requiring a particular context-manager implementation describes a mechanism.
 ## External contracts
 
 Externally visible names and representations MAY be prescribed when independently required by the behavior contract, under `specs/meta/general.md`.
-Visibility in current output alone MUST NOT establish such a requirement.
 An identifier that forms part of command, configuration, or workflow syntax remains an external contract even when it also names a Python symbol.
 
 Behavior specifications MUST NOT prescribe implementation function or type names or Python signatures, including those exposed through public Python interfaces.
@@ -45,9 +44,7 @@ API documentation MAY describe those implementation interfaces.
 
 ## Contract references
 
-Behavior specifications MAY adopt another specification's behavior by identifying the contract and where it applies.
-Such references MUST NOT implicitly require using that contract's current implementation.
-References MUST identify the owning specification rather than use unexplained terms such as “shared behavior.”
+Behavior specifications MUST follow Contract ownership and references in `specs/meta/general.md` when adopting another contract at their observable boundary.
 
 ## Separation from architecture
 

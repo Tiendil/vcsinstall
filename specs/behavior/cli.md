@@ -25,7 +25,7 @@ The following are out of scope:
 - `DESTINATION` — the final project path at which `add` installs an entry.
 - `ENTRY_PATH` — a local path selecting a declared entry by its destination, including when its installed content is missing.
 - `REF` — an untyped source-version reference accepted in a repository URL fragment.
-- `REVISION` — an immutable source revision identifier under the selected backend's contract; Git revisions in results MUST be full commit hashes.
+- `REVISION` — an immutable source revision identifier under the selected backend's contract.
 
 ## Entry points
 
@@ -53,13 +53,13 @@ Command execution MUST NOT require a vcsinstall-specific interactive prompt or l
 The required commands MUST be:
 
 - `init` — Create starter project configuration.
-- `dependency add [OPTIONS] NAME REPOSITORY` — Declare and lock a named dependency; redefining one requires `--replace` and refreshes all its entries together.
+- `dependency add [OPTIONS] NAME REPOSITORY` — Declare and lock a named dependency.
 - `dependency list` — List declared dependencies, their shared locked revisions, and local entry statistics.
 - `dependency outdated [NAME...]` — Check all or named dependencies for changes in their configured source versions and report differing locked and current revisions.
 - `dependency remove NAME` — Remove an unused dependency declaration and its lock.
 - `dependency update [NAME...]` — Advance all or named dependencies within their configured version selectors and refresh each dependency's entries together.
 - `dependency push --mode MODE [OPTIONS] NAME [ENTRY_PATH...]` — Deliver changes from all or selected entries of one named dependency through the explicit mode.
-- `add [OPTIONS] SOURCE DESTINATION` — Declare and install one entry from a dependency's locked revision; outdated revisions require `--allow-outdated`, and redefining an existing destination requires `--replace`.
+- `add [OPTIONS] SOURCE DESTINATION` — Declare and install one entry from a dependency's locked revision.
 - `install [OPTIONS]` — Install the entries declared by the project, preferring their locked revisions.
 - `remove [OPTIONS] ENTRY_PATH...` — Remove declared entries and their installed content, with `--keep-files` retaining the content as unmanaged project files.
 - `list [ENTRY_PATH...]` — Inspect declared installations and their local changes.
@@ -72,8 +72,7 @@ Locking operations and their state changes MUST follow Operation contracts and P
 ## Application identity and project files
 
 LLM cell framing MUST use `VCSINSTALL`, including shared errors produced during argument validation.
-The default project configuration filename MUST be `vcsinstall.toml`.
-Selected configurations MUST follow the schema and validation requirements in `specs/behavior/config.md`.
+Project configuration selection, project-root derivation, and validation MUST follow `specs/behavior/config.md`.
 Project lockfile selection and representation MUST follow `specs/behavior/lockfile.md`.
 
 The following commands MUST select and validate existing project configuration before performing their requested operation:
@@ -89,8 +88,6 @@ The following commands MUST select and validate existing project configuration b
 - `remove`.
 - `list`.
 
-Configuration discovery and project-root selection MUST follow the Existing configuration selection and Project scopes contracts in `specs/behavior/config.md` in `llm-tool-cli`, using the default filename above.
-The selected configuration file's parent MUST be the project root.
 Missing configuration MUST fail with the shared diagnostic rather than implicitly initialize a project.
 
 The following interfaces MUST NOT load or create project files or require a cache or a VCS client:
@@ -100,8 +97,7 @@ The following interfaces MUST NOT load or create project files or require a cach
 - `version`.
 - `skill`.
 
-`cache clean` MUST NOT load or create project files or require a VCS client.
-It MUST remain usable outside a project and with an unusable `--config` value.
+`cache clean` MUST follow the project-file and client independence requirements in Cleanup in `specs/behavior/cache.md`, remaining usable outside a project and with an unusable `--config` value.
 
 ## Global options
 
@@ -110,9 +106,6 @@ Global options MUST precede the subcommand.
 ### `--protocol PROTOCOL` / `-p PROTOCOL`
 
 The protocol option MUST follow the Protocol option and Protocol selection contracts in `specs/behavior/cli.md` in `llm-tool-cli`.
-The supported protocols MUST be `human`, `llm`, and `automation`.
-An explicit protocol MUST override the command default.
-Without an explicit protocol, `skill` MUST use LLM output and all other commands MUST use human output.
 
 ### `--config PATH`
 
@@ -122,7 +115,6 @@ Configuration-independent commands MUST remain usable with an unusable `--config
 
 ### `--cache-dir DIRECTORY`
 
-This option MUST override the vcsinstall cache root for the invocation without changing project configuration or the lockfile.
 Cache-root selection and Cache-independent operations in `specs/behavior/cache.md` MUST govern path interpretation, defaults, and deferred cache access.
 Repository identity and layout and Repository reuse and revision isolation in that specification MUST govern cached repositories and their source content.
 
@@ -228,12 +220,10 @@ Source paths MUST NOT undergo local home expansion or interpretation relative to
 They MUST accept canonical `@/` identifiers and contained filesystem paths, including absolute paths and paths whose targets do not yet exist.
 Shared path diagnostics MUST retain their native information.
 
-The canonical destination path MUST identify an entry at the CLI boundary.
+Destination validity and entry identity MUST follow Destinations and entry identity in `specs/behavior/config.md`.
 `DESTINATION` MUST identify the exact final file or directory path; an existing directory MUST NOT cause an implicit source-basename suffix to be appended.
 A directory mapping MUST place its selected content directly under that destination.
 Add MUST allow files and directories to be installed with names and paths different from those in the source repository.
-Overlaps between distinct entries MUST fail before project mutation.
-Destinations conflicting with the selected project configuration or lockfile MUST be rejected.
 
 For `list`, omitted entry paths MUST select every declared entry.
 Remove MUST require at least one explicit `ENTRY_PATH` and MUST NOT infer a selection when none is supplied.
@@ -245,18 +235,11 @@ Every explicit entry path MUST be validated before fetching sources, changing pr
 An unknown entry path MUST fail instead of silently broadening or ignoring the selection.
 The standard `--` argument separator MUST allow positional values beginning with `-`.
 
-Entry result records MUST be ordered by canonical destination path.
-
 ## `vcsinstall init` command
 
-Init MUST follow the Initialization command contract in `specs/behavior/cli.md` in `llm-tool-cli`, using invocation cwd, optional `--config`, and default filename `vcsinstall.toml`.
-It MUST create a valid starter configuration with no dependencies or installed entries.
+Init MUST follow the Initialization command contract in `specs/behavior/cli.md` in `llm-tool-cli`, using the default filename and configuration contract in `specs/behavior/config.md`.
 Starter contents MUST follow the Starter configuration contract in `specs/behavior/config.md`.
-It MUST NOT fetch repositories or create a lockfile.
-No positional arguments or command-specific options MUST be accepted.
-
-Existing targets and failed initialization MUST follow the shared configuration-creation and initialization contracts without overwriting existing configuration.
-Success MUST emit the shared creation acknowledgement identifying the created configuration path.
+Its effects on source access and lock state MUST follow State and shared revisions in `specs/behavior/locking.md`.
 
 ## `vcsinstall dependency` command group
 
@@ -282,8 +265,6 @@ The error MUST identify the name and explain that intentional redefinition requi
 `--replace` MUST authorize explicit dependency replacement under that operation contract.
 For a new name, `--replace` MUST still create the dependency normally.
 
-Success MUST emit one dependency record followed by installation records for any affected entries.
-
 Examples:
 
 ```bash
@@ -295,7 +276,7 @@ vcsinstall dependency add --replace formatting 'git+https://example.com/team/sha
 
 ### `vcsinstall dependency list` command
 
-Dependency list MUST report every declared dependency, including dependencies without entries, ordered by name.
+Dependency list MUST report every declared dependency, including dependencies without entries.
 It MUST include repository identity, effective selector, and the matching shared locked revision, or null when no matching lock exists.
 It MUST use Local state inspection in `specs/behavior/locking.md` and report the per-dependency entry counts defined under Dependency records below.
 A file mapping or directory mapping MUST each count as one entry regardless of how many files it contains.
@@ -315,7 +296,7 @@ The command MUST invoke the `dependency outdated` contract under Read-only opera
 A missing or mismatching dependency lock MUST produce an operational diagnostic identifying the dependency and providing guidance to run `install` or `dependency update NAME`.
 An outdated result MUST identify a source-revision difference rather than promise that an update can succeed or count entries whose source content would change.
 
-Success MUST emit only dependency records for outdated dependencies, ordered by name, showing their locked and current revisions.
+Success MUST emit only dependency records for outdated dependencies, showing their locked and current revisions.
 Finding outdated dependencies MUST NOT make the command fail.
 No outdated dependencies or an empty dependency selection MUST succeed without result records.
 
@@ -336,7 +317,6 @@ There MUST NOT be an implicit cascade or an option bypassing this check.
 
 The command MUST invoke the `dependency remove` operation contract in `specs/behavior/locking.md`.
 The command MUST operate locally without a VCS client or repository-cache access and MUST preserve cached repositories and remote contributions.
-Success MUST emit one dependency record describing the removed definition.
 
 ### `vcsinstall dependency update` command
 
@@ -348,7 +328,6 @@ An empty dependency collection MUST succeed without result records.
 The root MUST NOT expose an `update` command or alias.
 
 The command MUST invoke the `dependency update` operation contract in `specs/behavior/locking.md` for the selected dependencies.
-Success MUST emit one dependency record for each selected dependency followed by installation records for their entries, using `dependency update` as the operation.
 
 Examples:
 
@@ -368,7 +347,6 @@ The root MUST NOT expose a `push` command or alias.
 #### Mode and options
 
 `--mode` MUST select exactly one value under Delivery modes in `specs/behavior/vcs-interaction.md`.
-There MUST NOT be a default mode inferred from backend, host, or permissions.
 An unsupported mode, hosting/source combination, or mode-specific option MUST fail as an invalid argument before reading command payloads or accessing sources and hosting services.
 
 The command MUST accept these command-specific options:
@@ -398,46 +376,30 @@ Every explicitly selected entry MUST belong to the named dependency.
 Unknown entry paths and entries belonging to another dependency MUST fail as invalid arguments before fetching sources or invoking delivery effects.
 This membership restriction MUST apply even when dependencies share a repository, requested selector, and locked revision.
 Entries from different dependencies MUST NOT be combined in one invocation.
-The command MAY select only some entries of the named dependency; unselected entries MUST NOT contribute local changes or require local-content verification.
+The command MAY select only some entries of the named dependency; verification and exclusion of unselected entries MUST follow the `dependency push` operation contract in `specs/behavior/locking.md`.
 
 #### Preparation and delivery
 
 The command MUST invoke the `dependency push` operation contract in `specs/behavior/locking.md` for baselines and change detection.
-Local publication validation MUST complete before source fetching, hosting requests, or contribution creation.
 The command MUST process locally changed entries from the valid selection, including tracked additions and deletions.
 Clean explicitly selected entries MUST succeed as unchanged once validation passes.
-A selection with no changed content MUST NOT create delivery artifacts or remote contribution resources.
 
 Contribution publication, Publication destination selection, and the selected mode contract in `specs/behavior/vcs-interaction.md` MUST govern effects.
-Branch, PR, and patch modes MUST prepare selected changes together against the locked source revision.
-Branch mode MUST publish a new contribution branch; PR mode MUST also complete or recover its hosted review under the hosting contract.
-Direct mode MUST apply selected changes to the current destination branch under the baseline and concurrent-update protections in `specs/behavior/hosting/git.md`, including successful completion when those changes are already present.
-Patch mode MUST produce the requested file without remote publication, and overwrite mode MUST follow `specs/behavior/hosting/filesystem.md`.
 
 When PR or branch mode delivers changed entries, omitting `--branch` MUST cause a contribution branch name to be chosen automatically and reported.
 The option MUST NOT change dependency or source-version selection.
-Branch and PR modes MUST NOT advance or replace existing branches; verified PR retry MUST follow the selected hosting implementation's matching-contribution rules.
-Permission to publish MUST NOT imply permission to merge a review.
 
 #### Hosting and publication selection
 
 Hosting selection MUST follow Hosting selection and capabilities in `specs/behavior/vcs-interaction.md`.
-Native Git delivery MUST remain available for owned repositories on any Git server without requiring a hosted-service API.
 
 `--push-repository` MUST select one repository interpreted through the named dependency's backend.
 A VCS-qualified locator MUST agree with that backend; an unqualified native locator MUST use the already selected backend rather than infer another source kind.
 Version fragments MUST NOT be accepted because the argument selects a recipient, not a source version.
 Relative native filesystem locators MUST resolve against the invocation's working directory.
-The override MUST remain invocation-local without changing source declarations or lock state.
 
-Direct mode MUST use `--branch` as its existing destination branch, or default to the dependency's effective branch selector.
-A tag or revision selector MUST require explicit `--branch` in direct mode.
-Direct mode MUST NOT create a missing destination branch or infer a branch containing a pinned commit.
-
-PR mode MUST select a compatible service-specific hosting implementation.
-Without `--base`, an effective branch selector MUST supply the review target branch.
-A tag or revision selector MUST require explicit `--base`.
-Destination and review target branch selection MUST NOT change the dependency's selector or locked revision.
+Direct-mode destination branch selection MUST follow Destination branch in `specs/behavior/hosting/git.md`.
+PR review target selection MUST follow PR target selection in the selected hosting contract, including `specs/behavior/hosting/github.md` for GitHub.
 
 #### Patch output
 
@@ -464,11 +426,7 @@ An empty changed selection MUST leave the output file unchanged.
 
 Success MUST emit one installation record per selected entry using `dependency push` as the operation.
 Results MUST identify the delivery mode and the actual completed outcome under Installation records below.
-When changed entries are delivered in PR mode, success MUST include a confirmed review URL; branch publication alone MUST NOT satisfy that outcome.
-Other modes MUST remain independent of hosted review creation.
-
-When delivery fails after external effects occur, operational diagnostics MUST identify known completed effects and the information needed to retry safely.
-Success MUST NOT imply acceptance into the source or advance installation state.
+Failures and completion guarantees MUST follow Failures and completed effects in `specs/behavior/vcs-interaction.md`.
 
 Examples:
 
@@ -524,7 +482,6 @@ vcsinstall add --replace --allow-outdated dependency://formatting/specs @/specs/
 Install MUST invoke the `install` operation contract in `specs/behavior/locking.md` for the selected configuration.
 It MUST NOT accept positional arguments or source-selection options.
 `--locked` MUST select locked installation under that contract.
-Success MUST emit dependency records followed by installation records for the selected configuration.
 
 Examples:
 
@@ -612,18 +569,15 @@ vcsinstall --cache-dir ./temporary-cache cache clean
 The default and required document MUST be `usage`.
 Additional document choices MAY be introduced when matching packaged documentation is available.
 Document content MUST follow `specs/behavior/skill_fixtures.md`.
-The command MUST NOT load project files or use a repository cache or VCS client.
 
 ## `vcsinstall version` command
 
 Version MUST report the installed version of distribution `vcsinstall` under the Version command contract in `specs/behavior/cli.md` in `llm-tool-cli`.
-It MUST NOT load project files or use a repository cache or VCS client.
 
 ## Output behavior
 
 Output MUST follow the cell formatting and delivery contracts in `specs/behavior/protocol.md` in `llm-tool-cli`.
-All result, warning, and expected-error cells MUST use stdout in every protocol.
-Automation stdout MUST contain only JSON Lines; help and unadapted framework argument-parsing diagnostics retain their shared behavior.
+The default stdout stream MUST be used for result, warning, and expected-error delivery in every protocol; help and unadapted framework argument-parsing diagnostics retain their shared behavior.
 External VCS output MUST NOT be copied directly into the protocol stream; useful diagnostic information MUST be delivered through appropriate cells.
 vcsinstall MUST NOT add terminal styling or progress-control sequences.
 
@@ -740,7 +694,7 @@ Push records MUST additionally expose:
 Unchanged entries MUST use null for these effect fields other than `mode`, including when changed entries from the same selection were delivered.
 Every changed entry delivered by one invocation MUST identify the same mode and applicable contribution metadata.
 Direct delivery MUST use `pushed` for locally changed entries verified as already present at the destination, with that observed recipient revision, even when no new commit is required.
-For filesystem overwrite, `push_repository` MUST identify the original source directory, `branch` MUST be null, and `push_revision` MUST be the resulting complete source fingerprint.
+For filesystem overwrite, `push_repository` MUST identify the original source directory and `push_revision` MUST be the resulting complete source fingerprint.
 For patch delivery, `patch_file` MUST identify the same complete artifact for each exported entry; repository and review effect fields MUST be null, while `hosting_provider` MUST identify the selected implementation.
 The `revision` field MUST continue to identify the installation baseline rather than the newly published source revision.
 
@@ -779,21 +733,11 @@ Explicit command-shape and selector validation MUST follow the Invalid-argument 
 Command failures MUST follow that specification's Command error handling and Exit statuses contracts.
 Configuration and path diagnostics MUST propagate without losing their native diagnostic information.
 
-The default statuses MUST remain:
-
-- `0` — Successful execution, including unchanged results and listing local changes or outdated dependencies.
-- `1` — Explicit invalid-argument diagnostics.
-- `2` — Configuration errors and unadapted framework parsing errors.
-- `3` — Other expected operational failures, including local-change conflicts, VCS failures, and permission failures.
-
-Multiple errors MUST retain their diagnostic order and use the highest declared exit status.
-Shared diagnostics MUST retain their declared exit statuses.
-Environment-error cells MUST retain native codes and context under `specs/behavior/protocol.md` in `llm-tool-cli`.
-Unexpected technical failures MUST remain distinct from expected operational failures.
+Unchanged results and listing local changes or outdated dependencies MUST count as success.
+Local-change conflicts, VCS failures, and permission failures MUST use the shared expected-operational-failure category.
+Error representation and unexpected technical failures MUST follow `specs/architecture/errors.md`; environment-error cells MUST follow `specs/behavior/protocol.md` in `llm-tool-cli`.
 
 Command-shape, option-conflict, and local entry-selection failures MUST be detected before fetching sources or applying changes.
 Failures requiring source-reference resolution MAY follow source fetching but MUST precede project changes or contribution publication.
 Local-change and source-preparation failures MUST be detected before applying project changes or publishing contributions.
-If an expected failure occurs after local or remote effects have completed, diagnostics MUST identify those effects and provide enough context for recovery or retry.
-A failed `dependency push` MUST NOT imply that a contribution already published in that invocation was rolled back.
-Failure MUST suppress pending ordinary success output and deliver errors followed by warnings under the shared delivery contract.
+Failures after completed effects MUST follow Preparation and consistency in `specs/behavior/locking.md` for project changes, Failures and completed effects in `specs/behavior/vcs-interaction.md` for contributions, and Cleanup in `specs/behavior/cache.md` for cache cleanup.

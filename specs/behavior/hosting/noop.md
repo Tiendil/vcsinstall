@@ -17,13 +17,9 @@ The following are out of scope:
 ## Availability and composition
 
 The hosting implementation name MUST be `noop`.
-It MUST be available only when explicitly supplied by a test environment under `specs/architecture/tests.md`.
-Normal application execution MUST reject it as unsupported, without a production CLI option that enables it.
-The common hosting contract MUST follow Hosting selection and capabilities, Publication destination selection, and Failures and completed effects in `specs/behavior/vcs-interaction.md`.
+Test-only availability and the common hosting contract MUST follow `specs/behavior/vcs-interaction.md`.
 Architectural responsibilities MUST follow `specs/architecture/modules_layout.md`.
 
-Noop hosting MUST be independently selectable from the source backend.
-Selecting the noop source MUST NOT select or enable noop hosting implicitly.
 Fixtures MUST support composition with:
 
 - the noop source under `specs/behavior/vcs/noop.md`, supplying controlled views and explicitly declared simulated delivery modes.
@@ -88,8 +84,6 @@ Providing a view MUST NOT authorize publication or advance project revisions or 
 
 Branch and PR simulations MUST prepare the selected changes at the locked base revision, preserve unselected source content, and produce an immutable fixture contribution revision.
 Branch mode MUST create a new fixture branch with the ordinary collision protection.
-PR retry MAY reuse a branch only after verifying the requested parent, complete tree, and message; conflicting branches MUST NOT be advanced, replaced, or deleted.
-An explicit publication repository MUST remain the selected recipient without changing source declarations or falling back after failure.
 
 Direct simulation MUST follow the destination-branch selection, content protection, conditional advancement, and already-present completion rules in `specs/behavior/hosting/git.md`.
 It MUST expose conflicting content and concurrent branch movement as failures rather than unconditional success.
@@ -102,20 +96,14 @@ Simulated delivery MUST return the ordinary mode-specific result values without 
 ## Forks, reviews, and recovery
 
 PR destination discovery MUST respect fixture permissions and fork relationships under the common publication contract.
-An explicit publication repository MUST remain the selected recipient or fail; it MUST NOT be replaced silently.
 An eligible fixture fork MUST be reusable, and permitted creation MUST create only fixture state.
 Denied creation, an ineligible destination, or an unresolved choice MUST fail explicitly.
 
 Review lookup and creation MUST preserve the requested source, publication head, and review target.
 A newly created fixture review MUST receive a stable identity and URL and retain its contribution branch and revision.
-A matching open review MUST be returned rather than duplicated.
-An ambiguous or conflicting match MUST fail explicitly.
-Closed or merged fixture reviews MUST retain their state and MUST NOT be reopened or duplicated implicitly.
-A review match MUST NOT authorize reuse of an unverified contribution branch.
+Contribution-branch reuse and review matching MUST apply the verification, collision, and review-state rules in Review creation, retry, and completion in `specs/behavior/hosting/github.md` to fixture state, independently of that provider's native-client and identity formats.
 
-Completed PR simulation MUST confirm the matching head, target, and review URL.
-It MUST NOT acknowledge accepted content or advance installation baselines.
-Non-PR simulations MUST NOT create forks or reviews.
+PR completion and mode-specific effects MUST follow Delivery modes and Failures and completed effects in `specs/behavior/vcs-interaction.md`.
 
 ## Failures and determinism
 
@@ -137,7 +125,7 @@ Injected failures MUST cross the ordinary hosting-error boundary and retain the 
 A failure after a simulated effect MUST preserve it in fixture state rather than imply rollback.
 Review creation whose response is lost MUST remain discoverable on retry.
 The same fixture state and inputs MUST produce the same hosting decisions and effects, apart from generated identifiers permitted by the CLI contract.
-Fixture success MUST NOT substitute for coverage of real native publication or hosted-service behavior.
+Integration coverage MUST follow Adapter integration boundaries in `specs/architecture/tests.md`.
 
 ## Example
 

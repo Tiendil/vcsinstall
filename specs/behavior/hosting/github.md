@@ -19,10 +19,9 @@ The following are out of scope:
 The hosting implementation name MUST be `github`, compatible with source backend `git`.
 The common hosting contract MUST follow `specs/behavior/vcs-interaction.md`.
 Architectural composition and client selection MUST follow `specs/architecture/modules_layout.md`.
-GitHub support MUST NOT introduce a `github` source backend or a different representation of Git commits.
 
 GitHub hosting MUST support repository acquisition and refresh as well as PR delivery and native Git modes.
-Acquisition and native delivery MUST follow `specs/behavior/hosting/git.md` without requiring GitHub repository identification, the service client, or GitHub API authentication.
+Acquisition and native delivery MUST follow `specs/behavior/hosting/git.md`, including their service-client independence under `specs/behavior/vcs-interaction.md`.
 Overwrite mode MUST fail as unsupported under the CLI contract.
 
 ## Repository acquisition and refresh
@@ -61,7 +60,6 @@ Neither client defaults nor the publication repository's default branch MAY over
 
 With `--push-repository`, PR mode MUST validate that the selected repository is an eligible contribution head for the source on the same GitHub service.
 Eligibility MUST be established through hosting metadata rather than a matching repository basename.
-An explicit recipient MUST NOT be replaced if validation or publication fails.
 
 Without an override, the adapter MUST use the source repository when the authenticated account has source write access.
 When that access is absent, it MUST discover and reuse an eligible writable fork owned by the configured account, or create one where the host's policy permits.
@@ -72,7 +70,6 @@ A forbidden fork or unavailable writable destination MUST produce a diagnostic i
 A fork's default-branch-only state MUST NOT change the source revision or review target used for the contribution.
 Required contribution objects MUST come from the original source preparation even if the fork does not yet contain the selected branch or commit.
 A newly created fork MUST be available for the intended Git publication before the branch is pushed.
-Policy, authentication, and transport failures MUST NOT be silently converted into another publication mode or another recipient.
 
 The [GitHub fork contract](https://docs.github.com/en/pull-requests/reference/forks) defines fork relationships and policy restrictions.
 The [GitHub CLI](https://cli.github.com/manual/gh_pr_create) can offer its own fork and push choices; those choices MUST NOT override vcsinstall's resolved source, publication repository, head, or base.
@@ -80,7 +77,6 @@ Required hosted operations that exceed a convenience command's capabilities MUST
 
 ## Review creation, retry, and completion
 
-All local validation and contribution preparation under `specs/behavior/hosting/git.md` MUST complete before creating a fork or publishing a branch.
 After a contribution branch is available, PR mode MUST create or recover the matching review in the original source repository.
 Its title and body MUST be noninteractive and derived from the resolved contribution message and source-path changes.
 An implementation MUST NOT start an editor, interactive fork picker, or merge operation.
@@ -95,16 +91,9 @@ A matching open review MUST be returned rather than duplicated.
 An ambiguous or conflicting review MUST fail explicitly.
 A matching closed or merged review MUST be reported with its state and guidance rather than reopened or duplicated automatically.
 
-Completed PR delivery of changed content MUST confirm the actual contribution head and target and return the matching review URL.
-Branch publication alone MUST NOT complete PR delivery.
-If review creation fails or has an uncertain outcome, diagnostics MUST report known fork, branch, and commit effects and enough target information to retry with that branch.
-Remote effects MUST NOT be deleted to simulate rollback.
+Completed PR delivery of changed content MUST confirm the actual contribution head and target under the completion contract in Failures and completed effects in `specs/behavior/vcs-interaction.md`.
+Review failures and uncertain outcomes MUST retain that contract's retry information and completed-effect guarantees.
 Recovery MUST use verified repository and review state rather than contribution records in project configuration or the lockfile.
-
-Creating a review MUST NOT imply acceptance or authorize automatic merging.
-Merged, squashed, or cherry-picked contributions MUST be acknowledged only through Updating baselines in `specs/behavior/locking.md`.
-Git ancestry, review status, or a previous publication MUST NOT substitute for source-content equality.
-A dependency pinned to a tag or commit MUST retain that selection after submission or acceptance.
 
 ## Examples
 

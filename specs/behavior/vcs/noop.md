@@ -17,9 +17,7 @@ The following are out of scope:
 ## Availability and identity
 
 The backend name MUST be `noop`.
-It MUST be available only when explicitly supplied by a test environment under `specs/architecture/tests.md`.
-Normal application execution MUST reject it as unsupported, without a production CLI option that enables it.
-The common source contract MUST follow `specs/behavior/vcs-interaction.md`.
+Test-only availability and the common source contract MUST follow `specs/behavior/vcs-interaction.md`.
 
 The native repository locator MUST be a nonempty fixture identifier whose spelling and case remain literal.
 It MUST NOT implicitly access a filesystem location or network address.
@@ -63,9 +61,7 @@ The test fixture mechanism MAY model such failures without prescribing a concret
 ## Hosting composition
 
 Acquisition, refresh, and outgoing simulations MUST follow `specs/behavior/hosting/noop.md` and MUST be supplied independently.
-Selecting this source MUST NOT implicitly enable noop hosting or infer a real hosting adapter.
 Source inspection MUST interpret the supplied view without simulating acquisition, refreshing references, or inventing source access.
-Source resolution and extraction MUST NOT create contributions, patch artifacts, or fixture publication effects.
 Source and hosting fixture repository state MAY be shared explicitly by a test; simulated delivery MUST NOT change a separately supplied source fixture implicitly.
 
 ## Failures and determinism
@@ -80,4 +76,4 @@ Fixtures MUST be able to represent:
 
 Injected failures MUST cross the same observable source-error boundary as real backend failures and MUST NOT bypass normal selection, hashing, or project-consistency checks.
 The same fixture state and inputs MUST produce the same source content and resolution.
-Tests requiring native VCS semantics MUST exercise the appropriate real source boundary rather than treat a noop success as evidence about it.
+Integration coverage MUST follow Adapter integration boundaries in `specs/architecture/tests.md`.

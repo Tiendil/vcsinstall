@@ -25,13 +25,18 @@ Revision selection, baseline verification, and project state changes MUST follow
 Persisted revision and content identities MUST follow `specs/behavior/lockfile.md`.
 Source and hosting access using the repository cache MUST follow `specs/behavior/cache.md`.
 
+Test-only adapters MUST be available only when explicitly supplied by a test environment under `specs/architecture/tests.md`.
+Normal application execution MUST reject them as unsupported, without a production CLI option that enables them.
+They MUST be supplied independently; selecting one MUST NOT implicitly enable another source or hosting adapter.
+
 ## Backend selection and capabilities
 
-The supported source backends MUST be:
+The supported production source backends MUST be:
 
 - `git` — Git repositories, under `specs/behavior/vcs/git.md`.
 - `filesystem` — Ordinary filesystem directories, under `specs/behavior/vcs/filesystem.md`.
-- `noop` — Test-only controlled sources, under `specs/behavior/vcs/noop.md`.
+
+Tests MAY explicitly supply the test-only `noop` source under `specs/behavior/vcs/noop.md`, independently of hosting selection.
 
 Backend selection MUST be explicit through the normalized declaration produced under the CLI repository-locator rules.
 An unknown or unsupported backend MUST fail explicitly without falling back to Git or ordinary filesystem access.
@@ -45,10 +50,16 @@ Each backend MUST define its supported:
 - file and directory extraction semantics.
 - repository-cache use.
 
-Source resolution and extraction MUST use an available repository view without acquiring or refreshing repository data or publishing changes.
+Source resolution and extraction MUST use an available repository view and MUST NOT perform:
+
+- repository acquisition.
+- repository refresh.
+- contribution preparation.
+- delivery effects or artifact creation.
+
 Unsupported transports or selectors MUST fail explicitly rather than be ignored or reinterpreted as another capability.
 Unsupported command options MUST be rejected under the CLI's invalid-argument contract before source access or external mutation.
-Read access MUST NOT imply permission to publish, and publication permission MUST NOT imply permission to merge a contribution.
+Read access MUST NOT imply permission to publish.
 Ordinary filesystem and HTTP source notation MUST NOT by itself imply VCS revision history or contribution-branch support.
 
 Additional VCS support MUST preserve native semantics rather than impose Git's branch model on every backend.
@@ -66,7 +77,6 @@ The supported production hosting implementations MUST be:
 - `filesystem` — Access to an ordinary source directory and authorized direct writes, under `specs/behavior/hosting/filesystem.md`.
 
 Tests MAY explicitly supply test-only `noop` hosting under `specs/behavior/hosting/noop.md`, independently of source-backend selection.
-It MUST remain unavailable in normal application execution.
 
 A source hosted on GitHub MUST retain backend `git`; hosting selection MUST NOT change its native repository locator or revision meaning.
 Hosting selection MUST NOT create another source entity or change repository-cache identity or lock matching.
@@ -79,7 +89,6 @@ Acquisition and refresh MUST NOT require a delivery mode or publication permissi
 Without an explicit value, Git branch, direct, and patch delivery MUST select `git` regardless of the source's hosting service.
 Filesystem overwrite delivery MUST select `filesystem`.
 PR delivery MUST select a compatible service-specific implementation from an unambiguous recognized source host or native-client configuration.
-Selecting a noop source MUST NOT implicitly select noop hosting.
 
 Unknown implementations and unsupported hosting/source/mode combinations MUST fail under the CLI's invalid-argument contract before payload reads or source access.
 Where service identification is required, unresolved or ambiguous identity MUST fail with guidance to select or configure hosting before external mutation.
@@ -95,8 +104,8 @@ Additional implementations MUST define acquisition and refresh behavior, support
 
 Client selection and protocol integration MUST follow External integrations in `specs/architecture/modules_layout.md`.
 A required but unavailable client MUST cause an operational failure; vcsinstall MUST NOT install it automatically.
-Authentication and commit identity MUST use the selected client's configured facilities, with failures preserved as operational diagnostics.
-Filesystem and noop source or hosting access MUST NOT require a VCS executable.
+Authentication and commit-identity failures MUST remain operational diagnostics.
+Filesystem and noop source or hosting access MUST NOT require or invoke a VCS executable.
 
 Client invocations MUST preserve native locator, transport, and authority semantics under Repository locators and identity in `specs/behavior/cli.md`.
 Repository locators, selectors, and paths MUST be passed as data without allowing them to become shell commands or unintended client options.
@@ -170,10 +179,8 @@ Selected changes MUST map installed destinations back to their recorded source p
 Selected mappings proposing conflicting content or deletion at the same source path MUST fail before creating a contribution or applying source writes.
 Compatible overlapping edits MAY be combined, but unselected entries MUST NOT contribute local changes.
 
-Branch, PR, and patch delivery MUST prepare the selected changes together against the dependency's locked revision under the hosting contract.
-The resulting contribution MUST reproduce those changes at their source paths while preserving unrelated source content from that revision.
-Direct delivery MUST instead use the destination branch's current revision with baseline protection under `specs/behavior/hosting/git.md`.
-Filesystem overwrite MUST use the live source under `specs/behavior/hosting/filesystem.md`.
+Contribution bases and revision requirements MUST follow the `dependency push` operation contract in `specs/behavior/locking.md` and the selected hosting contract.
+The resulting contribution MUST reproduce the selected changes at their source paths while preserving unrelated content from its applicable base.
 A source root or content kind that cannot be represented by the selected hosting implementation MUST cause an explicit failure rather than an inaccurate successful publication.
 A selection without changed content MUST complete without source fetching, hosting requests, or delivery effects once local selection and option validation passes.
 All required source preparation and selected-content checks MUST finish before creating a fork or applying delivery effects.
@@ -201,7 +208,7 @@ The explicit `--mode` values MUST be as follows; required outcomes apply to chan
 Modes MUST NOT be selected implicitly from backend capabilities, permissions, or failure of another mode.
 A PR includes its contribution branch; callers MUST NOT need a separate branch-creation request.
 Only PR mode MAY create a fork or hosted review as part of delivery.
-Patch mode MUST NOT require hosting authentication or a writable remote.
+Patch generation MUST NOT require service API authentication or a writable remote; required source acquisition MUST retain the transport-authentication contract under Native client execution.
 Filesystem overwrite MUST follow `specs/behavior/hosting/filesystem.md`.
 For Git sources, branch, direct, and patch delivery MUST follow the Git hosting contract; GitHub PR delivery MUST follow its hosting contract.
 Noop hosting MAY simulate these modes only under its explicit test-fixture contract.
@@ -223,20 +230,14 @@ Creating a hosted review MUST NOT imply permission to merge it or authorize auto
 
 Patch mode MUST write the selected hosting implementation's contribution format to the required `--output` file under the CLI contract.
 The artifact MUST describe changes at original source paths rather than installed destination paths.
-Generating it MUST preserve project declarations, installation baselines, and installed content.
 The output MUST remain user-managed data rather than a cache entry or lockfile field.
 An output failure MUST fail the operation rather than report an exported contribution.
 
 ## Direct source overwrite
 
 Selecting overwrite mode MUST explicitly authorize direct writes only to the selected source mappings.
-It MUST NOT bypass:
-
-- entry selection and dependency membership.
-- matching lock and trustworthy baseline requirements.
-- source and destination containment.
-- conflicting selected edits.
-- filesystem permissions or hosting representability constraints.
+Selection and local verification MUST follow the common publication contract above, with source containment under Source inspection and extraction.
+Write permissions and representability MUST follow `specs/behavior/hosting/filesystem.md`; authorization MUST NOT bypass those constraints.
 
 ## Failures and completed effects
 

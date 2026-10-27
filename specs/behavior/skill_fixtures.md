@@ -22,12 +22,12 @@ Each fixture MUST start with one h1 identifying vcsinstall and the document's su
 
 ## Usage fixture
 
-Usage MUST describe:
+Usage MUST describe the implemented interface under `specs/behavior/cli.md`, including:
 
 - currently implemented commands.
 - command invocation and output protocols.
 - placement of global options before subcommands.
-- availability without project configuration.
+- which commands require project configuration and which interfaces remain project-independent.
 - the configuration and lockfile names.
 - the development status of installation, lockfile, and push-back functionality.
 

@@ -49,8 +49,7 @@ Accepted revision abbreviations MUST resolve unambiguously before the complete i
 After selector-kind inference from CLI input, the dependency declaration MUST record the resolved kind and requested name, or the complete immutable identifier for a revision pin.
 Later operations MUST use that recorded selector rather than repeat inference.
 
-Establishing a dependency definition without a selector MUST infer the backend's default version.
-For Git, this MUST resolve the remote's default branch name; inability to identify an unambiguous default branch MUST cause an operational failure before project mutation.
+Establishing a dependency definition without a selector MUST infer the backend's default version under its source contract in `specs/behavior/vcs-interaction.md`.
 The inferred Git branch name MUST be recorded as the dependency lock's branch selection.
 When `dependency add` establishes or explicitly replaces the Git definition, it MUST also write that branch name into configuration.
 
@@ -166,8 +165,7 @@ When source content is retrieved to reproduce an existing baseline, its kind and
 A mismatch MUST fail rather than rewrite the expected hash, accept the cache's content, or select a newer revision.
 Required repository data MUST follow Repository acquisition and refresh in `specs/behavior/vcs-interaction.md`; content inspection MUST follow Source inspection and extraction in that specification, including backend-specific revision-availability limits.
 For backends using the repository cache, rebuilding missing cache data MUST follow Repository reuse and revision isolation in `specs/behavior/cache.md`.
-Cache contents MUST remain disposable without changing locked revisions, baselines, or local-content comparisons.
-Cache reuse and cleanup MUST preserve this contract under `specs/behavior/cache.md`.
+Cache reuse and cleanup MUST preserve locked revisions, baselines, and local-content comparisons under `specs/behavior/cache.md`.
 
 ## Source freshness
 

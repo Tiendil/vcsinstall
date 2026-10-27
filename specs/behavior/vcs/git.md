@@ -26,15 +26,10 @@ Configured locators MUST retain Git's native form under `specs/behavior/config.m
 Client execution MUST follow External integrations in `specs/architecture/modules_layout.md`.
 An unsupported client feature or repository object format MUST fail explicitly rather than select another backend or revision.
 Inspection of cached views MUST follow `specs/behavior/cache.md`.
-Source inspection MUST use supplied local Git data and reference metadata without clone, fetch, transport authentication, or remote-reference discovery.
+Source inspection MUST use supplied local Git data and reference metadata under the source-access restrictions in `specs/behavior/vcs-interaction.md`.
 
 A local Git source MUST provide committed repository content; local working-tree and index changes MUST NOT be included.
-Source access MUST NOT modify the original local repository's:
-
-- working tree.
-- index.
-- checked-out branch.
-- configuration.
+Original-repository preservation MUST follow Native client execution in `specs/behavior/vcs-interaction.md`.
 
 ## Version selectors
 
@@ -43,12 +38,10 @@ Source access MUST NOT modify the original local repository's:
 A branch selector MUST identify the exact named branch in the source repository's `refs/heads/` namespace.
 Its name MUST be validated as a native Git branch name and MUST NOT be interpreted as a glob or revision expression.
 Resolution requiring a current branch target MUST use observations refreshed through hosting under Source freshness in `specs/behavior/locking.md`, including remote rewinds and deletions.
-A stale cached branch MUST NOT satisfy a failed refresh or hide deletion.
 
 Default-version inference MUST use the source's advertised default-branch metadata supplied by hosting and record its actual branch name under Version selection in `specs/behavior/locking.md`.
 It MUST NOT assume `main` or `master`, select the first advertised branch, or substitute the cache's checked-out branch.
 An ambiguous or unavailable default branch, or one without a resolvable commit, MUST fail before project mutation.
-Later operations MUST retain the inferred branch even if the remote's default changes.
 
 ### Tags
 
@@ -59,7 +52,6 @@ The recorded selector MUST remain the tag name, while the locked revision MUST b
 
 Resolution requiring a current tag target MUST use refreshed tag observations supplied through hosting rather than assume tags cannot move.
 A moved or deleted tag MUST follow the ordinary freshness and failure contracts; installation reusing a valid lock MUST continue requesting its locked commit.
-Tag movement MUST NOT rewrite an existing lock implicitly.
 
 ### Immutable revisions and ambiguity
 
@@ -69,8 +61,7 @@ Git SHA-1 and SHA-256 object formats MUST be supported when the installed client
 Symbolic expressions such as `HEAD` or `main~2` MUST NOT be recorded as immutable pins.
 Tree, blob, and tag-object identifiers MUST NOT be recorded in place of the selected commit identifier.
 
-Bare references MUST be resolved under the CLI ambiguity rules rather than Git's implicit ref precedence.
-In particular, a branch and tag sharing a name MUST remain ambiguous even when they resolve to the same commit.
+Bare references MUST follow Source-version fragments and option aliases in `specs/behavior/cli.md` rather than Git's implicit ref precedence.
 
 The [Git revision documentation](https://git-scm.com/docs/git-rev-parse) describes commit verification and repository object formats; these formats MUST remain distinct from vcsinstall's installed-content hashes.
 
@@ -80,7 +71,7 @@ A requested commit MUST be read from the supplied repository view, with acquisit
 If required objects remain unavailable, including after cache cleanup, extraction MUST fail rather than use another commit or a working-tree copy.
 Shallow or partial cached data MUST NOT make an incomplete tree appear complete.
 Local object inspection MUST NOT trigger an implicit fetch of missing objects.
-All entries prepared for one dependency operation MUST use its selected commit even if a branch or tag moves during acquisition.
+Revision consistency across entries MUST follow Version resolution and anchoring in `specs/behavior/vcs-interaction.md`.
 
 The content root MUST be the committed tree, excluding Git administrative data belonging to the original repository or cache.
 Source `.` MUST select that tree, and literal source paths MUST be interpreted relative to its root independently of a client's current directory.

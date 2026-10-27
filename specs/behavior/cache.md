@@ -37,8 +37,6 @@ When the platform provides no usable default cache location, the fallback MUST b
 If neither a default nor a home-based fallback can be resolved, operations requiring a cache MUST fail with guidance to provide `--cache-dir`.
 A directory's absence MUST NOT prevent its selection as a default or explicit cache root.
 
-**Note:** Python's standard library has no unified API for discovering application cache directories. The third-party [`platformdirs`](https://platformdirs.readthedocs.io/en/stable/) library supports this discovery on Linux, macOS, and Windows. To match the layout above, its options `appauthor=False` and `opinion=False` suppress the extra author directory and `Cache` suffix on Windows; `ensure_exists=False` leaves directory creation to the operation that needs the cache.
-
 After selecting the location and expanding home markers, absolute resolution MUST follow the Project-root resolution contract in `specs/behavior/paths.md` in `llm-tool-cli`, with the cache location as the supplied filesystem root.
 The effective root MUST remain the same resolved absolute location throughout an invocation, including cleanup and its result.
 The cache MAY reside outside the target project.
@@ -53,17 +51,15 @@ Access or creation failure at a selected default root MUST also fail rather than
 
 ## Cache-independent operations
 
-The following interfaces MUST remain usable without resolving or accessing a cache root, including when an explicit `--cache-dir` is unusable:
+The project-independent interfaces listed in Application identity and project files in `specs/behavior/cli.md` MUST retain their cache independence.
+The following interfaces MUST also remain usable without resolving or accessing a cache root, including when an explicit `--cache-dir` is unusable:
 
-- root and command help, including bare `dependency` and `cache`.
-- shell completion.
+- bare `dependency` and `cache`.
 - `init`.
 - `list`.
 - `remove`.
 - `dependency list`.
 - `dependency remove`.
-- `skill`.
-- `version`.
 
 Loading or validating configuration and lock state MUST NOT require repository-cache access.
 Whether acquisition, source inspection, or delivery needs cached data MUST follow the applicable operation and adapter contracts; accepting `--cache-dir` MUST NOT itself make an operation cache-dependent.
@@ -88,9 +84,6 @@ Repository cache identity MUST be independent of:
 
 Dependencies using the same normalized repository MUST share its repository cache entry, including across projects and when they select different branches, tags, or revisions.
 Sharing cached repository data MUST preserve independently locked dependencies under State and shared revisions in `specs/behavior/locking.md`.
-Equivalent qualified and explicitly selected native locators MUST use the same cache identity.
-Different native transports MUST remain separate identities; HTTPS and SSH locators MUST NOT be merged merely because they appear to address the same repository.
-Backend namespaces MUST remain separate, including an ordinary HTTP backend and a Git backend using the same HTTPS address if HTTP source support is introduced.
 
 **Examples:**
 
@@ -108,7 +101,6 @@ Native Git and GitHub hosting MUST share Git's cache namespace rather than creat
 Prepared publication commits MUST NOT replace source content or make a recipient's state authoritative for the dependency's source selection.
 Operations requiring source data MUST recreate missing cache data as needed and retrieve required revisions under the applicable operation contract in `specs/behavior/locking.md`.
 Rebuilding cached views MUST use the hosting acquisition contract without requiring source inspection to perform transport access.
-Inability to retrieve a required immutable revision MUST cause an operational failure.
 
 Dependencies sharing a cached repository MUST each be able to retrieve source content at their own locked revision, even when those revisions differ.
 Any cached checkouts or snapshots for specific versions MUST remain distinguishable by their immutable revisions.
@@ -116,7 +108,7 @@ Preparing one revision MUST NOT cause another dependency or operation to read co
 Changing installed content MUST NOT change cached source content or another installation through shared filesystem storage.
 
 Source reuse and refresh MUST follow Source integrity and cache independence and Source freshness in `specs/behavior/locking.md`.
-Cache availability MUST NOT change version selection or the content accepted for an existing installation baseline.
+Cache availability, reuse, and cleanup MUST NOT change locked revisions, installation baselines, or local-content comparisons, or the content accepted for an existing baseline.
 Missing cache data MUST NOT require removing or changing valid lock records.
 Preparation MAY populate or refresh the cache even when the project operation subsequently fails.
 Cache preparation alone MUST NOT establish project-operation success or advance project state.
@@ -156,14 +148,11 @@ Waiting MUST NOT modify:
 - project lockfiles.
 - installed content.
 
-Timeout MUST leave those resources unchanged by the waiting invocation.
 Other lock-access failures MUST fail operationally and retain the applicable filesystem diagnostic information.
 
 Once all protected cache access has ended, normal completion, failure, or process termination MUST release exclusive access without requiring users to remove stale coordination files.
 The presence of the cache lock file alone MUST NOT indicate that the cache is in use.
 Once created, that file and its containing cache root MUST remain in place across lock release and cleanup so later invocations coordinate through the same file.
-
-**Note:** An operating-system file lock, available through libraries such as [`filelock`](https://py-filelock.readthedocs.io/en/stable/), can provide exclusive access and release after process termination. Recording a PID alone does not provide these guarantees.
 
 ## Cleanup
 
@@ -190,7 +179,6 @@ Cleanup MUST preserve the cache root and cache lock file when they exist; other 
 Cache-access or deletion failures MUST fail explicitly rather than report complete cleanup or fall back to another cache root.
 If deletion fails after removing some data, diagnostics MUST identify partial cleanup rather than imply rollback.
 
-Removing cached data MUST preserve locked revisions, installation baselines, and local-change comparisons under Source integrity and cache independence in `specs/behavior/locking.md`.
 Later operations requiring source data MUST follow Repository reuse and revision isolation in this specification.
 Command arguments and cleanup result records MUST follow `specs/behavior/cli.md`.
 

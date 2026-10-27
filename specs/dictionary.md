@@ -36,7 +36,7 @@ The following topics are out of scope:
 - `human protocol` — output protocol optimized for terminal users.
 - `llm protocol` — output protocol optimized for coding agents invoking the tool.
 - `automation protocol` — output protocol optimized for programs; output is serialized as JSON Lines.
-- `expected error` — an operational failure represented by an environment-error model and returned through a result, both provided by `llm_tool_cli`.
+- `expected error` — an operational failure handled through the project's diagnostic contract in `specs/architecture/errors.md`.
 - `warning` — a non-fatal problem discovered while processing a request.
 
 Installation, lockfile, and push-back terms describe the intended product scope; they do not prescribe command syntax or storage formats.

@@ -63,8 +63,7 @@ Relative filesystem repository locators MUST retain their project-root-relative 
 Every Git dependency lock MUST contain exactly one of `branch`, `tag`, and `rev`.
 Branch and tag spellings MUST remain literal; they MUST NOT be replaced by resolved commits in their selector fields.
 
-`revision` MUST use the backend's complete immutable representation; Git MUST use a full commit hash.
-Backend-specific revision representations and availability MUST follow the contracts identified in `specs/behavior/vcs-interaction.md`.
+`revision` MUST use the backend's complete immutable representation under the source contracts identified in `specs/behavior/vcs-interaction.md`.
 For an immutable `rev` selector, `revision` MUST identify that same pinned revision.
 Inference and shared-revision semantics MUST follow Version selection and State and shared revisions in `specs/behavior/locking.md`.
 
@@ -78,7 +77,7 @@ Each item in `entries` MUST be a table with these fields:
 - `kind` — Required content kind: `file`, `directory`, or `absent`.
 - `hash` — Required content hash for `file` and `directory`; omitted for `absent`.
 
-Canonical destinations MUST be unique, and recorded destinations MUST NOT overlap or conflict with the selected configuration or lockfile.
+Recorded destinations MUST satisfy the uniqueness, overlap, and project-file conflict constraints in Destinations and entry identity in `specs/behavior/config.md`, independently of whether the records match current declarations.
 Record fields MUST retain the binding and mapping used to establish each baseline under State and shared revisions and Matching configuration in `specs/behavior/locking.md`.
 
 ## Hash representation

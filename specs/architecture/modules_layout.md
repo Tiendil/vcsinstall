@@ -24,7 +24,7 @@ The following are out of scope:
 All vcsinstall code MUST belong under `vcsinstall/`.
 
 - `core` — Project-wide error-base extensions and domain-independent technical utilities.
-- `domain` — Universal concepts, semantic values, and pure logic shared by all or most modules.
+- `domain` — Universal concepts, semantic values, and pure logic shared by all or most modules, independently of input interfaces, output protocols, and persisted syntax.
 - `project` — Managed dependency and entry state, including revision locks and installation baselines, and the invariants governing that state.
 - `workspace` — Project configuration and lockfile representations, with their loading and persistence.
 - `filesystem` — The filesystem adapter, local content inspection, and filesystem effects.
@@ -67,9 +67,7 @@ The ordinary filesystem source backend MUST belong to `sources`, using filesyste
 Reusable content-identity computations MUST remain pure and independent of project loading and external clients so local inspection and source preparation can use the same rules.
 
 Source adapters MUST own repository and version semantics, revision resolution, and content extraction from available repository views under `specs/behavior/vcs-interaction.md`.
-They MUST use supplied repository data and version metadata without performing clone, fetch, transport authentication, or remote-reference discovery.
-They MUST NOT prepare contributions or publish changes.
-Ordinary filesystem sources MUST retain their unversioned semantics.
+Their allowed effects MUST follow Backend selection and capabilities and Native client execution in that specification; filesystem source semantics MUST follow `specs/behavior/vcs/filesystem.md`.
 
 Hosting adapters MUST own repository acquisition, refresh, and complete outgoing workflows under `specs/behavior/vcs-interaction.md`, including:
 
@@ -119,7 +117,7 @@ Project error-base extensions MUST follow `specs/architecture/errors.md`.
 
 vcsinstall MUST use application construction and shared skill/version command registration from `llm_tool_cli`, supplying its document definitions and distribution identity `vcsinstall`.
 Static application settings MUST be initialized before command-line parsing, using the tool label `VCSINSTALL`.
-Static settings MUST supply `vcsinstall.toml` as the default project configuration filename before parsing.
+Static settings MUST supply the default project configuration filename from `specs/behavior/config.md` before parsing.
 
 The following MUST remain owned by `llm_tool_cli` rather than local wrappers:
 
@@ -143,11 +141,8 @@ Conventional names MUST stay consistent:
 - `entities` — Owned types/entities.
 - `fixtures` — Reusable configuration/docs/data.
 - `tests` — Module tests.
-- `tests.make` — Test-object construction.
-- `tests.helpers` — Setup, assertions, and coordinated actions.
 
-Tests SHOULD live under the nearest owning package's `tests`, named with the parent's `test_` prefix.
-Production MUST NOT import test utilities.
+Test placement, naming, and utility responsibilities MUST follow Test module layout in `specs/architecture/tests.md`.
 
 ## Cross-module dependencies
 

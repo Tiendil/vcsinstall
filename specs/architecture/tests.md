@@ -27,14 +27,7 @@ Tests MUST belong to the Python project and run through development containers, 
 They SHOULD be deterministic for the same repository/filesystem state.
 Required shared state MUST be prepared at test start or via class/module autouse fixtures.
 
-Tests SHOULD prefer public-boundary end-to-end coverage where practical, using:
-
-- real code.
-- temporary files.
-- explicit fixtures.
-- small fakes.
-
-Mocks, stubs, and patching SHOULD be minimal.
+Tests SHOULD prefer public-boundary end-to-end coverage where practical, using the alternatives to mocking under Mocking below.
 
 Tests MUST NOT use networks, user-specific files outside test-created temporary directories, or alter Docker configuration/runtime parameters.
 They SHOULD verify observable behavior/local validation, not declarations, and separate orthogonal cases.
@@ -44,6 +37,7 @@ Boolean assertions MUST use `assert condition` or `assert not condition` rather 
 
 ## Mocking
 
+Mocks, stubs, and patching SHOULD be minimal.
 The following SHOULD be preferred:
 
 - real code.
@@ -61,7 +55,6 @@ Ordinary attribute replacement SHOULD NOT use `monkeypatch` when the standard fi
 
 Source and hosting adapters MUST be independently replaceable by controlled test collaborators through the boundaries in `specs/architecture/modules_layout.md`.
 The noop source and hosting adapters MUST follow their respective contracts in `specs/behavior/vcs/noop.md` and `specs/behavior/hosting/noop.md`.
-They MUST be supplied independently; selecting either MUST NOT enable the other or a real hosting adapter implicitly.
 Tests of acquisition and delivery orchestration MAY combine a controlled source backend and separate noop hosting without native clients or network effects.
 They MAY also combine a real Git source with noop hosting, using test-prepared local repository views and the real Git client for local inspection; acquisition, refresh, and publication MUST remain simulated in that combination.
 Tests of native Git source semantics MUST exercise the real Git source adapter against available local views.
