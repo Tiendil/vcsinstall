@@ -28,6 +28,7 @@ Each stage's final checkbox includes all of the following:
 - Keep all previously implemented behavior working, with no skipped failures, placeholder commands, or unfinished production paths in the implemented scope.
 - Add tests alongside the changed behavior under [the test architecture](../architecture/tests.md). Prefer real temporary files and local repositories; use independently supplied source and hosting collaborators for orchestration tests. Do not add tests merely for passive fields or inherited shared-library behavior.
 - Check the affected specifications, code, and tests together. Preserve shared diagnostics and use shared results, command contexts, logic cells, and output delivery directly. Runtime constructs complete command payloads; the CLI passes parsed intent.
+- Common infrastructure libraries supplied by `llm_tool_cli`, including Pydantic and Typer, MUST use the compatible versions selected by `llm_tool_cli`. vcsinstall MUST NOT redeclare or independently constrain these libraries as direct runtime dependencies, even when importing their public APIs directly. Additional runtime dependencies MUST serve tool-specific functionality.
 - Maintain package exports and the module restrictions in [module structure](../architecture/modules_layout.md). Extend `tach.toml` and applicable `depmesh.toml` mappings as real responsibilities appear, without creating empty packages or weakening dependency checks.
 - Update help, `README.md`, and packaged usage documentation in the same stage when available behavior changes. Remove the scaffold's obsolete claim that the configuration and lockfile formats are undecided when first aligning those documents with the completed specs.
 - Agents MUST NOT update `changes/unreleased.md` or `CHANGELOG.md` while executing this refactoring plan, including during research, implementation, and final review. Changelog regeneration MUST NOT be part of these stages.
@@ -63,15 +64,6 @@ Detailed findings, API inventory, experiments, source references, and validation
 - Use immutable data entities and pure project-policy functions.
 - Use TOML Kit for persisted edits, Portalocker for persistent OS-backed locks, and Platformdirs for cache-location lookup; declare direct dependencies in their prerequisite stages.
 - Complete metadata-writer coordination research in Stage 11b and subprocess cache-lease research in Stage 22a before implementing their dependent operations.
-
-## Stage 1a — Direct modeling and CLI dependencies
-
-Prerequisite for Stage 2 and later consumer imports; the working CLI scaffold remains the review boundary.
-
-- [ ] Declare `pydantic>=2.12,<3` and `typer~=0.25.1` as direct runtime requirements, preserving the compatible shared-library requirement and avoiding reliance on transitive imports.
-- [ ] Update `uv.lock` through the repository helper and rebuild the development image, without adding unrelated packages or changing runtime parameters.
-- [ ] Verify the existing scaffold and installed wheel with the declared runtime dependency closure.
-- [ ] Record the dependency change and validation evidence; complete the common review gate before starting Stage 2.
 
 ## Stage 2 — Technical foundations and semantic values
 
