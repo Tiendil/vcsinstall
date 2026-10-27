@@ -27,6 +27,7 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/behavior/hosting/` — outgoing delivery and hosted-service behavior.
 - `./specs/documentation/` — documentation artifacts.
 - `./specs/meta/` — specification-writing requirements.
+- `./specs/refactorings/` — staged implementation and refactoring plans.
 
 ## Specification documents
 
@@ -56,6 +57,7 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/documentation/readme.md` — The root README's documentation contract.
 - `./specs/meta/general.md` — Requirements for specification content and presentation.
 - `./specs/meta/behavior.md` — Rules for expressing observable behavior in specifications.
+- `./specs/refactorings/implementation.md` — Staged implementation plan for the specified project behavior.
 
 Shared CLI and infrastructure contracts adopted by vcsinstall belong to the corresponding specifications in `llm-tool-cli`.
 This index lists vcsinstall's specifications, which define their application and tool-specific behavior.
