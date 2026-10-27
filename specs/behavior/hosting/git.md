@@ -59,7 +59,8 @@ A local publication destination resolving to the target project's own Git reposi
 
 ## Change application and commit metadata
 
-A prepared commit MUST reproduce selected source-path content kinds and bytes while preserving unselected entries and their Git file modes from its parent tree.
+A prepared commit MUST reproduce selected file states and exact bytes while preserving unselected entries and their Git file modes from its parent tree.
+Directory contribution scope and preservation of unselected content MUST follow Contributions and Filesystem effects in `specs/behavior/files-and-directories.md`.
 Changed existing regular files MUST retain their executable-file mode from that tree.
 New regular files MUST use the Git regular-file mode corresponding to their local executable status where the filesystem supports that distinction.
 Permission-only local changes MUST NOT create a contribution.
@@ -110,14 +111,15 @@ The locked source commit need not remain retrievable when matching, trustworthy 
 
 ### Content protection
 
-Each locally changed selected entry MUST be compared with its destination content at B using Content identity in `specs/behavior/locking.md`:
+Each selected entry with a contribution MUST be compared with its destination content at B using Local comparison and Contributions in `specs/behavior/files-and-directories.md`, including the complete directory trees in that comparison scope:
 
 - If the destination equals the selected local content, that entry MUST require no write.
 - Otherwise, if the destination equals the recorded installation baseline, the selected local change MAY be applied.
 - Otherwise, the selection MUST fail as a conflict before commit creation or publication, identifying the affected entry and destination revision.
 
-Directory comparison MUST cover the complete mapped tree.
-Different remote edits within a selected directory MUST conflict even if they affect different files from the local edits.
+Directory comparison MUST cover the selected entry's complete contribution scope under Contributions in `specs/behavior/files-and-directories.md`.
+Different remote edits within a selected directory MUST conflict even if they affect different files from the local edits, including source-only additions since the baseline.
+Source content outside selected mappings MUST be preserved; type obstructions MUST retain the shared preservation checks.
 Selected mappings MUST retain the common overlap and representability checks.
 These checks MUST complete for the whole selection before any destination write.
 Direct mode MUST NOT merge or rebase differing content automatically.
@@ -131,7 +133,7 @@ A destination ref differing from B when the update is applied, including a moved
 The update MUST be a fast-forward from B; history rewriting and ref deletion MUST NOT be authorized by this mode.
 A failed conditional update MUST NOT be silently retried against a different branch head.
 
-If every locally changed selected entry already equals its destination content, direct delivery MUST succeed without creating a commit or updating a ref.
+If every selected entry with a contribution already equals its destination content within the contribution scope, direct delivery MUST succeed without creating a commit or updating a ref.
 That verified result MUST identify the observed B as its delivery revision.
 Completed direct delivery, including this already-present case, MUST follow Installation records in `specs/behavior/cli.md`.
 

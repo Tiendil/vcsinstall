@@ -76,14 +76,29 @@ Each item in `entries` MUST be a table with these fields:
 - `destination` — Required canonical `@/` identifier under the configuration's destination contract.
 - `kind` — Required content kind: `file`, `directory`, or `absent`.
 - `hash` — Required content hash for `file` and `directory`; omitted for `absent`.
+- `files` — Required array of file-manifest records for `directory`, including an empty array for an empty selection; omitted for `file` and `absent`.
 
 Recorded destinations MUST satisfy the uniqueness, overlap, and project-file conflict constraints in Destinations and entry identity in `specs/behavior/config.md`, independently of whether the records match current declarations.
 Record fields MUST retain the binding and mapping used to establish each baseline under State and shared revisions and Matching configuration in `specs/behavior/locking.md`.
 
+### Directory file manifests
+
+Each item in an entry's `files` MUST be a table containing only:
+
+- `path` — Required literal path relative to the entry root under File manifests in `specs/behavior/files-and-directories.md`.
+- `hash` — Required file content hash under Hash representation below.
+
+Manifest path uniqueness and file-ancestor constraints MUST follow that File manifests contract.
+Directory records MUST NOT appear among these child records.
+Parsing MUST reject duplicate or conflicting child paths and an aggregate entry hash inconsistent with the recorded file manifest under Directory hashes in `specs/behavior/files-and-directories.md`.
+This validation MUST use recorded data alone, without inspecting installed files, sources, or cache data.
+Writers SHOULD sort child records by their literal UTF-8 path bytes.
+
 ## Hash representation
 
 A hash MUST be `sha256:` followed by exactly 64 lowercase hexadecimal digits.
-Digest computation, content kinds, and expected absence MUST follow Content identity in `specs/behavior/locking.md`.
+Digest computation and file-set equality MUST follow Content identity and Local comparison in `specs/behavior/files-and-directories.md`.
+Expected-absence baseline transitions MUST follow Expected absence in `specs/behavior/locking.md`.
 
 ## Writes and failures
 
@@ -128,4 +143,8 @@ source_path = "specs"
 destination = "@/specs/shared"
 kind = "directory"
 hash = "sha256:0882e94f4f02b979246240aeb542967a48efb157f10bb67860415d2f907ee2e8"
+
+[[entries.files]]
+path = "guide.md"
+hash = "sha256:5ba1677a4833fd02ece676817a073abef834d542a27562e9ad1c903b656d37dd"
 ```

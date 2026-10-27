@@ -65,6 +65,7 @@ Command results MUST follow `specs/architecture/entities.md`; shared utility com
 The filesystem adapter MUST own local filesystem access without taking ownership of dependency selection or installation-baseline policy.
 The ordinary filesystem source backend MUST belong to `sources`, using filesystem facilities under its source contract; local filesystem access and source-version semantics MUST remain distinct responsibilities.
 Reusable content-identity computations MUST remain pure and independent of project loading and external clients so local inspection and source preparation can use the same rules.
+File selection, manifest ownership, and identity semantics MUST follow `specs/behavior/files-and-directories.md` at the respective project, persistence, and adapter boundaries.
 
 Source adapters MUST own repository and version semantics, revision resolution, and content extraction from available repository views under `specs/behavior/vcs-interaction.md`.
 Their allowed effects MUST follow Backend selection and capabilities and Native client execution in that specification; filesystem source semantics MUST follow `specs/behavior/vcs/filesystem.md`.

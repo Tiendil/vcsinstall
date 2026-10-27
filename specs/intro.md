@@ -40,6 +40,7 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/behavior/cache.md` — The shared repository cache contract.
 - `./specs/behavior/cli.md` — The command invocation, selection, and result contract.
 - `./specs/behavior/config.md` — The project declaration and configuration contract.
+- `./specs/behavior/files-and-directories.md` — The file and directory management contract.
 - `./specs/behavior/locking.md` — The dependency revision and installation state contract.
 - `./specs/behavior/lockfile.md` — The persisted installation state format and file I/O contract.
 - `./specs/behavior/skill_fixtures.md` — Requirements for built-in skill documentation.

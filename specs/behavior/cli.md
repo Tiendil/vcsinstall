@@ -69,6 +69,7 @@ The required commands MUST be:
 - `version` — Print the installed tool version.
 
 Locking operations and their state changes MUST follow Operation contracts and Preparation and consistency in `specs/behavior/locking.md`.
+File selection, empty-directory behavior, and preservation of unmanaged files MUST follow Source file selection, Directories, and Filesystem effects in `specs/behavior/files-and-directories.md` at each command's applicable boundary.
 
 ## Application identity and project files
 
@@ -360,7 +361,7 @@ The resolved message MUST apply to that commit or patch metadata.
 
 #### Entry selection
 
-Without entry paths, the command MUST inspect only the named dependency's declared entries and select all locally changed entries belonging to it.
+Without entry paths, the command MUST inspect only the named dependency's declared entries and select all entries whose contribution content differs from the recorded baseline under Contributions in `specs/behavior/files-and-directories.md`.
 A known dependency with no changed entries MUST succeed without delivery effects or installation records once local selection and option validation passes, including when it has no entries.
 With entry paths, it MUST select exactly the declared entries identified under the common entry-selection rules, including unchanged entries.
 Every explicitly selected entry MUST belong to the named dependency.
@@ -369,11 +370,14 @@ This membership restriction MUST apply even when dependencies share a repository
 Entries from different dependencies MUST NOT be combined in one invocation.
 The command MAY select only some entries of the named dependency; verification and exclusion of unselected entries MUST follow the `dependency push` operation contract in `specs/behavior/locking.md`.
 
+Selecting a directory entry MUST select its complete local file tree, including new files absent from its lockfile manifest, under Contributions in `specs/behavior/files-and-directories.md`.
+The command MUST NOT require individual child-file listings for a directory entry.
+
 #### Preparation and delivery
 
 The command MUST invoke the `dependency push` operation contract in `specs/behavior/locking.md` for baselines and change detection.
-The command MUST process locally changed entries from the valid selection, including tracked additions and deletions.
-Clean explicitly selected entries MUST succeed as unchanged once validation passes.
+The command MUST process contribution changes from the valid selection under Contributions in `specs/behavior/files-and-directories.md`.
+Explicitly selected entries whose complete contribution content matches the recorded baseline MUST succeed as unchanged once validation passes.
 
 Contribution publication, Publication destination selection, and the selected mode contract in `specs/behavior/vcs-interaction.md` MUST govern effects.
 
@@ -429,6 +433,7 @@ vcsinstall dependency push ci --mode branch --push-repository git+ssh://git@exam
 vcsinstall dependency push ci --mode direct -m "Clarify the shared specification"
 vcsinstall dependency push ci-stable --mode direct --branch release/1.x
 vcsinstall dependency push ci --mode patch --output ./ci-fix.patch
+vcsinstall dependency push ci @/specs/shared --mode patch --output ./ci-addition.patch
 vcsinstall dependency push ci-stable --mode pr --base release/1.x --hosting-provider github
 vcsinstall dependency push local-guides --mode overwrite
 ```
@@ -492,15 +497,17 @@ Both removal modes MUST invoke the `remove` operation contract in `specs/behavio
 
 ### Removing installed content
 
-Without `--keep-files`, remove MUST delete the selected destinations and their installed content.
-For a directory entry, deletion MUST remain confined to that destination's tree.
+Without `--keep-files`, remove MUST delete the selected entries' managed files under Filesystem effects in `specs/behavior/files-and-directories.md`.
+Directory removal MUST use recorded manifests and MAY leave destination directories containing unmanaged files.
 Existing content that is locally modified or cannot be verified against a trustworthy locked baseline MUST cause an operational failure unless `--force` is supplied.
-Verification MUST use Content identity and Local state inspection in `specs/behavior/locking.md`.
+Verification MUST use Local comparison in `specs/behavior/files-and-directories.md` and Local state inspection in `specs/behavior/locking.md`.
 
 Already missing installed files or directories MUST NOT by themselves prevent removal of the declarations and associated local metadata.
 Any remaining content scheduled for deletion MUST still satisfy the applicable verification rules.
 
 `--force` MUST waive only local-content and baseline-verification refusals for selected entries.
+It MUST NOT authorize deleting unmanaged descendants or infer ownership from the current directory contents.
+If a nonempty directory has no structurally valid recorded manifest identifying its managed files, removal requiring content deletion MUST fail even with `--force`, with guidance to use `--keep-files`.
 It MUST NOT bypass destination validation or ignore failures while changing files or project metadata.
 
 ### Keeping installed content
@@ -684,10 +691,11 @@ Push records MUST additionally expose:
 
 Unchanged entries MUST use null for these effect fields other than `mode`, including when changed entries from the same selection were delivered.
 Every changed entry delivered by one invocation MUST identify the same mode and applicable contribution metadata.
-Direct delivery MUST use `pushed` for locally changed entries verified as already present at the destination, with that observed recipient revision, even when no new commit is required.
+Direct delivery MUST use `pushed` for entries with contribution changes verified as already present at the destination, with that observed recipient revision, even when no new commit is required.
 For filesystem overwrite, `push_repository` MUST identify the original source directory and `push_revision` MUST be the resulting complete source fingerprint.
 For patch delivery, `patch_file` MUST identify the same complete artifact for each exported entry; repository and review effect fields MUST be null, while `hosting_provider` MUST identify the selected implementation.
 The `revision` field MUST continue to identify the installation baseline rather than the newly published source revision.
+An entry delivered solely because of new local directory files MAY report `status = clean` while its outcome is `pushed` or `exported`, because ordinary local status MUST continue to describe its recorded baseline ownership.
 
 ### Removal records
 

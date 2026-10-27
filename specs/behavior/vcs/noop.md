@@ -47,12 +47,13 @@ Fixture changes MUST NOT advance project locks or installation baselines except 
 ## Source content
 
 A revision MUST expose a repository-relative tree of files, directories, and absent paths.
-Files MUST retain exact supplied bytes, including binary content, and directories MUST retain literal names and empty directories.
+Files MUST retain exact supplied bytes, including binary content, and paths MUST retain literal names.
+Fixtures MAY expose empty directories so tests can verify the structural-directory equivalence in Directories in `specs/behavior/files-and-directories.md`.
 The content root MUST be the fixture revision's root directory.
 An unknown path at an available revision MUST be reported as absent; an unavailable revision MUST remain a retrieval failure.
 Fixture enumeration order MUST NOT affect content identity or result ordering.
 
-Extraction MUST follow Source paths and Source inspection and extraction in `specs/behavior/vcs-interaction.md`, without VCS filters or ignore patterns.
+Extraction MUST follow Source paths and Source inspection and extraction in `specs/behavior/vcs-interaction.md`, without native VCS filters or implicit ignore patterns.
 Installed content MUST be ordinary content that the real hashing and local-state inspection contracts can verify.
 Unsupported objects and requested read failures MUST fail rather than be converted into empty files or directories.
 The test fixture mechanism MAY model such failures without prescribing a concrete filesystem representation.

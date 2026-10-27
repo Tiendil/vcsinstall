@@ -106,6 +106,7 @@ Dependencies sharing a cached repository MUST each be able to retrieve source co
 Any cached checkouts or snapshots for specific versions MUST remain distinguishable by their immutable revisions.
 Preparing one revision MUST NOT cause another dependency or operation to read content from the wrong revision, including when both select different versions of the same repository.
 Changing installed content MUST NOT change cached source content or another installation through shared filesystem storage.
+Content verification MUST use the selected source manifest under Content identity and Local comparison in `specs/behavior/files-and-directories.md` rather than hash the physical repository-cache directory.
 
 Source reuse and refresh MUST follow Source integrity and cache independence and Source freshness in `specs/behavior/locking.md`.
 Cache availability, reuse, and cleanup MUST NOT change locked revisions, installation baselines, or local-content comparisons, or the content accepted for an existing baseline.

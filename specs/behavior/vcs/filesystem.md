@@ -37,8 +37,9 @@ Equivalent file-URL and native-path forms selecting the same normalized root MUS
 ## Live revisions and selectors
 
 The source directory MUST have one current content state rather than an invented branch or tag history.
-Its immutable revision identifier MUST be the complete directory content hash of the source root under Content identity in `specs/behavior/locking.md`, including the `sha256:` representation from `specs/behavior/lockfile.md`.
-This fingerprint MUST cover the complete source tree, not only the declared entries.
+Its immutable revision identifier MUST be the directory hash of the complete source-root file manifest under Source file selection and Content identity in `specs/behavior/files-and-directories.md`, including the `sha256:` representation from `specs/behavior/lockfile.md`.
+This fingerprint MUST cover every source file, independently of the declared entry paths.
+Changes confined to empty directories MUST NOT change the fingerprint.
 
 An omitted selector MUST mean the directory's current live state.
 Configuration and lock records MUST retain omitted selector fields; locking MUST record the resolved fingerprint in `revision` without inventing a named selector or turning live tracking into a revision pin.
@@ -67,8 +68,8 @@ All content prepared for one dependency operation MUST agree with its one select
 Source changes that prevent consistent preparation MUST cause operational failure before project mutation.
 Unreadable or unsupported objects MUST fail rather than be skipped while fingerprinting or extracting.
 
-The content root MUST be the source directory, including empty directories and hidden content.
-Files and directories MUST be treated as ordinary content without VCS ignore rules or special treatment of files named after VCS metadata.
+The content root MUST be the source directory, with file selection and structural directories following Source file selection and Directories in `specs/behavior/files-and-directories.md`.
+Hidden files and files named after VCS metadata MUST remain ordinary content; VCS ignore rules MUST NOT apply implicitly.
 Symbolic links below the resolved source root MUST be rejected under Filesystem containment in `specs/behavior/paths.md` in `llm-tool-cli`; the root itself MAY be selected through a resolved symlink.
 Source and installed destination locations MUST NOT overlap in either direction; operations creating such an overlap MUST fail before mutation.
 

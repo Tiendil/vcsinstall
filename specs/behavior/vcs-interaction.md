@@ -23,6 +23,7 @@ Architectural responsibilities and integration choices MUST follow `specs/archit
 CLI argument syntax and input decoding MUST follow `specs/behavior/cli.md`; persisted declarations MUST follow `specs/behavior/config.md`.
 Revision selection, baseline verification, and project state changes MUST follow `specs/behavior/locking.md`.
 Persisted revision and content identities MUST follow `specs/behavior/lockfile.md`.
+File membership, manifests, and equality MUST follow Source file selection, File manifests, and Local comparison in `specs/behavior/files-and-directories.md` at source-inspection and contribution boundaries.
 Source and hosting access using the repository cache MUST follow `specs/behavior/cache.md`.
 
 Test-only adapters MUST be available only when explicitly supplied by a test environment under `specs/architecture/tests.md`.
@@ -180,7 +181,7 @@ An uncached backend MUST define how a requested revision is verified against ava
 Extraction MUST distinguish:
 
 - a regular file with its exact bytes.
-- a directory with its complete selected content tree.
+- a directory with its complete selected file set under Source file selection and Directories in `specs/behavior/files-and-directories.md`.
 - an absent path at an otherwise available revision.
 - an unavailable revision or failed inspection.
 
@@ -190,7 +191,7 @@ Extraction MUST preserve literal names and file bytes without applying package d
 
 Unsupported source objects or names that cannot be represented safely at the destination MUST fail before project mutation rather than be omitted, followed, or renamed silently.
 Symbolic links MUST NOT bypass source or destination containment.
-Prepared source content MUST satisfy Content identity and Source integrity and cache independence in `specs/behavior/locking.md`.
+Prepared source content MUST satisfy Content identity in `specs/behavior/files-and-directories.md` and Source integrity and cache independence in `specs/behavior/locking.md`.
 
 ## Contribution publication
 
@@ -198,6 +199,7 @@ Publication selection and local verification MUST follow the `dependency push` c
 Each invocation MUST deliver changes from exactly one declared dependency through exactly one explicit delivery mode.
 The source repository MUST remain the authority for installed versions; the publication repository MAY differ under Publication destination selection below.
 Selected changes MUST map installed destinations back to their recorded source paths, including selected additions, replacements, and deletions.
+Directory publication MUST reproduce the complete local tree under Contributions and Filesystem effects in `specs/behavior/files-and-directories.md`, preserving source content outside selected mappings.
 Selected mappings proposing conflicting content or deletion at the same source path MUST fail before creating a contribution or applying source writes.
 Compatible overlapping edits MAY be combined, but unselected entries MUST NOT contribute local changes.
 

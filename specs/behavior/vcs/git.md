@@ -75,7 +75,9 @@ Revision consistency across entries MUST follow Version resolution and anchoring
 
 The content root MUST be the committed tree, excluding Git administrative data belonging to the original repository or cache.
 Ordinary and executable Git blobs MUST extract as regular files, and trees MUST extract as directories.
-Committed executable-file metadata SHOULD be preserved where the destination filesystem supports it; local permission-only changes MUST remain outside the content identity defined by `specs/behavior/locking.md`.
+File membership MUST come from the requested commit under Source file selection in `specs/behavior/files-and-directories.md`.
+Empty-tree materialization MUST follow Directories in that specification.
+Committed executable-file metadata SHOULD be preserved where the destination filesystem supports it; local permission-only changes MUST remain outside Content identity in `specs/behavior/files-and-directories.md`.
 
 Extracted file bytes MUST be the committed blob bytes.
 Extraction MUST NOT apply:

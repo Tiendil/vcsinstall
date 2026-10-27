@@ -46,9 +46,11 @@ This mode MUST support selected file and directory changes of these kinds:
 
 It MUST NOT create a branch, commit, or source-side history record.
 
-The live source MAY differ from the installation's locked fingerprint; selecting overwrite mode MUST authorize replacing the selected source mappings despite those differences.
-A selected directory MUST be replaced as a complete tree, including removal of source-only children within that selected tree.
-Existing source content outside the selected mappings MUST remain unchanged by the invocation.
+The live source MAY differ from the installation's locked fingerprint; selecting overwrite mode MUST authorize overwriting the selected contribution files despite those differences.
+Directory changes MUST apply only within the authorized contribution scope under Contributions and Filesystem effects in `specs/behavior/files-and-directories.md`.
+For a selected directory, successful overwrite MUST reproduce its complete local tree, including removal of source-only children absent locally.
+Source content outside selected mappings MUST remain unchanged.
+Type changes that would destroy that preserved content MUST fail before writes.
 Missing parent directories MAY be created where required to apply a selected mapping, subject to source containment.
 
 The source root itself MUST remain a directory; a mapping of `.` MUST NOT authorize deleting that root or replacing it with a file.
@@ -56,7 +58,7 @@ Overwrite authorization MUST NOT bypass containment, permissions, or unsupported
 Validation, preparation, and partial failures MUST follow Contribution publication and Failures and completed effects in `specs/behavior/vcs-interaction.md`.
 
 Mode-specific options MUST follow the applicability rules in `specs/behavior/cli.md`.
-Successful writes MUST be verified against the selected local content and identify the resulting complete source fingerprint.
+Successful writes MUST be verified against the selected local content within the contribution scope and identify the resulting complete source fingerprint under `specs/behavior/vcs/filesystem.md`.
 Results MUST follow Installation records in `specs/behavior/cli.md`; installation-state preservation and later baseline acknowledgement MUST follow `specs/behavior/locking.md`.
 
 ## Example

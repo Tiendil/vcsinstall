@@ -130,6 +130,53 @@ output = { type = "union", items = [
   { type = "files", pattern = "./vcsinstall/filesystem/**/*.py" },
 ] }
 
+# Shared file rules govern their consumers and the specifications adopting them.
+[[rules]]
+relation = "governed_by"
+input = { type = "any", items = [
+  { type = "glob", pattern = "./vcsinstall/project/**/*.py" },
+  { type = "glob", pattern = "./vcsinstall/filesystem/**/*.py" },
+  { type = "glob", pattern = "./vcsinstall/workspace/**/*.py" },
+  { type = "glob", pattern = "./vcsinstall/sources/**/*.py" },
+  { type = "glob", pattern = "./vcsinstall/hosting/**/*.py" },
+  { type = "glob", pattern = "./vcsinstall/cache/**/*.py" },
+  { type = "glob", pattern = "./vcsinstall/runtime/**/*.py" },
+  { type = "glob", pattern = "./specs/behavior/vcs/**/*.md" },
+  { type = "glob", pattern = "./specs/behavior/hosting/**/*.md" },
+  { type = "one_of", artifacts = [
+    "./specs/behavior/cache.md",
+    "./specs/behavior/cli.md",
+    "./specs/behavior/config.md",
+    "./specs/behavior/locking.md",
+    "./specs/behavior/lockfile.md",
+    "./specs/behavior/vcs-interaction.md",
+  ] },
+] }
+output = { type = "list", artifacts = ["./specs/behavior/files-and-directories.md"] }
+
+[[rules]]
+relation = "governs"
+input = { type = "one_of", artifacts = ["./specs/behavior/files-and-directories.md"] }
+output = { type = "union", items = [
+  { type = "files", pattern = "./vcsinstall/project/**/*.py" },
+  { type = "files", pattern = "./vcsinstall/filesystem/**/*.py" },
+  { type = "files", pattern = "./vcsinstall/workspace/**/*.py" },
+  { type = "files", pattern = "./vcsinstall/sources/**/*.py" },
+  { type = "files", pattern = "./vcsinstall/hosting/**/*.py" },
+  { type = "files", pattern = "./vcsinstall/cache/**/*.py" },
+  { type = "files", pattern = "./vcsinstall/runtime/**/*.py" },
+  { type = "files", pattern = "./specs/behavior/vcs/**/*.md" },
+  { type = "files", pattern = "./specs/behavior/hosting/**/*.md" },
+  { type = "list", artifacts = [
+    "./specs/behavior/cache.md",
+    "./specs/behavior/cli.md",
+    "./specs/behavior/config.md",
+    "./specs/behavior/locking.md",
+    "./specs/behavior/lockfile.md",
+    "./specs/behavior/vcs-interaction.md",
+  ] },
+] }
+
 # Workspace code and fixtures implement the persisted project formats.
 [[rules]]
 relation = "governed_by"

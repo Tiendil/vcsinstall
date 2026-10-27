@@ -129,6 +129,7 @@ Each item in `entries` MUST be a table containing these required nonempty string
 
 Each entry MUST refer to an existing dependency declaration.
 Repository and version selection MUST follow State and shared revisions in `specs/behavior/locking.md`.
+File selection, directory semantics, and manifest ownership MUST follow Source file selection, File manifests, and Directories in `specs/behavior/files-and-directories.md`.
 The CLI's `dependency://NAME/PATH` source argument MUST be represented by separate `dependency` and `source_path` fields.
 Configuration order MUST NOT alter dependency membership or entry identity.
 
