@@ -15,7 +15,7 @@ exclude = [
     "**/__pycache__/",
 ]
 
-layers = ["meta-tests", "cli", "support"]
+layers = ["meta-tests", "cli", "support", "domain", "core"]
 
 [[modules]]
 path = "vcsinstall"
@@ -34,13 +34,23 @@ layer = "cli"
 
 [[modules]]
 path = "vcsinstall.cli"
-depends_on = ["vcsinstall.skills"]
+depends_on = ["vcsinstall.domain", "vcsinstall.skills"]
 layer = "cli"
 
 [[modules]]
 path = "vcsinstall.skills"
 depends_on = []
 layer = "support"
+
+[[modules]]
+path = "vcsinstall.domain"
+depends_on = []
+layer = "domain"
+
+[[modules]]
+path = "vcsinstall.core"
+depends_on = []
+layer = "core"
 
 [external]
 exclude = ["pytest", "pytest_mock", "tach", "typer"]

@@ -72,7 +72,7 @@ Inference and shared-revision semantics MUST follow Version selection and State 
 Each item in `entries` MUST be a table with these fields:
 
 - `dependency` — Required name of a dependency recorded in this lockfile.
-- `source_path` — Required source path under the configuration's Source paths contract.
+- `source_path` — Required canonical `@/` source identifier under the configuration's Source paths contract.
 - `destination` — Required canonical `@/` identifier under the configuration's destination contract.
 - `kind` — Required content kind: `file`, `directory`, or `absent`.
 - `hash` — Required content hash for `file` and `directory`; omitted for `absent`.
@@ -132,14 +132,14 @@ revision = "1111111111111111111111111111111111111111"
 
 [[entries]]
 dependency = "ci"
-source_path = "LICENSE"
+source_path = "@/LICENSE"
 destination = "@/licenses/shared.txt"
 kind = "file"
 hash = "sha256:4745da00e984a8aab4faeb69b987318e1aabdd8fad0df4a22f2a89a865299cc1"
 
 [[entries]]
 dependency = "ci"
-source_path = "specs"
+source_path = "@/specs"
 destination = "@/specs/shared"
 kind = "directory"
 hash = "sha256:0882e94f4f02b979246240aeb542967a48efb157f10bb67860415d2f907ee2e8"

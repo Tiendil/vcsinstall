@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "llm-tool-cli==0.2.0",
+    "llm-tool-cli==0.2.1",
 ]
 
 # Uncomment to use the local shared-library checkout during development.
@@ -46,8 +46,6 @@ dev = [
     "black==26.10.*",
     "changy==0.4.*",
     "codespell==2.4.*",
-    "depmesh==0.2.0",
-    "donna==0.5.0",
     "flake8==7.4.*",
     "flake8-absolute-import==1.0.*",
     "flake8-annotations-complexity==0.2.*",

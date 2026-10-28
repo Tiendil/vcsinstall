@@ -44,12 +44,18 @@ Relative filesystem locators MUST use the directory base established by their in
 
 ## Source paths
 
-A source path MUST name a literal repository-relative path at the selected revision, using `/` separators.
-It MUST NOT imply hosting-specific package discovery or modify the dependency's repository locator or version selector.
-It MUST NOT be interpreted as a package name or expanded as a glob.
-`.` MUST select the repository's content root.
-Absolute source paths and paths escaping that root MUST be rejected.
-Source paths MUST NOT undergo local home expansion, project-path interpretation, or resolution against a local working directory.
+A source path MUST be a canonical `@/` identifier anchored at the selected dependency's repository root at the selected revision.
+The prefix MUST refer to that repository root independently of the target project's root, the invocation's working directory, or the repository's acquisition location.
+`@/` MUST identify the repository root itself.
+Normalization MUST follow the Normalization contract in `specs/behavior/paths.md` in `llm-tool-cli`, retaining its canonical result as source-path identity.
+Inputs without the `@/` prefix MUST be rejected at boundaries accepting a source-path identifier; CLI source references MUST separate the dependency name from the source-path identifier under Source arguments in `specs/behavior/cli.md`.
+
+Source paths MUST NOT imply hosting-specific package discovery or modify the dependency's repository locator or version selector.
+They MUST NOT be interpreted as package names or expanded as globs.
+Source paths MUST NOT undergo local filesystem resolution, home expansion, URL or percent decoding, or interpretation relative to the target project.
+Ordinary path-segment text MUST retain its literal meaning under the shared normalization contract.
+
+**Example:** `@/guides/../LICENSE` normalizes to `@/LICENSE`, and `@/.` normalizes to `@/`.
 
 The backend MUST identify its content root, including which repository data belongs to the content tree and which administrative data is excluded.
 

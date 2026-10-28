@@ -53,7 +53,7 @@ Source content outside selected mappings MUST remain unchanged.
 Type changes that would destroy that preserved content MUST fail before writes.
 Missing parent directories MAY be created where required to apply a selected mapping, subject to source containment.
 
-The source root itself MUST remain a directory; a mapping of `.` MUST NOT authorize deleting that root or replacing it with a file.
+The source root itself MUST remain a directory; a mapping of `@/` MUST NOT authorize deleting that root or replacing it with a file.
 Overwrite authorization MUST NOT bypass containment, permissions, or unsupported-object failures.
 Validation, preparation, and partial failures MUST follow Contribution publication and Failures and completed effects in `specs/behavior/vcs-interaction.md`.
 

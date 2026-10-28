@@ -21,8 +21,8 @@ The following are out of scope:
 
 - `NAME` — a project-local dependency name.
 - `REPOSITORY` — a locator identifying a backend and native repository locator, optionally carrying a version fragment for `dependency add`.
-- `SOURCE` — a `dependency://NAME/PATH` URL selecting a repository path within a declared dependency.
-- `SOURCE_PATH` — a file or directory path relative to the source repository root.
+- `SOURCE` — a `NAME@/PATH` reference selecting a repository path within a declared dependency.
+- `SOURCE_PATH` — a canonical `@/` identifier anchored at the selected dependency's repository root.
 - `DESTINATION` — the final project path at which `add` installs an entry.
 - `ENTRY_PATH` — a local path selecting a declared entry by its destination, including when its installed content is missing.
 - `REF` — an untyped source-version reference accepted in a repository URL fragment.
@@ -196,15 +196,17 @@ Unversioned-source behavior MUST NOT silently weaken the locking and publication
 
 ### Source arguments
 
-`SOURCE` MUST use `dependency://NAME/PATH`, resolving `NAME` only against declared project dependencies.
+`SOURCE` MUST use `NAME@/PATH`, resolving `NAME` only against declared project dependencies.
 Unknown names MUST fail before fetching sources or changing project files.
-The authority MUST contain only the exact dependency name, without user information or a port.
-Query parameters and fragments MUST NOT be accepted.
+The name preceding the first `@/` MUST be an exact dependency name under Dependencies in `specs/behavior/config.md`.
+The suffix beginning at that `@/` MUST be normalized directly into `SOURCE_PATH` under Source paths in `specs/behavior/vcs-interaction.md`.
+`NAME@/` MUST select the dependency's repository root, represented by `@/`.
+Source references MUST preserve literal path text without URL or percent decoding, and MUST NOT interpret query or fragment syntax.
 Raw repository URLs and per-entry version options MUST NOT be accepted by `add`.
-The path after the authority separator MUST be percent-decoded exactly once as `SOURCE_PATH`, preserving literal `+` characters.
-An empty path, as in `dependency://ci/`, MUST select the repository content root, equivalent to `.`.
-Malformed escapes MUST fail explicitly.
-The decoded `SOURCE_PATH` MUST satisfy Source paths in `specs/behavior/vcs-interaction.md`.
+
+**Example:** `ci@/specs` selects dependency `ci` with source path `@/specs`, while `ci@/` selects that dependency's repository root.
+The reference `ci@/@/notes` selects the literal `@` directory within the dependency.
+The reference `ci@/notes%20+draft#1?.md` preserves the filename `notes%20+draft#1?.md` literally; callers may need shell quoting to pass it unchanged.
 
 ## Local path arguments and entry selection
 
@@ -442,7 +444,7 @@ Each entry-path example requires all supplied entries to belong to the named dep
 
 ## `vcsinstall add` command
 
-Add MUST require exactly one `SOURCE` URL and one `DESTINATION` path.
+Add MUST require exactly one `SOURCE` reference and one `DESTINATION` path.
 Missing or extra positional arguments MUST fail before fetching sources or changing project files.
 It MUST create the corresponding entry declaration and install its content by default.
 Only `--replace` and `--allow-outdated` MUST be accepted as command-specific options; repository and version-selection options MUST belong to `dependency add`.
@@ -465,12 +467,12 @@ The mismatch diagnostic MUST identify the dependency, its requested selector, an
 Examples, using previously declared dependencies:
 
 ```bash
-vcsinstall add dependency://ci/specs @/specs/shared
-vcsinstall add dependency://formatting/LICENSE @/licenses/shared.txt
-vcsinstall add dependency://formatting/guides @/docs/shared
-vcsinstall add --replace dependency://formatting/specs @/specs/shared
-vcsinstall add --allow-outdated dependency://ci/guides @/docs/shared
-vcsinstall add --replace --allow-outdated dependency://formatting/specs @/specs/shared
+vcsinstall add ci@/specs @/specs/shared
+vcsinstall add formatting@/LICENSE @/licenses/shared.txt
+vcsinstall add formatting@/guides @/docs/shared
+vcsinstall add --replace formatting@/specs @/specs/shared
+vcsinstall add --allow-outdated ci@/guides @/docs/shared
+vcsinstall add --replace --allow-outdated formatting@/specs @/specs/shared
 ```
 
 ## `vcsinstall install` command
@@ -657,7 +659,7 @@ Automation records MUST expose these common fields:
 - `destination` — The canonical project-path identifier selecting the entry.
 - `vcs` — The source backend name.
 - `repository` — The normalized native repository locator, excluding the version fragment; `vcs` identifies its backend.
-- `source_path` — The repository-relative source path.
+- `source_path` — The canonical `@/` source identifier anchored at the owning dependency's repository root.
 - `ref_kind` — The effective source-selector kind, with these values:
 
   - `default`.

@@ -25,7 +25,8 @@ Production commands must reject test-only adapters, and incomplete adapter capab
 
 Each stage's final checkbox includes all of the following:
 
-- Keep all previously implemented behavior working, with no skipped failures, placeholder commands, or unfinished production paths in the implemented scope.
+- Keep the implemented scope working and consistent with the current specifications, with no skipped failures, placeholder commands, or unfinished production paths.
+- Backward compatibility is not required during this refactoring. Prefer the simplest implementation consistent with the current specifications; remove obsolete compatibility code instead of preserving previous behavior for its own sake.
 - Add tests alongside the changed behavior under [the test architecture](../architecture/tests.md). Prefer real temporary files and local repositories; use independently supplied source and hosting collaborators for orchestration tests. Do not add tests merely for passive fields or inherited shared-library behavior.
 - Check the affected specifications, code, and tests together. Preserve shared diagnostics and use shared results, command contexts, logic cells, and output delivery directly. Runtime constructs complete command payloads; the CLI passes parsed intent.
 - Common infrastructure libraries supplied by `llm_tool_cli`, including Pydantic and Typer, MUST use the compatible versions selected by `llm_tool_cli`. vcsinstall MUST NOT redeclare or independently constrain these libraries as direct runtime dependencies, even when importing their public APIs directly. Additional runtime dependencies MUST serve tool-specific functionality.
@@ -69,10 +70,12 @@ Detailed findings, API inventory, experiments, source references, and validation
 
 Relevant contracts: [entities](../architecture/entities.md), [errors](../architecture/errors.md), [naming](../architecture/naming.md), [configuration](../behavior/config.md), and [source paths and identity](../behavior/vcs-interaction.md).
 
-- [ ] Add the project-wide environment-error and internal-error bases in `core`, directly extending the shared foundations without another result, entity-base, or rendering abstraction.
-- [ ] Introduce the semantic values and closed enums needed by the next slices, including dependency names, repository identity, selectors, source paths, and revisions; retain backend-specific revision validation at its owner.
-- [ ] Implement local validation and normalization without I/O, preserving literal selector and path text where the contracts require it, including whitespace, case, and `+` characters.
-- [ ] Test meaningful validation and conversion paths, including root source paths, traversal rejection, invalid dependency names, and selector exclusivity; complete the common review gate.
+- [x] Add the project-wide environment-error and internal-error bases in `core`, directly extending the shared foundations without another result, entity-base, or rendering abstraction.
+- [x] Introduce the semantic values and closed enums needed by the next slices, including dependency names, repository identity, selectors, source paths, and revisions; retain backend-specific revision validation at its owner.
+- [x] Define reusable Pydantic field constraints without I/O, normalize repository-anchored source identifiers through the shared lexical contract, and preserve literal selector and ordinary path-segment text; keep input-shape conversion with its CLI or workspace owner.
+- [x] Test meaningful field constraints, including root source paths, traversal rejection, dependency-name values and dictionary keys, and selector value invariants; complete the common review gate.
+
+Review evidence: [Stage 2 report](../../.session/implementation-stage-2/review.md).
 
 ## Stage 3 — File manifests and content identity
 
@@ -96,8 +99,8 @@ Relevant contracts: [project ownership](../architecture/modules_layout.md#projec
 
 Relevant contracts: [configuration](../behavior/config.md), [workspace ownership](../architecture/modules_layout.md#project-state-and-operations), and the shared configuration/path contracts.
 
-- [ ] Add the version-1 workspace configuration schema and conversion to project declarations, reusing shared discovery, version validation, loading, and project scopes.
-- [ ] Normalize configured destinations relative to the selected project root and filesystem repository locators using their own base, without requiring source or installed content to exist.
+- [ ] Add the version-1 workspace configuration schema and conversion to project declarations, reusing shared discovery, version validation, loading, and project scopes; validate selector exclusivity and convert configuration fields into domain selectors here.
+- [ ] Normalize repository-anchored source identifiers and project-root destinations under their respective contracts, and resolve filesystem repository locators using their own base, without requiring source or installed content to exist.
 - [ ] Validate complete configuration, dependency references, unique/nonoverlapping destinations, and conflicts with the selected configuration and sibling lockfile; preserve shared diagnostic context.
 - [ ] Test discovery and explicit paths, nested invocation directories, minimal/empty/invalid TOML, unknown fields, strict versions, literal strings, containment, and absence of source/cache/client access; complete the common review gate.
 
@@ -115,7 +118,7 @@ Relevant contracts: [starter configuration](../behavior/config.md#starter-config
 Relevant contracts: [lockfile](../behavior/lockfile.md) and [declaration matching](../behavior/locking.md#matching-configuration).
 
 - [ ] Load only the exact sibling `vcsinstall.lock`, distinguishing absence from unreadable, malformed, symlink, and non-regular-file targets.
-- [ ] Implement independent version-1 lockfile validation and conversion to project state, including complete revisions, selector consistency, baseline-kind fields, manifests, and aggregate hashes.
+- [ ] Implement independent version-1 lockfile validation and conversion to project state with canonical source/destination bindings, including complete revisions, selector consistency, baseline-kind fields, manifests, and aggregate hashes.
 - [ ] Validate recorded destination conflicts and manifest structure independently of active declarations; preserve old valid records and defer operation-specific preconditions to their owners.
 - [ ] Test minimal and missing files, malformed records, unsupported versions, conflicting paths, absent baselines, stale declarations, and loading without installed/source/cache access; complete the common review gate.
 
@@ -250,9 +253,11 @@ Relevant contracts: [filesystem source](../behavior/vcs/filesystem.md) and [file
 Relevant contracts: [dependency definitions and source arguments](../behavior/cli.md#dependency-definitions-and-source-arguments) and [repository identity](../behavior/vcs-interaction.md#repository-locators-and-identity).
 
 - [ ] Parse VCS-qualified/native URLs, local paths, scp-style addresses, explicit backend assertions, and invocation-relative repository locations into typed intent.
-- [ ] Parse typed/bare URL fragments and option aliases, enforcing selector exclusivity, exactly-once percent decoding, preserved `+`, and native literal meaning for non-URL locators.
-- [ ] Parse `dependency://NAME/PATH`, including root selection, without accepting user information, ports, query strings, fragments, raw repositories, or per-entry version selection.
-- [ ] Test ambiguous/unsupported source notation, plain HTTP guidance, `.git` suffix non-inference, malformed escapes, option conflicts, and equivalent inputs; leave reference-kind inference requiring repository facts to the source layer; complete the common review gate.
+- [ ] Parse typed/bare URL fragments and option aliases into domain selectors, enforcing selector exclusivity at the CLI boundary, exactly-once percent decoding, preserved `+`, and native literal meaning for non-URL locators.
+- [x] Parse and test literal `NAME@/PATH` source references into a typed dependency name and canonical repository-anchored source identifier, including `NAME@/` root selection, without URL or percent decoding.
+- [ ] Test remaining repository input forms, plain HTTP guidance, `.git` suffix non-inference, malformed URL escapes, option conflicts, and equivalent inputs; leave reference-kind inference requiring repository facts to the source layer; complete the common review gate.
+
+Source-reference parsing evidence: [review report](../../.session/dependency-source-references/review.md).
 
 ## Stage 21 — Reusable native-client execution
 
@@ -367,7 +372,7 @@ Relevant contracts: [`dependency add`](../behavior/cli.md#vcsinstall-dependency-
 
 Relevant contracts: [`add`](../behavior/cli.md#vcsinstall-add-command), [entry addition](../behavior/locking.md#add), and [installation protection](../behavior/locking.md#installation-protection).
 
-- [ ] Implement and register `add SOURCE DESTINATION`, installing exact file/directory/root selections at an already matching dependency lock without advancing that lock.
+- [ ] Implement and register `add SOURCE DESTINATION`, resolving source-reference names only against declared dependencies and installing exact file/directory/root selections at an already matching dependency lock without advancing that lock.
 - [ ] Implement `--replace` and `--allow-outdated` as independent permissions, including entry reassignment and old-baseline protection, with all command/selection checks before source access.
 - [ ] Check freshness before mutation, fail absent initial source paths, and retain revision-availability/integrity checks even when outdated use is permitted; emit the complete installation result.
 - [ ] Test renamed destinations, empty directories, duplicate mappings, stale/missing locks, outdated versus failed freshness, unavailable filesystem history, identical replacements, collisions, missing-file restoration, and unselected-state preservation; complete the common review gate.

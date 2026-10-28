@@ -109,10 +109,6 @@ output = { type = "list", artifacts = [
   "./depmesh.toml",
 ] }
 
-# Module behavior governance covers Python code and selected fixture formats.
-# Core and domain retain the global architecture rules; add behavior scopes
-# for shared concepts when their implementations are introduced.
-
 # Project invariants and local content inspection follow the locking contract.
 [[rules]]
 relation = "governed_by"
@@ -257,67 +253,53 @@ input = { type = "one_of", artifacts = [
 ] }
 output = { type = "files", pattern = "./vcsinstall/runtime/**/*.py" }
 
-# Adapter-specific contracts govern the named implementation and its tests.
+# Adapter-specific contracts govern the named implementation.
 
 # The git source adapter follows its source contract.
 [[rules]]
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/sources/adapters/git.py",
-  "./vcsinstall/sources/adapters/tests/test_git.py",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/vcs/git.md"] }
 
 [[rules]]
 relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/vcs/git.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/sources/adapters/git.py" },
-  { type = "files", pattern = "./vcsinstall/sources/adapters/tests/test_git.py" },
-] }
+output = { type = "files", pattern = "./vcsinstall/sources/adapters/git.py" }
 
 # The filesystem source adapter follows its source contract.
 [[rules]]
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/sources/adapters/filesystem.py",
-  "./vcsinstall/sources/adapters/tests/test_filesystem.py",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/vcs/filesystem.md"] }
 
 [[rules]]
 relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/vcs/filesystem.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/sources/adapters/filesystem.py" },
-  { type = "files", pattern = "./vcsinstall/sources/adapters/tests/test_filesystem.py" },
-] }
+output = { type = "files", pattern = "./vcsinstall/sources/adapters/filesystem.py" }
 
 # The noop source adapter follows its source contract.
 [[rules]]
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/sources/adapters/noop.py",
-  "./vcsinstall/sources/adapters/tests/test_noop.py",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/vcs/noop.md"] }
 
 [[rules]]
 relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/vcs/noop.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/sources/adapters/noop.py" },
-  { type = "files", pattern = "./vcsinstall/sources/adapters/tests/test_noop.py" },
-] }
+output = { type = "files", pattern = "./vcsinstall/sources/adapters/noop.py" }
 
 # Native Git hosting also governs GitHub's delegated Git integration.
 [[rules]]
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/hosting/adapters/git.py",
-  "./vcsinstall/hosting/adapters/tests/test_git.py",
   "./vcsinstall/hosting/adapters/github.py",
-  "./vcsinstall/hosting/adapters/tests/test_github.py",
   "./specs/behavior/hosting/github.md",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/hosting/git.md"] }
@@ -327,9 +309,7 @@ relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/hosting/git.md"] }
 output = { type = "union", items = [
   { type = "files", pattern = "./vcsinstall/hosting/adapters/git.py" },
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/tests/test_git.py" },
   { type = "files", pattern = "./vcsinstall/hosting/adapters/github.py" },
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/tests/test_github.py" },
   { type = "files", pattern = "./specs/behavior/hosting/github.md" },
 ] }
 
@@ -338,51 +318,39 @@ output = { type = "union", items = [
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/hosting/adapters/github.py",
-  "./vcsinstall/hosting/adapters/tests/test_github.py",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/hosting/github.md"] }
 
 [[rules]]
 relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/hosting/github.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/github.py" },
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/tests/test_github.py" },
-] }
+output = { type = "files", pattern = "./vcsinstall/hosting/adapters/github.py" }
 
 # The filesystem hosting adapter follows its hosting contract.
 [[rules]]
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/hosting/adapters/filesystem.py",
-  "./vcsinstall/hosting/adapters/tests/test_filesystem.py",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/hosting/filesystem.md"] }
 
 [[rules]]
 relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/hosting/filesystem.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/filesystem.py" },
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/tests/test_filesystem.py" },
-] }
+output = { type = "files", pattern = "./vcsinstall/hosting/adapters/filesystem.py" }
 
 # The noop hosting adapter follows its hosting contract.
 [[rules]]
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/hosting/adapters/noop.py",
-  "./vcsinstall/hosting/adapters/tests/test_noop.py",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/hosting/noop.md"] }
 
 [[rules]]
 relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/hosting/noop.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/noop.py" },
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/tests/test_noop.py" },
-] }
+output = { type = "files", pattern = "./vcsinstall/hosting/adapters/noop.py" }
 
 # CLI and skill-facing code is governed by the CLI behavior spec.
 [[rules]]

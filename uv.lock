@@ -208,33 +208,6 @@ wheels = [
 ]
 
 [[package]]
-name = "depmesh"
-version = "0.2.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "llm-tool-cli" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e3/d7/f4b1cb5a63b79ca9a40eb698c81218d06d3ee112dd9bf69f8ad1ef67f5b3/depmesh-0.2.0.tar.gz", hash = "sha256:e1dd7e94eb9a6f6fd7e2a859464882e6a847af116277d0a29af3a626c26a9226", size = 45203, upload-time = "2026-10-21T10:12:48.572Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a3/45/6436e46ebe8ba3f3f7d7ad7c09483ddcdaafca574d4994c9a9644855f514/depmesh-0.2.0-py3-none-any.whl", hash = "sha256:4689cc5304fa8c8733e97de18a7c9221ff00d4c17cb96df949f35ad049cce8b4", size = 72112, upload-time = "2026-10-21T10:12:46.975Z" },
-]
-
-[[package]]
-name = "donna"
-version = "0.5.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "jinja2" },
-    { name = "llm-tool-cli" },
-    { name = "markdown-it-py" },
-    { name = "mdformat" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/10/b6/2e42eee4e7d5dd1ddd65aab205c872482d2d86312b9b7fc88f822dc031af/donna-0.5.0.tar.gz", hash = "sha256:54881cca983cfc3ace64ff38cb17bc1e56947b4b16f57626c9a81baae4abfab8", size = 106282, upload-time = "2026-10-21T10:13:49.864Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/0b/936868b9b1b03d1bee90c8799bd639b961b365c58524d42745c466da4d07/donna-0.5.0-py3-none-any.whl", hash = "sha256:07ec960010fb57a62456fe14e491cc720ad056056b2d2550091adfeab4934cce", size = 163669, upload-time = "2026-10-21T10:13:48.339Z" },
-]
-
-[[package]]
 name = "eradicate"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -563,16 +536,16 @@ wheels = [
 
 [[package]]
 name = "llm-tool-cli"
-version = "0.2.0"
+version = "0.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "tomli" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fd/e9/77ec0439baae6658e76019ffba6bf1bbe7b4d49859865c6461ad01c85c86/llm_tool_cli-0.2.0.tar.gz", hash = "sha256:553b8df38f09a147920e19b04ad322243f11433d7bb8c136b1b77fc1996ec702", size = 70751, upload-time = "2026-10-21T09:41:34.523Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ff/52/59f36e895505876775d3f51654647ba7b0b0a964485145b1ab647fec337a/llm_tool_cli-0.2.1.tar.gz", hash = "sha256:dc6c0c41566004ca4c425c919876d2fc05c32a09da77b19f2ea496f57af47c37", size = 71159, upload-time = "2026-10-28T13:16:24.357Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/b9/87e7296a5098371ddf400a07f5a0cc2ab2ff477e349769145424815b3df7/llm_tool_cli-0.2.0-py3-none-any.whl", hash = "sha256:0fd3f3eee2bde00c404e600177b93a40c67a28ccae017a4a5797832797a3a4a7", size = 112328, upload-time = "2026-10-21T09:41:33.142Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/21/975de77f6b767955c4942a8f2f6c473ff49e865bf2174bf67476e89b31d9/llm_tool_cli-0.2.1-py3-none-any.whl", hash = "sha256:7880eed77c8a6ddc840750d2fa1fd30c625b15f134bac229dc023484573aa8ef", size = 112695, upload-time = "2026-10-28T13:16:22.795Z" },
 ]
 
 [[package]]
@@ -707,18 +680,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e7/ff/0ffefdcac38932a54d2b5eed4e0ba8a408f215002cd178ad1df0f2806ff8/mccabe-0.7.0.tar.gz", hash = "sha256:348e0240c33b60bbdf4e523192ef919f28cb2c3d7d5c7794f74009290f236325", size = 9658, upload-time = "2022-01-24T01:14:51.113Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/27/1a/1f68f9ba0c207934b35b86a8ca3aad8395a3d6dd7921c0686e23853ff5a9/mccabe-0.7.0-py2.py3-none-any.whl", hash = "sha256:6c2d30ab6be0e4a46919781807b4f0d834ebdd6c6e3dca0bda5a15f863427b6e", size = 7350, upload-time = "2022-01-24T01:14:49.62Z" },
-]
-
-[[package]]
-name = "mdformat"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "markdown-it-py" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/05/32b5e14b192b0a8a309f32232c580aefedd9d06017cb8fe8fce34bec654c/mdformat-1.0.0.tar.gz", hash = "sha256:4954045fcae797c29f86d4ad879e43bb151fa55dbaf74ac6eaeacf1d45bb3928", size = 56953, upload-time = "2025-10-16T12:05:03.695Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/9a/8fe71b95985ca7a4001effbcc58e5a07a1f2a2884203f74dcf48a3b08315/mdformat-1.0.0-py3-none-any.whl", hash = "sha256:bca015d65a1d063a02e885a91daee303057bc7829c2cd37b2075a50dbb65944b", size = 53288, upload-time = "2025-10-16T12:05:02.607Z" },
 ]
 
 [[package]]
@@ -1371,8 +1332,6 @@ dev = [
     { name = "black" },
     { name = "changy" },
     { name = "codespell" },
-    { name = "depmesh" },
-    { name = "donna" },
     { name = "flake8" },
     { name = "flake8-absolute-import" },
     { name = "flake8-annotations-complexity" },
@@ -1392,7 +1351,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "llm-tool-cli", specifier = "==0.2.0" }]
+requires-dist = [{ name = "llm-tool-cli", specifier = "==0.2.1" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1400,8 +1359,6 @@ dev = [
     { name = "black", specifier = "==26.10.*" },
     { name = "changy", specifier = "==0.4.*" },
     { name = "codespell", specifier = "==2.4.*" },
-    { name = "depmesh", specifier = "==0.2.0" },
-    { name = "donna", specifier = "==0.5.0" },
     { name = "flake8", specifier = "==7.4.*" },
     { name = "flake8-absolute-import", specifier = "==1.0.*" },
     { name = "flake8-annotations-complexity", specifier = "==0.2.*" },

@@ -70,12 +70,12 @@ tag = "v1.0"
 
 [[entries]]
 dependency = "ci"
-source_path = "specs"
+source_path = "@/specs"
 destination = "@/specs/shared"
 
 [[entries]]
 dependency = "formatting"
-source_path = "LICENSE"
+source_path = "@/LICENSE"
 destination = "@/licenses/shared.txt"
 ```
 
@@ -124,20 +124,23 @@ Configuration selector strings MUST NOT undergo URL-fragment or percent decoding
 Each item in `entries` MUST be a table containing these required nonempty string fields:
 
 - `dependency` — The exact name of one declared dependency.
-- `source_path` — The literal path of a file or directory within that dependency's repository.
+- `source_path` — The repository-anchored identifier of a file or directory within that dependency's repository.
 - `destination` — The final local path of the installed entry.
 
 Each entry MUST refer to an existing dependency declaration.
 Repository and version selection MUST follow State and shared revisions in `specs/behavior/locking.md`.
 File selection, directory semantics, and manifest ownership MUST follow Source file selection, File manifests, and Directories in `specs/behavior/files-and-directories.md`.
-The CLI's `dependency://NAME/PATH` source argument MUST be represented by separate `dependency` and `source_path` fields.
+The CLI's `NAME@/PATH` source reference MUST be represented by separate `dependency` and `source_path` fields.
 Configuration order MUST NOT alter dependency membership or entry identity.
 
 ### Source paths
 
 `source_path` MUST follow Source paths in `specs/behavior/vcs-interaction.md`.
+New or changed entry declarations written by vcsinstall MUST store `source_path` in its canonical form.
 Configuration source-path strings MUST NOT undergo URL or percent decoding.
 The same source path MAY appear in multiple entries with different destinations.
+
+**Example:** With `dependency = "ci"`, `source_path = "@/specs"` selects content in that dependency, while `destination = "@/docs/shared"` identifies a path in the target project.
 
 ### Destinations and entry identity
 
@@ -179,7 +182,7 @@ version = 1
 
 # [[entries]]
 # dependency = "shared"
-# source_path = "specs"
+# source_path = "@/specs"
 # destination = "@/specs/shared"
 ```
 

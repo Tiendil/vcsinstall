@@ -47,7 +47,7 @@ Configuration remains the authority for requested mappings, while previous lock 
 An explicit revision pin in configuration does not itself establish a baseline.
 Loading either file does not acknowledge local changes or rebuild a missing manifest from the destination.
 
-**Example:** Configuration maps source directory `guides` to `@/docs/shared` as one entry.
+**Example:** Configuration maps source directory `@/guides` to `@/docs/shared` as one entry.
 The lockfile records revision A and a directory manifest containing `guide.md` and `examples/basic.py` with their hashes.
 A generated local cache file remains outside that manifest.
 If an update selects a revision containing another source file, the successful update records the new manifest while preserving the same configured directory mapping.
@@ -231,7 +231,7 @@ Preparation and partial-effect guarantees MUST follow Preparation and consistenc
 
 ## Example
 
-An installed directory maps source path `guides` and has a manifest containing `guide.md` and `examples/basic.py`.
+An installed directory maps source path `@/guides` and has a manifest containing `guide.md` and `examples/basic.py`.
 Running a local tool creates `__pycache__/basic.pyc` and an empty `output` directory; a developer also creates `examples/new.py`.
 
 - Editing `guide.md` MUST produce a managed modification.

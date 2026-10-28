@@ -39,13 +39,13 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/architecture/naming.md` — Project and code naming conventions.
 - `./specs/architecture/tests.md` — Requirements for project tests.
 - `./specs/behavior/cache.md` — The shared repository cache contract.
-- `./specs/behavior/cli.md` — The command invocation, selection, and result contract.
+- `./specs/behavior/cli.md` — The command-line interface contract.
 - `./specs/behavior/config.md` — The project declaration and configuration contract.
 - `./specs/behavior/files-and-directories.md` — The file and directory management contract.
 - `./specs/behavior/locking.md` — The dependency revision and installation state contract.
 - `./specs/behavior/lockfile.md` — The persisted installation state format and file I/O contract.
 - `./specs/behavior/skill_fixtures.md` — Requirements for built-in skill documentation.
-- `./specs/behavior/vcs-interaction.md` — The shared repository access and change delivery contract.
+- `./specs/behavior/vcs-interaction.md` — The contract for addressing and interacting with source and publication repositories.
 - `./specs/behavior/vcs/git.md` — The Git source contract.
 - `./specs/behavior/vcs/filesystem.md` — The filesystem source contract.
 - `./specs/behavior/vcs/noop.md` — The test-only noop source contract.

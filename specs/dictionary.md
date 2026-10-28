@@ -28,6 +28,8 @@ The following topics are out of scope:
 - `hosting adapter` — an integration providing repository acquisition, refresh, and supported change-delivery workflows for a compatible source backend; it may use native repository facilities or a hosting service.
 - `native repository locator` — the backend-native location or identifier for a source repository, without vcsinstall's version fragment.
 - `source repository` — the source content root accessed through a selected backend, including a VCS repository or an ordinary filesystem directory.
+- `source path` — a canonical `@/` identifier selecting content within a dependency's source repository.
+- `dependency source reference` — a CLI `NAME@/PATH` reference combining a declared dependency name with a source path anchored at that dependency's repository root.
 - `publication repository` — the repository selected to receive a contribution, independently of the source used for installation and updates.
 - `review target` — the source repository and branch into which a hosted contribution requests integration.
 - `delivery mode` — the explicitly requested way to deliver or apply selected local changes.

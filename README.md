@@ -113,10 +113,10 @@ The image installs dependencies from `uv.lock` and matches the host user's UID a
 
 ### Project tools
 
-[Donna](https://github.com/Tiendil/donna) runs deterministic development workflows. Its local configuration is [donna.toml](donna.toml). Run the complete polishing workflow to format the code and check architecture, spelling, lint, types, and tests:
+[Donna](https://github.com/Tiendil/donna) runs deterministic development workflows. Its local configuration is [donna.toml](donna.toml). Run the host-installed Donna executable to format the code and check architecture, spelling, lint, types, and tests through the container helpers:
 
 ```bash
-./bin/dev.sh uv run -- donna -p llm run @/workflows/polish.donna.md
+donna -p llm run @/workflows/polish.donna.md
 ```
 
 [Depmesh](https://github.com/Tiendil/depmesh) discovers relationships between project artifacts. [depmesh.toml](depmesh.toml) connects code with its specifications, tests, imports, and callers.

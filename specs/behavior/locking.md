@@ -80,7 +80,7 @@ An explicit branch selection MUST match a recorded inferred branch with the same
 A tag or revision lock MUST NOT satisfy an omitted Git selector.
 A branch or tag advancing remotely MUST NOT itself make a lock stale relative to configuration.
 
-An entry baseline MUST match a declaration only when its dependency lock matches and its dependency name, source path, and canonical destination agree.
+An entry baseline MUST match a declaration only when its dependency lock matches and its dependency name, canonical source path, and canonical destination agree.
 Configuration comments, declaration ordering, and equivalent destination spelling MUST NOT affect matching.
 Local content changes MUST NOT affect declaration matching.
 A complete configuration match MUST require exactly the declared dependency and entry sets, with a matching record for every declaration.
@@ -104,7 +104,7 @@ It MUST remain distinct from unexpectedly missing managed files whose baseline e
 An absent directory baseline MUST NOT require deleting structural directories or unmanaged descendants.
 Deleting a managed child within a directory entry MUST produce a local difference while the recorded manifest remains unchanged.
 
-**Example:** A project declares `LICENSE` from dependency `ci`, installed at `@/licenses/shared.txt`.
+**Example:** A project declares `@/LICENSE` from dependency `ci`, installed at `@/licenses/shared.txt`.
 
 1. The initial baseline records `kind = "file"` and the file's hash.
 2. Upstream deletes `LICENSE`; `vcsinstall dependency update ci` removes the unchanged local copy, advances the dependency's revision, and records `kind = "absent"` without a hash.
