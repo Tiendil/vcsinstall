@@ -83,7 +83,7 @@ For container development, follow [Development](#development).
 The available help, version, and skill commands work without project configuration. The shared `--config` option is accepted, but these commands do not load a project configuration file.
 
 The default project configuration filename is `vcsinstall.toml`; the lockfile filename is `vcsinstall.lock`.
-The configuration schema and lockfile format are still to be defined.
+The version 1 [configuration schema](specs/behavior/config.md) and [lockfile format](specs/behavior/lockfile.md) are specified; loading and managing these files remain under development.
 
 ## Specifications
 

@@ -5,6 +5,7 @@ from llm_tool_cli.paths import project_path_parts
 
 from vcsinstall.domain import (
     BackendName,
+    ContentHash,
     DependencyName,
     RepositoryIdentity,
     RepositoryLocator,
@@ -13,6 +14,8 @@ from vcsinstall.domain import (
     SourcePath,
     VersionSelector,
 )
+
+_EMPTY_HASH = ContentHash("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
 
 
 class _DomainFields(BaseEntity):
@@ -192,3 +195,29 @@ class TestVersionSelector:
     def test_serialization_preserves_selection(self) -> None:
         selector = VersionSelector(kind=SelectorKind.revision, value=SelectorValue("opaque:revision+ID"))
         assert VersionSelector.model_validate_json(selector.model_dump_json()) == selector
+
+
+class TestContentHash:
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "",
+            "sha256:",
+            "sha256:" + "a" * 63,
+            "sha256:" + "a" * 65,
+            "sha256:" + "A" * 64,
+            "sha256:" + "g" * 64,
+            "SHA256:" + "a" * 64,
+            "sha512:" + "a" * 64,
+            "a" * 64,
+            " " + _EMPTY_HASH,
+            _EMPTY_HASH + " ",
+            _EMPTY_HASH + "\n",
+            _EMPTY_HASH.encode("ascii"),
+            None,
+            1,
+        ],
+    )
+    def test_rejects_invalid_hash_values(self, value: object) -> None:
+        with pytest.raises(pydantic.ValidationError):
+            pydantic.TypeAdapter(ContentHash).validate_python(value)

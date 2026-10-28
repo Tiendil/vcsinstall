@@ -85,7 +85,7 @@ Record fields MUST retain the binding and mapping used to establish each baselin
 
 Each item in an entry's `files` MUST be a table containing only:
 
-- `path` — Required literal path relative to the entry root under File manifests in `specs/behavior/files-and-directories.md`.
+- `path` — Required canonical `@/` identifier scoped to the entry root under File manifests in `specs/behavior/files-and-directories.md`.
 - `hash` — Required file content hash under Hash representation below.
 
 Manifest path uniqueness and file-ancestor constraints MUST follow that File manifests contract.
@@ -142,9 +142,9 @@ dependency = "ci"
 source_path = "@/specs"
 destination = "@/specs/shared"
 kind = "directory"
-hash = "sha256:0882e94f4f02b979246240aeb542967a48efb157f10bb67860415d2f907ee2e8"
+hash = "sha256:bea5475d87735beab89c88a39fb417625013c60ddf696d3dba4eb11d343e27fe"
 
 [[entries.files]]
-path = "guide.md"
+path = "@/guide.md"
 hash = "sha256:5ba1677a4833fd02ece676817a073abef834d542a27562e9ad1c903b656d37dd"
 ```

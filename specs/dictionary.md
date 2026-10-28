@@ -20,7 +20,7 @@ The following topics are out of scope:
 - `effective selector` — the source version selection used by an operation, including an inferred branch retained in a matching dependency lock.
 - `entry` — a mapping from a path within a dependency's source repository to a destination in the target project; each entry belongs to one dependency.
 - `installation baseline` — the recorded content state of an entry at its dependency's shared locked revision.
-- `file manifest` — the recorded set of selected files within a directory entry, with their literal relative paths and content hashes at one source state.
+- `file manifest` — the recorded set of selected files within a directory entry, with their canonical paths scoped to the entry root and content hashes at one source state.
 - `managed file` — a file identified by an entry's recorded installation baseline.
 - `unmanaged content` — content in the target project outside the recorded file set, including additional files beneath a directory entry.
 - `source backend` — the source kind defining repository identity, version semantics, revision resolution, and content extraction from an available repository view.

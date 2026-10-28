@@ -1,5 +1,6 @@
 from vcsinstall.domain.entities import (
     BackendName,
+    ContentHash,
     DependencyName,
     RepositoryIdentity,
     RepositoryLocator,
@@ -12,6 +13,7 @@ from vcsinstall.domain.entities import (
 
 __all__ = [
     "BackendName",
+    "ContentHash",
     "DependencyName",
     "RepositoryIdentity",
     "RepositoryLocator",

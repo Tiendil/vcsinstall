@@ -34,4 +34,4 @@ Version output defaults to the human protocol; skill output defaults to the LLM 
 The shared `--config` option is accepted, but the current commands do not load project configuration.
 
 The default project configuration filename is `vcsinstall.toml`; the lockfile filename is `vcsinstall.lock`.
-The configuration schema and lockfile format are still to be defined.
+The version 1 configuration schema and lockfile format are specified; loading and managing these files remain under development.

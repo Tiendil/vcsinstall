@@ -14,6 +14,12 @@ def _normalize_source_path(value: str) -> ProjectPathId:
 
 
 BackendName = NewType("BackendName", str)
+ContentHash = NewType(
+    "ContentHash",
+    Annotated[
+        str, pydantic.StringConstraints(pattern=r"\Asha256:[0-9a-f]{64}\z", strict=True, strip_whitespace=False)
+    ],
+)
 DependencyName = NewType(
     "DependencyName",
     Annotated[str, pydantic.StringConstraints(pattern=r"\A[a-z][a-z0-9_-]*\z", strict=True, strip_whitespace=False)],

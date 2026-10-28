@@ -34,7 +34,7 @@ The following summarizes their responsibilities; field definitions and validatio
 | Version | Declares a requested selector, which may be omitted for default selection. | Records the effective selector and one resolved immutable `revision` shared by the dependency's entries. |
 | Entry mapping | Declares one entry for an installed directory root, or one entry for a standalone file. A directory's child files have no separate configuration entries. | Retains one baseline per declared entry; a directory's child file records are nested in that baseline's `files` manifest. |
 | File content | Declares the file mapping without a content hash. | Records `kind = "file"` and the root file's `hash`. |
-| Directory content | Declares one directory-root mapping; its child file set is discovered from the selected source state. | Records `kind = "directory"`, the aggregate `hash`, and the `files` manifest containing relative file paths and individual hashes. |
+| Directory content | Declares one directory-root mapping; its child file set is discovered from the selected source state. | Records `kind = "directory"`, the aggregate `hash`, and the `files` manifest containing canonical file paths scoped to the entry root and individual hashes. |
 | Expected source absence | Retains the entry declaration. | Records `kind = "absent"` without a hash or file manifest. |
 
 The lockfile's directory manifests identify the recorded managed file set for installation and removal; configuration does not expand a directory mapping into declarations for every child.
@@ -48,7 +48,7 @@ An explicit revision pin in configuration does not itself establish a baseline.
 Loading either file does not acknowledge local changes or rebuild a missing manifest from the destination.
 
 **Example:** Configuration maps source directory `@/guides` to `@/docs/shared` as one entry.
-The lockfile records revision A and a directory manifest containing `guide.md` and `examples/basic.py` with their hashes.
+The lockfile records revision A and a directory manifest containing `@/guide.md` and `@/examples/basic.py` with their hashes.
 A generated local cache file remains outside that manifest.
 If an update selects a revision containing another source file, the successful update records the new manifest while preserving the same configured directory mapping.
 
@@ -71,18 +71,18 @@ A directory mapping MUST remain one entry with one manifest, independently of it
 Manifest children MUST NOT become independently versioned entries.
 Every file MUST use the dependency's shared locked revision.
 
-Paths within a directory manifest MUST be literal paths relative to the entry root, using `/` separators.
-They MUST be nonempty, strictly below that root, and contain no empty, `.` or `..` path components.
+Paths within a directory manifest MUST use canonical `@/` identifiers under Identifiers and Identifier checks in `specs/behavior/paths.md` in `llm-tool-cli`, with the entry root as the identifier root.
+Every child identifier MUST be strictly below that root; `@/` MUST NOT identify a directory-manifest child.
+Manifest paths MUST retain this canonical spelling, including the `@/` prefix, in persisted records, comparisons, and content hashes.
 Manifest paths MUST be unique, and one file path MUST NOT be an ancestor of another file path.
-Manifest paths MUST be representable as UTF-8 and MUST NOT contain NUL characters.
 Names MUST NOT undergo Unicode normalization or case folding.
 Paths MUST NOT undergo home or glob expansion.
 Every listed child MUST be a regular file; directories MUST be inferred from file paths.
 An empty directory selection MUST have an empty manifest.
 
 A file entry MUST identify its root file by its own hash; an absent entry MUST identify no current source files.
-For comparison, a root file MUST occupy the distinguished relative position `.` and directory children MUST occupy their manifest paths.
-This comparison convention MUST NOT turn `.` into a directory-manifest child.
+For comparison, a root file MUST occupy the canonical root position `@/` and directory children MUST occupy their manifest paths.
+This comparison convention MUST NOT turn `@/` into a directory-manifest child.
 
 Updating a dependency MUST enumerate the selected revision again rather than freeze the old manifest's membership.
 New source files MUST enter the proposed manifest, and removed source files MUST leave it.
@@ -151,8 +151,8 @@ A directory hash MUST be derived from its complete file manifest, with paths sor
 Its SHA-256 input MUST concatenate one record per file, with each record containing these byte sequences in order:
 
 1. `file` encoded as ASCII, followed by one NUL byte.
-2. The complete relative manifest path encoded as UTF-8, followed by one NUL byte.
-3. The file's 64-digit lowercase SHA-256 digest encoded as ASCII, without the `sha256:` prefix, followed by one NUL byte.
+2. The complete canonical manifest path, including its `@/` prefix, encoded as UTF-8, followed by one NUL byte.
+3. The complete file content hash, including its `sha256:` prefix, encoded as ASCII, followed by one NUL byte.
 
 An empty manifest MUST hash an empty byte sequence.
 Entry kinds MUST distinguish that digest's directory use from an empty regular file.
@@ -231,7 +231,7 @@ Preparation and partial-effect guarantees MUST follow Preparation and consistenc
 
 ## Example
 
-An installed directory maps source path `@/guides` and has a manifest containing `guide.md` and `examples/basic.py`.
+An installed directory maps source path `@/guides` and has a manifest containing `@/guide.md` and `@/examples/basic.py`.
 Running a local tool creates `__pycache__/basic.pyc` and an empty `output` directory; a developer also creates `examples/new.py`.
 
 - Editing `guide.md` MUST produce a managed modification.

@@ -8,7 +8,7 @@ This document organizes implementation of the completed vcsinstall specification
 
 The plan covers the path from the existing CLI scaffold to the specified Git and filesystem installation and contribution workflows, including tests, packaged documentation, and integration with `llm_tool_cli`.
 Additional source backends, HTTP support, publication history, automatic merging, and release publication are outside this plan.
-The owning behavior and architecture specifications remain the source of requirements; this plan describes implementation order rather than a competing product contract.
+The owning behavior and architecture specifications remain the source of requirements and may be revised under [Specification review during implementation](#specification-review-during-implementation); this plan describes implementation order rather than a competing product contract.
 
 ## Starting point and ordering
 
@@ -38,7 +38,15 @@ Each stage's final checkbox includes all of the following:
 
 Before adding rich domain entities, obtain the explicit approval required by [Domain entities](../architecture/entities.md#domain-entities); data entities with pure policy functions remain an available design.
 Dependency, lockfile, Docker, and tool-installation changes require the authorization described in `AGENTS.md`; a research finding must become a concrete prerequisite task before dependent implementation proceeds.
-Product specification changes require a separate explicit request and an index update; discovering an ambiguity does not authorize rewriting its contract.
+
+## Specification review during implementation
+
+Executing this plan explicitly authorizes agents to revise existing specifications within the refactoring's scope when requirements are impractical, inconvenient, unnecessarily complex, or conflict with sound engineering judgment or established Donna, Depmesh, and `llm_tool_cli` patterns. Such revisions do not require a separate developer request.
+Agents MUST evaluate requirements against actual product needs and implementation simplicity; existing specification text alone MUST NOT justify unnecessary validation, abstractions, or special cases.
+Reference projects SHOULD guide shared infrastructure and routine design choices; tool-specific differences SHOULD have a concrete reason.
+When revising a contract, agents MUST update its owning specification, the specification index, and affected code, tests, and documentation together, and record the reason and review evidence in the stage's `.session/` report.
+
+The [path-validation reevaluation](../../.session/path-validation-alignment/review.md) records the revised proposal prompted by this rule.
 
 ## Maintaining the plan
 
@@ -81,16 +89,22 @@ Review evidence: [Stage 2 report](../../.session/implementation-stage-2/review.m
 
 Relevant contracts: [files and directories](../behavior/files-and-directories.md) and [hash representation](../behavior/lockfile.md#hash-representation).
 
-- [ ] Implement reusable pure representations of file, directory, and absent content, with directory manifests identifying regular files rather than independently versioned children.
-- [ ] Validate literal UTF-8 manifest paths, uniqueness, file-ancestor conflicts, and the distinction between the root-file comparison position `.` and directory child paths.
-- [ ] Implement exact-byte file hashes and the specified UTF-8-byte-sorted directory hash encoding, including empty manifests and aggregate-hash verification.
-- [ ] Test binary bytes, enumeration-order independence, Unicode names, invalid manifests, empty-file/directory distinctions, and the published hash examples; complete the common review gate.
+- [x] Implement workspace-owned records of file, directory, and absent content, with directory manifests identifying regular files rather than independently versioned children.
+- [x] Validate canonical manifest paths, uniqueness, file-ancestor conflicts, and the distinction between the root-file comparison position `@/` and directory child paths.
+- [x] Implement exact-byte file hashes and the specified UTF-8-byte-sorted directory hash encoding, including empty manifests and aggregate-hash verification.
+- [x] Test binary bytes, enumeration-order independence, Unicode names, invalid manifests, empty-file/directory distinctions, and the published hash examples; complete the common review gate.
+
+`vcsinstall.workspace.entities`, exported through `vcsinstall.workspace`, owns `ManifestFile`, the content record models, and their `ContentSchema` validation union. `DirectoryContent` validates and canonicalizes complete manifests; the record models retain their `ContentBase.file_hashes()` interface. Shared `ContentHash` belongs to `vcsinstall.domain.entities` and remains exported through `vcsinstall.domain`.
+File and directory hash calculation belongs to the public leaf module `vcsinstall.filesystem.hashes`. `hash_files` accepts `Mapping[ProjectPathId, ContentHash]`, independently of workspace record types. File positions retain the canonical `@/` spelling anchored at the entry root in records, serialization, and hash inputs; the root comparison position is `@/`.
+Content kinds are defaulted `Literal` model fields. `DirectoryContent` retains a required supplied aggregate hash alongside its files; callers calculate that hash through `filesystem.hashes` before construction. `ContentSchema` requires an explicit kind in stored records and verifies directory hash consistency after model validation. Ordinary model serialization preserves the stored fields without conversion wrappers.
+Stage 4 supplies project-owned bindings and baselines using shared semantic values and supplied content facts independently of these persisted record models. Stages 5 and 7 extend workspace-owned configuration and lockfile schemas; workspace owns conversion between persisted records and project state. Lower layers MUST NOT import workspace records for hashing or project policy.
+Review evidence: [Stage 3 report](../../.session/implementation-stage-3/review.md).
 
 ## Stage 4 — Project state and declaration matching
 
 Relevant contracts: [project ownership](../architecture/modules_layout.md#project-state-and-operations) and [locking](../behavior/locking.md#matching-configuration).
 
-- [ ] Represent declarations, dependency locks, and entry baselines independently of TOML, filesystem access, or adapter execution, including declared-but-unlocked states and dependencies without entries.
+- [ ] Represent declarations, dependency locks, and entry baselines in `vcsinstall.project`, independently of TOML, filesystem access, or adapter execution, including declared-but-unlocked states and dependencies without entries. Use shared semantic values and supplied content facts without importing workspace record models or moving project bindings into `domain`; workspace owns conversion from persisted records.
 - [ ] Implement repository/selector matching and entry-binding matching, including selector-less Git declarations adopting a matching recorded branch and explicit branch declarations matching that same inferred branch.
 - [ ] Retain old valid bindings separately from current declaration matches so later replacement checks can protect previous installations and unselected entries.
 - [ ] Test independent dependencies sharing a repository, missing/mismatching records, exact declared-set matching, inconsistent baselines, and declaration changes that do not change identity; complete the common review gate.
@@ -99,7 +113,7 @@ Relevant contracts: [project ownership](../architecture/modules_layout.md#projec
 
 Relevant contracts: [configuration](../behavior/config.md), [workspace ownership](../architecture/modules_layout.md#project-state-and-operations), and the shared configuration/path contracts.
 
-- [ ] Add the version-1 workspace configuration schema and conversion to project declarations, reusing shared discovery, version validation, loading, and project scopes; validate selector exclusivity and convert configuration fields into domain selectors here.
+- [ ] Define the version-1 configuration schema in `vcsinstall.workspace` and explicitly convert it to project declarations, reusing shared discovery, version validation, loading, and project scopes; validate selector exclusivity and convert configuration fields into domain selectors here. Reuse validated domain values while keeping TOML field shapes, schema versions, and file-specific diagnostics in the workspace schema.
 - [ ] Normalize repository-anchored source identifiers and project-root destinations under their respective contracts, and resolve filesystem repository locators using their own base, without requiring source or installed content to exist.
 - [ ] Validate complete configuration, dependency references, unique/nonoverlapping destinations, and conflicts with the selected configuration and sibling lockfile; preserve shared diagnostic context.
 - [ ] Test discovery and explicit paths, nested invocation directories, minimal/empty/invalid TOML, unknown fields, strict versions, literal strings, containment, and absence of source/cache/client access; complete the common review gate.
@@ -118,7 +132,7 @@ Relevant contracts: [starter configuration](../behavior/config.md#starter-config
 Relevant contracts: [lockfile](../behavior/lockfile.md) and [declaration matching](../behavior/locking.md#matching-configuration).
 
 - [ ] Load only the exact sibling `vcsinstall.lock`, distinguishing absence from unreadable, malformed, symlink, and non-regular-file targets.
-- [ ] Implement independent version-1 lockfile validation and conversion to project state with canonical source/destination bindings, including complete revisions, selector consistency, baseline-kind fields, manifests, and aggregate hashes.
+- [ ] Define the version-1 lockfile schema in `vcsinstall.workspace`, reusing `ContentSchema` for persisted content, and explicitly convert it to project state with canonical source/destination bindings, including complete revisions, selector consistency, baseline-kind fields, manifests, and aggregate hashes. Reuse the content entities directly while retaining directory-hash verification and contextual diagnostics at the workspace boundary; keep the complete lockfile layout owned by workspace rather than deriving it from project-state dumps.
 - [ ] Validate recorded destination conflicts and manifest structure independently of active declarations; preserve old valid records and defer operation-specific preconditions to their owners.
 - [ ] Test minimal and missing files, malformed records, unsupported versions, conflicting paths, absent baselines, stale declarations, and loading without installed/source/cache access; complete the common review gate.
 

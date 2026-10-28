@@ -47,6 +47,7 @@ It MUST evaluate supplied facts without performing filesystem access, native-cli
 It MUST represent declarations with missing or mismatching locks and baselines where the locking contract permits that state.
 
 `workspace` MUST load and persist that state under `specs/behavior/config.md` and `specs/behavior/lockfile.md`.
+It MUST own persisted file-manifest and content record representations.
 It MUST preserve the distinction between declarations and recorded installation baselines without duplicating project-owned policies.
 Loading MUST preserve those distinctions without enforcing operation-specific preconditions.
 
