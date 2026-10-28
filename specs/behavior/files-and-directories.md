@@ -76,6 +76,7 @@ Every child identifier MUST be strictly below that root; `@/` MUST NOT identify 
 Manifest paths MUST retain this canonical spelling, including the `@/` prefix, in persisted records, comparisons, and content hashes.
 Manifest paths MUST be unique, and one file path MUST NOT be an ancestor of another file path.
 Names MUST NOT undergo Unicode normalization or case folding.
+Input models MAY use the shared entity string-normalization defaults before path validation; preservation of surrounding whitespace is not required.
 Paths MUST NOT undergo home or glob expansion.
 Every listed child MUST be a regular file; directories MUST be inferred from file paths.
 An empty directory selection MUST have an empty manifest.

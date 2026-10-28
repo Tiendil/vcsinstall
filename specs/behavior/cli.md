@@ -201,7 +201,7 @@ Unknown names MUST fail before fetching sources or changing project files.
 The name preceding the first `@/` MUST be an exact dependency name under Dependencies in `specs/behavior/config.md`.
 The suffix beginning at that `@/` MUST be normalized directly into `SOURCE_PATH` under Source paths in `specs/behavior/vcs-interaction.md`.
 `NAME@/` MUST select the dependency's repository root, represented by `@/`.
-Source references MUST preserve literal path text without URL or percent decoding, and MUST NOT interpret query or fragment syntax.
+Source references MUST preserve literal path text under the Source paths input-normalization contract in `specs/behavior/vcs-interaction.md`, without URL or percent decoding, and MUST NOT interpret query or fragment syntax.
 Raw repository URLs and per-entry version options MUST NOT be accepted by `add`.
 
 **Example:** `ci@/specs` selects dependency `ci` with source path `@/specs`, while `ci@/` selects that dependency's repository root.

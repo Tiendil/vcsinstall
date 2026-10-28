@@ -146,6 +146,7 @@ Re-exports MUST keep the defining owner clear.
 ## Configuration entities
 
 Configuration and lockfile entities MAY validate parsed TOML shape or reference validated project and universal domain entities.
+They SHOULD reuse shared pure value entities rather than redeclare the same data for storage.
 They SHOULD reject malformed input with Pydantic before lower layers and MUST preserve useful error context.
 Workspace conversion MUST follow Project state and operations in `specs/architecture/modules_layout.md`.
 

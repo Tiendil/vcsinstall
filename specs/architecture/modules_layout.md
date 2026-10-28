@@ -45,11 +45,17 @@ Implementations MUST grow with required behavior under these responsibilities; t
 Its model MUST remain independent of configuration and lockfile syntax.
 It MUST evaluate supplied facts without performing filesystem access, native-client execution, or persistence.
 It MUST represent declarations with missing or mismatching locks and baselines where the locking contract permits that state.
+Project models and matching MUST NOT branch on backend names or implement backend-specific selector requirements.
+They MUST compare effective-selector facts supplied by their caller; source-owned rules MUST determine whether an omitted selector can reuse a recorded selection.
+
+Universal file-identity values and their collection invariants MUST belong to `domain` and be reused across project and persisted content models.
 
 `workspace` MUST load and persist that state under `specs/behavior/config.md` and `specs/behavior/lockfile.md`.
-It MUST own persisted file-manifest and content record representations.
+It MUST own persisted content record representations and directory-specific manifest constraints while reusing shared file-identity values.
 It MUST preserve the distinction between declarations and recorded installation baselines without duplicating project-owned policies.
 Loading MUST preserve those distinctions without enforcing operation-specific preconditions.
+Workspace loading MUST apply source-owned, effect-free validation of backend-specific definitions and lock fields before constructing project state.
+Backend validation and retained-default interpretation MUST NOT require repository acquisition, cache access, or native-client execution.
 
 `runtime` MUST coordinate each complete requested use case, including read-only operations and selections spanning multiple dependencies or entries.
 It MUST supply observed facts to the project model and coordinate external effects and persistence through their owning boundaries under the operation's behavior contract.
