@@ -1,15 +1,14 @@
-# Noop test sources
+# Noop sources
 
 ## Goal of the document
 
-This document describes a deterministic source backend for testing backend-independent behavior without native VCS clients or real publication.
+This document describes a deterministic source backend for controlled repository views without native VCS clients or real publication.
 
 ## Scope
 
-This specification covers version resolution and extraction from controlled repository views, including injected read failures at the test-source boundary.
+This specification covers declaration validation, version resolution, and extraction from controlled repository views, including injected read failures at the source boundary.
 The following are out of scope:
 
-- production source installation through this backend.
 - native VCS protocol, authentication, or real hosting-provider behavior.
 - concrete Python test-double interfaces or fixture storage formats.
 - native-client integration-test coverage.
@@ -17,7 +16,7 @@ The following are out of scope:
 ## Availability and identity
 
 The backend name MUST be `noop`.
-Test-only availability and the common source contract MUST follow `specs/behavior/vcs-interaction.md`.
+Availability and the common source contract MUST follow Backend selection and capabilities in `specs/behavior/vcs-interaction.md`.
 
 The native repository locator MUST be a nonempty fixture identifier whose spelling and case remain literal.
 It MUST NOT implicitly access a filesystem location or network address.
@@ -29,6 +28,8 @@ Ordinary project effects performed by the operation being tested MUST still foll
 Source and hosting responsibilities MUST follow the adapter boundaries in `specs/architecture/modules_layout.md`.
 
 ## Controlled revisions
+
+Declaration and lockfile validation MUST treat selector and revision strings as opaque nonempty identifiers and MUST NOT consult fixture state.
 
 A source fixture MUST supply an available repository view with immutable content states identified by complete nonempty revision identifiers.
 Identifiers MUST be opaque fixture values; noop MUST NOT require Git-shaped hexadecimal hashes or invent source state for an unknown identifier.

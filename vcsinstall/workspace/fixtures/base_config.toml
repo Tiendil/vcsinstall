@@ -1,0 +1,11 @@
+version = 1
+
+# [dependencies.shared]
+# vcs = "git"
+# repository = "https://example.com/team/shared.git"
+# branch = "main"
+
+# [[entries]]
+# dependency = "shared"
+# source_path = "@/specs"
+# destination = "@/specs/shared"

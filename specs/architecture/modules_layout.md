@@ -76,6 +76,8 @@ File selection, manifest ownership, and identity semantics MUST follow `specs/be
 
 Source adapters MUST own repository and version semantics, revision resolution, and content extraction from available repository views under `specs/behavior/vcs-interaction.md`.
 Their allowed effects MUST follow Backend selection and capabilities and Native client execution in that specification; filesystem source semantics MUST follow `specs/behavior/vcs/filesystem.md`.
+The default source-adapter registry MUST cover every recognized source backend.
+Invocation-specific adapter replacements MUST preserve that complete coverage so selecting a recognized backend always supplies an adapter.
 
 Hosting adapters MUST own repository acquisition, refresh, and complete outgoing workflows under `specs/behavior/vcs-interaction.md`, including:
 

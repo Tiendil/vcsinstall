@@ -61,12 +61,13 @@ The backend MUST identify its content root, including which repository data belo
 
 ## Backend selection and capabilities
 
-The supported production source backends MUST be:
+The supported source backends MUST be:
 
 - `git` — Git repositories, under `specs/behavior/vcs/git.md`.
 - `filesystem` — Ordinary filesystem directories, under `specs/behavior/vcs/filesystem.md`.
+- `noop` — Controlled repository views, under `specs/behavior/vcs/noop.md`.
 
-Tests MAY explicitly supply the test-only `noop` source under `specs/behavior/vcs/noop.md`, independently of hosting selection.
+Every supported source backend MUST be available through ordinary backend selection without additional registration or opt-in, independently of hosting selection.
 
 Backend selection MUST be explicit in the normalized repository identity under Repository locators and identity.
 An unknown or unsupported backend MUST fail explicitly without falling back to Git or ordinary filesystem access.

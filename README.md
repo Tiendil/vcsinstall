@@ -2,7 +2,7 @@
 
 `vcsinstall` is being developed to install files into a target repository from source repositories, record their origins in a lockfile, and push local changes back to their source.
 
-**Development status:** initial scaffold. Help, version output, and built-in usage documentation work today. File installation, lockfile management, and push back are planned.
+**Development status:** configuration initialization and config/lockfile loading work today, alongside help, version output, and built-in usage documentation. `dependency add` currently validates project files only. Dependency creation, file installation, lockfile writes, and push back are planned.
 
 ## Example
 
@@ -19,6 +19,7 @@ This prints the installed package version using the default human output protoco
 Available today:
 
 - **CLI scaffold** — help, package version output, and built-in usage documentation.
+- **Project configuration** — create a starter with `init`, discover or explicitly select configuration, and validate configuration and existing lock state.
 - **Output protocols** — human output, framed output for coding agents, and JSON Lines for programs.
 - **Python entry point** — the same commands through `vcsinstall` and `python -m vcsinstall`.
 
@@ -32,7 +33,7 @@ Planned:
 
 Files shared between repositories can accumulate local edits while their sources continue to change. Keeping their origins and revisions recorded makes it easier to reproduce an installation. Returning useful local changes to the source lets other repositories benefit from them too.
 
-Vcsinstall aims to support that workflow. Its product commands are still to be implemented.
+Vcsinstall aims to support that workflow. Repository access and file operations are still to be implemented.
 
 ## Quick Usage
 
@@ -82,8 +83,23 @@ For container development, follow [Development](#development).
 
 The available help, version, and skill commands work without project configuration. The shared `--config` option is accepted, but these commands do not load a project configuration file.
 
-The default project configuration filename is `vcsinstall.toml`; the lockfile filename is `vcsinstall.lock`.
-The version 1 [configuration schema](specs/behavior/config.md) and [lockfile format](specs/behavior/lockfile.md) are specified; loading and managing these files remain under development.
+Create a starter [configuration](specs/behavior/config.md) in the current directory:
+
+```bash
+vcsinstall init
+vcsinstall --config project/custom.toml init
+```
+
+The parent directory must already exist. Init refuses to overwrite an existing file and creates no lockfile.
+
+The `dependency add NAME REPOSITORY` command is currently an empty operation that loads and validates project files without creating a dependency:
+
+```bash
+vcsinstall dependency add ci git+https://example.com/team/shared.git
+vcsinstall --config project/custom.toml dependency add ci git+https://example.com/team/shared.git
+```
+
+Without `--config`, loading discovers the nearest `vcsinstall.toml` in the current directory or its parents. An explicit path overrides discovery. The selected configuration's parent is the project root, and its fixed sibling `vcsinstall.lock` is the [lockfile](specs/behavior/lockfile.md). A missing lockfile is allowed; an invalid existing lockfile fails validation. Loading changes neither file and does not access sources or installed contents.
 
 ## Specifications
 

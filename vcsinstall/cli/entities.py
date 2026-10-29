@@ -1,7 +1,36 @@
+from typing import Annotated
+
 import pydantic
+import typer
 from llm_tool_cli.core.entities import BaseEntity
 
-from vcsinstall.domain import DependencyName, SourcePath
+from vcsinstall.domain import DependencyName, RepositoryLocator, SourcePath
+
+
+def _parse_dependency_name(value: str) -> DependencyName:
+    try:
+        return pydantic.TypeAdapter(DependencyName).validate_python(value)
+    except pydantic.ValidationError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+DependencyNameArgument = Annotated[
+    DependencyName,
+    typer.Argument(
+        metavar="NAME",
+        parser=_parse_dependency_name,
+        help="Project-local dependency name.",
+    ),
+]
+
+RepositoryArgument = Annotated[
+    RepositoryLocator,
+    typer.Argument(
+        metavar="REPOSITORY",
+        parser=RepositoryLocator,
+        help="Source repository locator.",
+    ),
+]
 
 
 class DependencySource(BaseEntity):

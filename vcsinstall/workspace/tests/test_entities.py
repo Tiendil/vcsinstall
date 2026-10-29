@@ -62,7 +62,7 @@ class TestContentSchema:
             pydantic.TypeAdapter(ContentSchema).validate_python(data)
 
     @pytest.mark.parametrize("kind", ["file", "directory"])
-    @pytest.mark.parametrize("value", [" " + _EMPTY_HASH, _EMPTY_HASH.upper(), "sha256:" + "0" * 63, b"hash"])
+    @pytest.mark.parametrize("value", [_EMPTY_HASH.upper(), "sha256:" + "0" * 63, b"hash"])
     def test_validate__rejects_invalid_stored_hash(self, kind: str, value: object) -> None:
         data: dict[str, object] = {"kind": kind, "hash": value}
         if kind == "directory":
@@ -137,7 +137,7 @@ class TestManifestFile:
             ".hidden",
             "~/literal/*.md",
             "@/literal",
-            " notes/with spaces.md ",
+            " notes/with spaces.md",
             "a+b%20c",
             "Заметки/é.md",
             "notes/e\u0301.md",
@@ -172,7 +172,6 @@ class TestManifestFile:
             "@/a/../b",
             "@/a/.",
             "@/a/..",
-            b"@/guide.md",
             None,
             1,
         ],

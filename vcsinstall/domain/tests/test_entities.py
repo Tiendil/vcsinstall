@@ -4,15 +4,10 @@ from llm_tool_cli.core.entities import BaseEntity
 from llm_tool_cli.paths import project_path_parts
 
 from vcsinstall.domain import (
-    BackendName,
     ContentHash,
+    Dependency,
     DependencyName,
-    RepositoryIdentity,
-    RepositoryLocator,
-    SelectorKind,
-    SelectorValue,
     SourcePath,
-    VersionSelector,
 )
 
 _EMPTY_HASH = ContentHash("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
@@ -31,9 +26,7 @@ class TestDependencyName:
 
         assert fields.name == value
 
-    @pytest.mark.parametrize(
-        "value", ["", " ci", "ci ", "Ci", "1ci", "-ci", "_ci", "ci/x", "ci.x", "café", "ci\n", None, 1, True, b"ci"]
-    )
+    @pytest.mark.parametrize("value", ["", "Ci", "1ci", "-ci", "_ci", "ci/x", "ci.x", "café", None, 1, True])
     def test_rejects_invalid_name_fields(self, value: object) -> None:
         with pytest.raises(pydantic.ValidationError) as caught:
             _DomainFields.model_validate({"name": value, "source_path": "@/"})
@@ -47,7 +40,7 @@ class TestDependencyName:
 
         assert fields.dependencies == {"shared-tools": "repo", "ci_2": "other"}
 
-    @pytest.mark.parametrize("value", ["", " ci", "Ci", "ci/x", "ci\n", 1, b"ci"])
+    @pytest.mark.parametrize("value", ["", "Ci", "ci/x", 1])
     def test_rejects_invalid_dictionary_keys(self, value: object) -> None:
         with pytest.raises(pydantic.ValidationError) as caught:
             _DomainFields.model_validate({"name": "ci", "source_path": "@/", "dependencies": {value: "repo"}})
@@ -72,7 +65,7 @@ class TestSourcePath:
             "@/notes/e\u0301.md",
             "@/notes/line\nbreak.txt",
             "@/notes/back\\slash.txt",
-            "@/ docs/file ",
+            "@/ docs/file",
             "@/a\0b",
         ],
     )
@@ -114,7 +107,6 @@ class TestSourcePath:
             "~/literal",
             "*.md",
             "@file",
-            " @/docs",
             "@/./",
             "@/guides//notes.md",
             "@/guides/",
@@ -144,57 +136,74 @@ class TestSourcePath:
         assert failure["input"] == value
 
     def test_preserves_literal_text_through_serialization(self) -> None:
-        fields = _DomainFields.model_validate({"name": "ci", "source_path": "@/ docs/./é+%20.md "})
+        fields = _DomainFields.model_validate({"name": "ci", "source_path": "@/ docs/./é+%20.md"})
 
         restored = _DomainFields.model_validate_json(fields.model_dump_json())
 
-        assert restored.source_path == "@/ docs/é+%20.md "
+        assert restored.source_path == "@/ docs/é+%20.md"
 
 
-class TestRepositoryIdentity:
+class TestDependency:
     @pytest.mark.parametrize(
         "locator",
         [
             "https://example.com/team/shared.git?key=a+b%20c",
             "ssh://git@example.com/team/shared.git",
             "git@example.com:team/shared.git",
-            "/shared/Notes and guides/ ",
+            "/shared/Notes and guides/",
             "literal-fixture-ID",
         ],
     )
-    def test_preserves_native_locator(self, locator: str) -> None:
-        identity = RepositoryIdentity(backend=BackendName("git"), locator=RepositoryLocator(locator))
-        assert identity.locator == locator
+    def test_preserves_literal_repository_text(self, locator: str) -> None:
+        dependency = Dependency.model_validate({"vcs": "git", "repository": locator})
 
-    @pytest.mark.parametrize("backend,locator", [("", "repo"), ("git", ""), ("", "")])
-    def test_rejects_empty_components(self, backend: str, locator: str) -> None:
+        assert dependency.repository == locator
+        assert Dependency.model_validate_json(dependency.model_dump_json()).repository == locator
+
+    @pytest.mark.parametrize(
+        "fields",
+        [
+            {"vcs": ""},
+            {"repository": ""},
+            {"repository": 1},
+            {"branch": ""},
+            {"tag": ""},
+            {"rev": ""},
+            {"branch": "main", "tag": "v1"},
+            {"branch": "main", "rev": "opaque"},
+            {"tag": "v1", "rev": "opaque"},
+        ],
+    )
+    def test_rejects_invalid_declaration_shape(self, fields: dict[str, object]) -> None:
         with pytest.raises(pydantic.ValidationError):
-            RepositoryIdentity(backend=BackendName(backend), locator=RepositoryLocator(locator))
+            Dependency.model_validate({"vcs": "git", "repository": "source", **fields})
 
-    def test_serialization_preserves_identity(self) -> None:
-        identity = RepositoryIdentity(
-            backend=BackendName("filesystem"), locator=RepositoryLocator("/source/Заметки/ ")
-        )
-        assert RepositoryIdentity.model_validate_json(identity.model_dump_json()) == identity
+    def test_preserves_literal_selector_without_backend_policy(self) -> None:
+        dependency = Dependency.model_validate({"vcs": "git", "repository": "source", "tag": "literal fixture"})
 
+        assert dependency.version == "literal fixture"
+        assert Dependency.model_validate_json(dependency.model_dump_json()).tag == "literal fixture"
 
-class TestVersionSelector:
-    @pytest.mark.parametrize("value", ["Release/One", "v1.0+fix%2Fnotes", " literal ", "opaque-revision"])
-    def test_preserves_literal_value(self, value: str) -> None:
-        selector = VersionSelector(kind=SelectorKind.tag, value=SelectorValue(value))
-        assert selector.value == value
+    @pytest.mark.parametrize(
+        "field,value", [("branch", "Release/One"), ("tag", "v1.0+fix%2Fnotes"), ("rev", "a" * 40)]
+    )
+    def test_version__returns_selected_value(self, field: str, value: str) -> None:
+        dependency = Dependency.model_validate({"vcs": "git", "repository": "../source", field: value})
 
-    def test_rejects_empty_value(self) -> None:
+        assert dependency.version == value
+        assert "version" not in dependency.model_dump()
+        assert Dependency.model_validate_json(dependency.model_dump_json()).version == value
+
+    @pytest.mark.parametrize("backend", ["unknown", "http"])
+    def test_rejects_unknown_vcs_ids(self, backend: str) -> None:
         with pytest.raises(pydantic.ValidationError):
-            VersionSelector(kind=SelectorKind.branch, value=SelectorValue(""))
+            Dependency.model_validate({"vcs": backend, "repository": "source"})
 
-    def test_rejects_unknown_kind(self) -> None:
-        with pytest.raises(pydantic.ValidationError):
-            VersionSelector.model_validate({"kind": "latest", "value": "main"})
+    def test_omitted_selector_remains_omitted(self) -> None:
+        dependency = Dependency.model_validate({"vcs": "filesystem", "repository": "../source"})
 
-    def test_serialization_preserves_selection(self) -> None:
-        selector = VersionSelector(kind=SelectorKind.revision, value=SelectorValue("opaque:revision+ID"))
-        assert VersionSelector.model_validate_json(selector.model_dump_json()) == selector
+        assert dependency.version is None
+        assert dependency.model_dump(exclude_none=True) == {"vcs": "filesystem", "repository": "../source"}
 
 
 class TestContentHash:
@@ -213,7 +222,6 @@ class TestContentHash:
             " " + _EMPTY_HASH,
             _EMPTY_HASH + " ",
             _EMPTY_HASH + "\n",
-            _EMPTY_HASH.encode("ascii"),
             None,
             1,
         ],

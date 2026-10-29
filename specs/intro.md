@@ -48,7 +48,7 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/behavior/vcs-interaction.md` — The contract for addressing and interacting with source and publication repositories.
 - `./specs/behavior/vcs/git.md` — The Git source contract.
 - `./specs/behavior/vcs/filesystem.md` — The filesystem source contract.
-- `./specs/behavior/vcs/noop.md` — The test-only noop source contract.
+- `./specs/behavior/vcs/noop.md` — The noop source contract for controlled repository views.
 - `./specs/behavior/hosting/git.md` — The native Git delivery contract.
 - `./specs/behavior/hosting/github.md` — The GitHub contribution and review contract.
 - `./specs/behavior/hosting/filesystem.md` — The filesystem delivery contract.

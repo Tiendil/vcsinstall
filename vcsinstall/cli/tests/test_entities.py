@@ -26,7 +26,7 @@ class TestDependencySource:
         [
             "@/notes%20+draft#1?.md",
             "@/notes%ZZ.md",
-            "@/ docs/Заметки.md ",
+            "@/ docs/Заметки.md",
             "@/@/notes",
             "@/folder@/notes",
             "@/~/literal*.md",
@@ -47,7 +47,6 @@ class TestDependencySource:
             "@/",
             "@/notes",
             "Ci@/notes",
-            " ci@/notes",
             "ci@other@/notes",
             "ci@/..",
             "ci@/../notes",
@@ -79,4 +78,4 @@ class TestDependencySource:
         restored = DependencySource.model_validate_json(source.model_dump_json())
 
         assert restored == source
-        assert restored.model_dump() == {"dependency": "ci", "source_path": "@/ notes%20+draft#1?.md "}
+        assert restored.model_dump() == {"dependency": "ci", "source_path": "@/ notes%20+draft#1?.md"}

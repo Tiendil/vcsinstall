@@ -1,25 +1,21 @@
 from vcsinstall.domain.entities import (
-    BackendName,
     ContentHash,
+    Dependency,
     DependencyName,
-    RepositoryIdentity,
     RepositoryLocator,
-    SelectorKind,
     SelectorValue,
     SourcePath,
     SourceRevision,
-    VersionSelector,
+    VcsId,
 )
 
 __all__ = [
-    "BackendName",
     "ContentHash",
+    "Dependency",
     "DependencyName",
-    "RepositoryIdentity",
     "RepositoryLocator",
-    "SelectorKind",
     "SelectorValue",
     "SourcePath",
     "SourceRevision",
-    "VersionSelector",
+    "VcsId",
 ]

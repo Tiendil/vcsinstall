@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Annotated, NewType
+from typing import Annotated, NewType, Self
 
 import pydantic
 from llm_tool_cli.core.entities import BaseEntity
@@ -13,47 +13,48 @@ def _normalize_source_path(value: str) -> ProjectPathId:
     return result.unwrap()
 
 
-BackendName = NewType("BackendName", str)
 ContentHash = NewType(
     "ContentHash",
-    Annotated[
-        str, pydantic.StringConstraints(pattern=r"\Asha256:[0-9a-f]{64}\z", strict=True, strip_whitespace=False)
-    ],
+    Annotated[str, pydantic.StringConstraints(pattern=r"\Asha256:[0-9a-f]{64}\z")],
 )
 DependencyName = NewType(
     "DependencyName",
-    Annotated[str, pydantic.StringConstraints(pattern=r"\A[a-z][a-z0-9_-]*\z", strict=True, strip_whitespace=False)],
+    Annotated[str, pydantic.StringConstraints(pattern=r"\A[a-z][a-z0-9_-]*\z")],
 )
 RepositoryLocator = NewType("RepositoryLocator", str)
-SelectorValue = NewType("SelectorValue", str)
+SelectorValue = NewType(
+    "SelectorValue",
+    Annotated[str, pydantic.StringConstraints(min_length=1)],
+)
 SourcePath = NewType(
     "SourcePath",
-    Annotated[
-        ProjectPathId,
-        pydantic.StringConstraints(strict=True, strip_whitespace=False),
-        pydantic.AfterValidator(_normalize_source_path),
-    ],
+    Annotated[ProjectPathId, pydantic.AfterValidator(_normalize_source_path)],
 )
 SourceRevision = NewType("SourceRevision", str)
 
 
-class SelectorKind(StrEnum):
-    branch = "branch"
-    tag = "tag"
-    revision = "revision"
+class VcsId(StrEnum):
+    git = "git"
+    filesystem = "filesystem"
+    noop = "noop"
 
 
-class RepositoryIdentity(BaseEntity):
-    """A backend and its native locator, with backend normalization supplied by the caller."""
+class Dependency(BaseEntity):
+    """A source declaration, independent of adapters and persisted project state."""
 
-    backend: Annotated[BackendName, pydantic.StringConstraints(min_length=1, strip_whitespace=False, strict=True)]
-    locator: Annotated[
-        RepositoryLocator, pydantic.StringConstraints(min_length=1, strip_whitespace=False, strict=True)
-    ]
+    vcs: VcsId
+    repository: RepositoryLocator = pydantic.Field(min_length=1)
+    branch: SelectorValue | None = None
+    tag: SelectorValue | None = None
+    rev: SelectorValue | None = None
 
+    @property
+    def version(self) -> SelectorValue | None:
+        """Return the selected tag, branch, or revision value, when declared."""
+        return self.tag or self.branch or self.rev
 
-class VersionSelector(BaseEntity):
-    """An explicit selection; omitted/default selection is represented by None."""
-
-    kind: SelectorKind
-    value: Annotated[SelectorValue, pydantic.StringConstraints(min_length=1, strip_whitespace=False, strict=True)]
+    @pydantic.model_validator(mode="after")
+    def _validate_selection(self) -> Self:
+        if sum(value is not None for value in (self.branch, self.tag, self.rev)) > 1:
+            raise ValueError("At most one of branch, tag, and rev may be present")
+        return self

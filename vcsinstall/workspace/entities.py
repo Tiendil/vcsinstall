@@ -21,7 +21,7 @@ class ContentKind(StrEnum):
 class ManifestFile(BaseEntity):
     """A regular file identified below its entry root with a shared canonical path."""
 
-    path: Annotated[ProjectPathId, pydantic.StringConstraints(strict=True, strip_whitespace=False)]
+    path: ProjectPathId
     hash: ContentHash
 
     @pydantic.field_validator("path")
@@ -95,3 +95,12 @@ def _verify_content_hash(content: Content) -> Content:
 
 
 ContentSchema = Annotated[Content, pydantic.Field(discriminator="kind"), pydantic.AfterValidator(_verify_content_hash)]
+
+
+def _canonical_path(value: ProjectPathId) -> ProjectPathId:
+    if not is_project_path_id(value):
+        raise ValueError(f"Expected a canonical @/ identifier: {value!r}")
+    return value
+
+
+type CanonicalPath = Annotated[ProjectPathId, pydantic.AfterValidator(_canonical_path)]

@@ -1,5 +1,14 @@
 ### Changes
 
+- Separate CLI command groups from application assembly, use typed Typer argument aliases and parsers, and organize tests by their owning modules.
+- Register all source adapters, including noop, by default and simplify adapter lookup.
+- Separate workspace loading from activation through `Workspace.scope()` and shared context infrastructure.
+- Trust tool-managed destination data when loading configuration and lockfiles.
+- Isolate backend validation in source adapters selected by an explicit registry, sharing pure dependency entities between configuration and lockfile loading.
+- Replace selector objects with a dependency version property while preserving source validation.
+- Remove the repository identity wrapper and validate backend and repository locator fields directly in source definitions.
+- Separate workspace configuration and lockfile models and loading responsibilities into dedicated modules.
+- Add version 1 configuration and lockfile models, project discovery and validation, `init`, and an empty `dependency add` command for the project-loading path.
 - Prepare the Python CLI scaffold and shared `llm-tool-cli` integration.
 - Add project specifications, agent instructions, and session-file management.
 - Configure Docker development, code checks, dependency discovery, and Donna polishing.
