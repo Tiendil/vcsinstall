@@ -2,7 +2,7 @@
 
 ## Goal of the document
 
-This document describes which files vcsinstall manages and how directory mappings are selected, compared, and changed while preserving unmanaged files.
+This document describes entry destination ownership and how complete file trees are selected, compared, and replaced while protecting local changes.
 
 ## Scope
 
@@ -37,11 +37,11 @@ The following summarizes their responsibilities; field definitions and validatio
 | Directory content | Declares one directory-root mapping; its child file set is discovered from the selected source state. | Records `kind = "directory"`, the aggregate `hash`, and the `files` manifest containing canonical file paths scoped to the entry root and individual hashes. |
 | Expected source absence | Retains the entry declaration. | Records `kind = "absent"` without a hash or file manifest. |
 
-The lockfile's directory manifests identify the recorded managed file set for installation and removal; configuration does not expand a directory mapping into declarations for every child.
+The lockfile's directory manifests identify the recorded source file set for baseline comparison; configuration does not expand a directory mapping into declarations for every child.
 Publication of a directory selects its complete current local file tree under Contributions, including files not yet present in the recorded manifest.
 An empty directory baseline has an empty `files` array, and descendant directories have no independent manifest records.
 Actual installed bytes remain at the configured destinations and are compared with these recorded baselines.
-Unmanaged local files and local modifications are not added to either project file merely because they exist on disk.
+Local additions and modifications are not added to either project file merely because they exist on disk.
 
 Configuration remains the authority for requested mappings, while previous lock records protect the prior installation until a successful operation replaces its baseline under State and shared revisions and Matching configuration in `specs/behavior/locking.md`.
 An explicit revision pin in configuration does not itself establish a baseline.
@@ -49,8 +49,17 @@ Loading either file does not acknowledge local changes or rebuild a missing mani
 
 **Example:** Configuration maps source directory `@/guides` to `@/docs/shared` as one entry.
 The lockfile records revision A and a directory manifest containing `@/guide.md` and `@/examples/basic.py` with their hashes.
-A generated local cache file remains outside that manifest.
+A generated local cache file remains outside that manifest but is a local addition within the owned destination.
 If an update selects a revision containing another source file, the successful update records the new manifest while preserving the same configured directory mapping.
+
+## Destination ownership
+
+Each entry MUST exclusively own its destination, including the complete file tree when the destination is a directory.
+Ownership MUST follow the entry root rather than membership in its recorded file manifest.
+Additional local files beneath that root MUST count as local changes, including hidden, generated, and target-VCS-ignored files.
+Files outside selected entry destinations MUST remain outside the operation's ownership.
+Entry destinations MUST remain nonoverlapping under Entries in `specs/behavior/config.md`.
+Baseline records MUST describe prior source content without silently acknowledging local additions.
 
 ## Source file selection
 
@@ -97,7 +106,7 @@ This requirement MUST apply to standalone file entries and missing children of p
 Local absence MUST NOT itself cause a file to be skipped or require permission to restore it.
 
 Restoration MUST use the source revision selected by the operation under Operation contracts in `specs/behavior/locking.md`.
-Source-integrity and availability checks MUST still pass, and existing modified or unmanaged content MUST retain its normal protection.
+Source-integrity and availability checks MUST still pass, and existing local modifications and additions MUST retain their normal protection.
 Existing objects at file or parent positions MUST undergo the applicable type and preservation checks rather than be treated as missing files.
 Unreadable content MUST remain an inspection failure rather than be classified as missing.
 
@@ -158,43 +167,47 @@ Its SHA-256 input MUST concatenate one record per file, with each record contain
 An empty manifest MUST hash an empty byte sequence.
 Entry kinds MUST distinguish that digest's directory use from an empty regular file.
 Directory enumeration and manifest serialization order MUST NOT affect the hash.
-An aggregate hash MUST NOT substitute for the per-file manifest needed to identify ownership.
+An aggregate hash MUST NOT substitute for the per-file manifest needed to compare individual file baselines and identify missing files.
 
 ## Local comparison
 
-Local inspection MUST obtain managed directory paths from the recorded manifest without reading source repositories or repository-cache data.
-Target-VCS tracking, staging, and ignore status MUST NOT change recorded ownership or suppress a managed file's modifications.
-Files below an entry root that are absent from its manifest MUST remain outside recorded baseline ownership.
-Their contents MUST NOT affect ordinary local baseline equality or be read merely to calculate a baseline-scoped content hash.
-Publication MUST instead enumerate the complete local directory under Contributions, independently of recorded baseline membership.
+Local inspection MUST enumerate and hash the complete actual file tree at each selected destination without reading source repositories or repository-cache data.
+The recorded manifest MUST supply expected baseline content rather than restrict local inspection to recorded paths.
+Target-VCS tracking, staging, and ignore status MUST NOT change ownership or suppress local changes.
+Files absent from the manifest MUST participate as local additions.
+Publication MUST use the same complete local tree under Contributions.
 
-Comparison against both an existing baseline and proposed source content MUST use one scope containing the union of their file paths.
-A file omitted by either state MUST represent expected absence at that position in that state.
-Unmanaged files occupying proposed new source paths MUST participate in collision checks rather than disappear from the comparison.
-An entry's root and the parent paths needed to reach scoped files MUST be inspected for type obstructions.
-An obstructing regular file MUST remain a type change even when its own path is not a manifest child.
-A directory occupying a scoped file position MUST NOT be read recursively as newly managed content.
+Comparison against an existing baseline or proposed source content MUST include every actual local file.
+A file omitted by an expected state MUST represent expected absence at that position in that state.
+Required destination parents outside the entry root MUST be checked for obstructions before mutation; ownership of an entry MUST NOT authorize deleting its ancestors.
+Files inside an owned destination MUST participate regardless of whether a file or directory occupied that position in the baseline.
+Directory presence alone MUST NOT count as a local-file modification.
 
-Equality MUST require agreement at every scoped position, with the structural-directory equivalence in Directories.
-Matching some changed files MUST NOT acknowledge remaining managed differences.
+Exact equality MUST require the same file paths and hashes, with the structural-directory equivalence in Directories.
+Installation and update protection MUST retain the missing-file restoration allowance in `specs/behavior/locking.md`.
+Matching some changed files MUST NOT acknowledge remaining local differences.
 Source-integrity checks MUST enumerate the complete selected source file set, so unexpected source files cannot be hidden by comparing only previously recorded paths.
 An empty directory and an absent container MAY reproduce the same zero-file content; source availability and initial source-path validation MUST remain separate checks.
 
 ## Filesystem effects
 
-Installation, update, removal, and delivery MUST change only the file paths authorized by the applicable operation.
-Applying a changed installation manifest MUST preserve unmanaged files, including descendants within the installed destination.
-An unmanaged file at a newly selected path MAY become managed when the operation verifies that it already has the selected source content; conflicting content MUST fail before mutation.
-Type changes MUST fail before mutation when completing them would destroy content outside the applicable operation's authorized file set.
+Installation, update, removal, and delivery MUST change only destinations authorized by the applicable operation.
+All selected entries MUST pass their applicable path, content, baseline, and source checks before the first mutation.
+Local additions inside an owned destination MUST undergo the same content protection as recorded files; they MUST NOT be silently discarded.
+Existing local files MUST collectively agree with an accepted state under Installation protection and Updating baselines in `specs/behavior/locking.md`.
 
-Deletion MUST remove authorized files individually.
-Directories MAY be pruned only when physically empty and within the operation's containment boundary.
-Unmanaged descendants MUST NOT become deletable merely because an ancestor is an entry root or would otherwise be pruned.
-Successful removal MAY leave the destination directory and its unmanaged files in place.
+When an entry's complete local file content already equals the selected source content, installation and update MUST leave its filesystem content untouched, even if the dependency revision or baseline metadata changes.
+Otherwise, after validation succeeds, installation and update MUST remove the existing destination root, whether a file or directory, and copy all selected source files into that destination.
+This replacement MUST apply per entry rather than per dependency; unchanged entries MUST remain untouched.
+Unchanged files within a changed entry MUST be copied again with the rest of that entry.
+File-to-directory and directory-to-file transitions MUST use the same root replacement without separate descendant-removal plans.
+The zero-file equivalence in Directories MUST still apply; an absent or empty source MUST NOT require creating empty destination directories.
+Content copying MUST stream files with bounded Python memory rather than retain their complete payloads.
 
-Deleting installed directory contents during installation, update, or removal MUST require a structurally valid recorded manifest identifying the owned paths.
-Permission to bypass content verification MUST NOT grant ownership of unknown descendants.
-Without that ownership information, an operation requiring directory-content deletion MUST fail with guidance to retain files instead.
+Removal without retaining files MUST delete the selected destination roots and their complete contents after the operation's applicable checks pass.
+Explicit permission to bypass local-content verification MAY authorize deleting local additions within selected entry roots under the removal contract.
+It MUST NOT authorize deleting content outside those roots or bypass containment validation.
+Root replacement MUST NOT require backups, atomic swaps, or rollback; failure diagnostics MUST follow Preparation and consistency in `specs/behavior/locking.md`.
 
 ## Contributions
 
@@ -208,25 +221,25 @@ Hidden files and generated files MUST participate in directory contributions.
 Unsupported objects in the local tree MUST fail under Failures before delivery effects.
 
 Contribution change detection MUST compare the complete local tree with the recorded baseline.
-A new local file MUST constitute an addition even when ordinary baseline-scoped inspection reports the entry as clean.
+A new local file MUST constitute an addition in both local inspection and contribution change detection.
 A recorded file missing locally MUST contribute a deletion when publication is explicitly requested; installation and update MUST retain the restoration behavior in Missing files.
 Root-file type changes MUST remain changes within the selected mapping.
 
 Directory delivery MUST reproduce the complete local tree at the mapped source path, including removal of source-only children when the selected mode permits the change.
 Directory comparisons with a recipient or contribution base MUST include its complete tree, so additional source files cannot be hidden by the old installation manifest.
-The selected mode's baseline and concurrent-change protection MUST still apply to this complete tree.
+The selected mode's baseline protection MUST still apply to this complete tree.
 Source content outside selected mappings MUST be preserved.
 An obstruction or type change that cannot preserve that content MUST fail before delivery.
 
 Publication MUST NOT change configuration, the installation manifest, or lockfile bytes.
-A later successful update MUST establish newly published files as managed only when they belong to its selected source revision.
+A later successful update MUST add newly published files to the baseline only when they belong to its selected source revision.
 
 ## Failures
 
 Unreadable selected or managed files MUST fail rather than be skipped or reported as clean.
 Unsupported objects and names that cannot satisfy the encoding or destination-containment contracts MUST fail when they are in the selected or managed scope.
-Unmanaged payloads outside that scope MUST NOT be inspected merely to reject their object kinds.
-Preservation checks MAY inspect their existence and kinds when necessary to determine whether a proposed effect would destroy them.
+Files outside selected entry destinations MUST NOT be inspected merely to reject their object kinds.
+Containment and required-parent checks MAY inspect those paths when necessary to determine whether a proposed effect is permitted.
 Symbolic links MUST NOT be followed in violation of the shared containment contract.
 Preparation and partial-effect guarantees MUST follow Preparation and consistency in `specs/behavior/locking.md` and Failures and completed effects in `specs/behavior/vcs-interaction.md` at their respective operation boundaries.
 
@@ -237,7 +250,8 @@ Running a local tool creates `__pycache__/basic.pyc` and an empty `output` direc
 
 - Editing `guide.md` MUST produce a managed modification.
 - A missing `examples/basic.py` MUST be restored by installation or update when it remains selected, after the operation's protection and source checks pass.
-- The cache file, empty directory, and new local file MUST NOT change ordinary managed-content equality.
+- The cache file and new local file MUST make the entry locally modified; the empty directory alone MUST NOT change content equality.
 - Pushing the directory MUST include `examples/new.py` and the cache file automatically.
-- Removing the entry MUST remove its verified managed files while preserving the cache file and `examples/new.py`.
-- A later update whose source contains `examples/new.py` MUST include it in the proposed manifest and apply the ordinary collision and equality checks before recording ownership.
+- Ordinary removal MUST refuse to delete the modified entry; removal with explicit permission to discard local changes MUST delete the complete destination tree, including the cache file and `examples/new.py`.
+- A later update whose source contains `examples/new.py` MUST include it in the proposed manifest. If the cache file remains absent from that source and baseline, it MUST still cause a local-change conflict.
+- Once the entire local file tree agrees with the selected source, update MUST record that baseline without replacing the destination.

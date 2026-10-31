@@ -14,7 +14,7 @@ from llm_tool_cli.paths import PathInput, ProjectConfigPath, ProjectRootPath
 
 from vcsinstall.domain import Dependency, DependencyName, SourceRevision
 from vcsinstall.sources import DEFAULT_ADAPTERS, AdapterRegistry, get_adapter
-from vcsinstall.workspace import errors
+from vcsinstall.workspace import errors, validation
 from vcsinstall.workspace.config import Config
 from vcsinstall.workspace.lockfile import Lockfile, LockfilePath, load_lockfile
 
@@ -28,6 +28,14 @@ class Workspace(BaseEntity):
     @property
     def project_root(self) -> ProjectRootPath:
         return ProjectRootPath(self.config_path.parent)
+
+    def validate_no_orphaned_baselines(self, dependency: DependencyName) -> Result[None]:
+        """Require recorded installations to remain declared for this dependency."""
+        return validation.validate_no_orphaned_baselines(self, dependency)
+
+    def validate_no_missing_baselines(self, dependency: DependencyName) -> Result[None]:
+        """Require an existing baseline for every declared destination of this dependency."""
+        return validation.validate_no_missing_baselines(self, dependency)
 
     @contextmanager
     def scope(self) -> Iterator[None]:
@@ -52,7 +60,9 @@ def _validate_source(
 
     adapter = get_adapter(dependency.vcs, adapters=adapters)
     result = (
-        adapter.validate_dependency(dependency) if revision is None else adapter.validate_lock(dependency, revision)
+        adapter.validate_dependency(dependency)
+        if revision is None
+        else adapter.validate_revision_lock(dependency, revision)
     )
     return result.map_err(with_context)
 
@@ -74,7 +84,12 @@ def _prepare_workspace(config: Config, *, adapters: AdapterRegistry) -> Result[W
                 revision=locked_dependency.revision,
             ).unwrap()
     return Ok(
-        Workspace(config_path=selected.config_path, lockfile_path=lockfile_path, config=config, lockfile=lockfile)
+        Workspace(
+            config_path=selected.config_path,
+            lockfile_path=lockfile_path,
+            config=config,
+            lockfile=lockfile,
+        )
     )
 
 

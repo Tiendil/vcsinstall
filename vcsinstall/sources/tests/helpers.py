@@ -2,9 +2,10 @@ from llm_tool_cli.core.errors import EnvironmentErrors
 from llm_tool_cli.core.result import Err, Ok, Result
 
 from vcsinstall.domain import Dependency, SourceRevision
+from vcsinstall.sources.adapters.noop import NoopSourceAdapter
 
 
-class RecordingAdapter:
+class RecordingAdapter(NoopSourceAdapter):
     def __init__(self, problems: EnvironmentErrors | None = None) -> None:
         self.dependencies: list[Dependency] = []
         self.locks: list[tuple[Dependency, SourceRevision]] = []
@@ -14,6 +15,6 @@ class RecordingAdapter:
         self.dependencies.append(dependency)
         return Err(self.problems) if self.problems else Ok(None)
 
-    def validate_lock(self, dependency: Dependency, revision: SourceRevision) -> Result[None]:
+    def validate_revision_lock(self, dependency: Dependency, revision: SourceRevision) -> Result[None]:
         self.locks.append((dependency, revision))
         return Err(self.problems) if self.problems else Ok(None)

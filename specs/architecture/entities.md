@@ -138,6 +138,9 @@ Runtime constructors and validators SHOULD remain preferred for untrusted primit
 ## Entity ownership
 
 Reusable entity infrastructure MUST belong to `llm_tool_cli.core`.
+Version selection MUST use one optional data entity combining an enumerated kind and a nonempty literal value rather than parallel branch, tag, and revision attributes.
+The shared selector model and its kind enum MUST belong to `domain` and be reused by dependency declarations, parsed source requests, and dependency locks.
+An omitted selector MUST use `None`; unresolved input MUST use a distinct kind rather than a separate reference field.
 Entity ownership MUST follow the module responsibilities in `specs/architecture/modules_layout.md`.
 Crossing a module boundary MUST NOT by itself move an entity to `domain`.
 Public cross-module entity classes MUST be exported from, and imported through, the owning top-level package root.
@@ -147,6 +150,7 @@ Re-exports MUST keep the defining owner clear.
 
 Configuration and lockfile entities MAY validate parsed TOML shape or reference validated project and universal domain entities.
 They SHOULD reuse shared pure value entities rather than redeclare the same data for storage.
+Configuration and lockfile entry destinations MUST reuse the same validated canonical project-path value type.
 They SHOULD reject malformed input with Pydantic before lower layers and MUST preserve useful error context.
 Workspace conversion MUST follow Project state and operations in `specs/architecture/modules_layout.md`.
 

@@ -1,5 +1,5 @@
 from vcsinstall.core import errors as core_errors
-from vcsinstall.domain import SelectorValue, SourceRevision, VcsId
+from vcsinstall.domain import RepositoryLocator, SelectorValue, SourceRevision, VcsId
 
 
 class InternalError(core_errors.InternalError):
@@ -42,3 +42,11 @@ class RevisionMismatch(EnvironmentError):
     message: str = "Locked revision {error.revision!r} must equal the immutable rev selector {error.expected!r}."
     revision: SourceRevision
     expected: SelectorValue
+
+
+class RepositoryAccess(EnvironmentError):
+    code: str = "source_access_failed"
+    message: str = "Cannot access {error.vcs} source {error.repository!r}: {error.reason}"
+    vcs: VcsId
+    repository: RepositoryLocator
+    reason: str

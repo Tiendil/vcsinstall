@@ -1,21 +1,14 @@
 """Persisted manifest and content record models."""
 
 from abc import ABC, abstractmethod
-from enum import StrEnum
 from typing import Annotated, Literal
 
 import pydantic
 from llm_tool_cli.core.entities import BaseEntity
 from llm_tool_cli.paths import ProjectPathId, is_project_path_id, project_path_parts
 
-from vcsinstall.domain import ContentHash
+from vcsinstall.domain import ContentHash, ContentKind
 from vcsinstall.filesystem import hashes
-
-
-class ContentKind(StrEnum):
-    file = "file"
-    directory = "directory"
-    absent = "absent"
 
 
 class ManifestFile(BaseEntity):

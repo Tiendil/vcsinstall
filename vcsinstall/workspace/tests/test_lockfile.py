@@ -1,7 +1,7 @@
 import pydantic
 import pytest
 
-from vcsinstall.domain import ContentHash, SourceRevision
+from vcsinstall.domain import ContentHash, DependencyName, SourceRevision
 from vcsinstall.filesystem import hashes
 from vcsinstall.workspace import DependencyLock, Lockfile
 
@@ -12,37 +12,80 @@ _DIRECTORY_HASH = ContentHash("sha256:bea5475d87735beab89c88a39fb417625013c60ddf
 
 class TestDependencyLock:
     @pytest.mark.parametrize("revision", ["1" * 40, "a" * 64])
-    @pytest.mark.parametrize("selector", ["branch", "tag", "rev"])
+    @pytest.mark.parametrize("selector", ["branch", "tag", "revision"])
     def test_accepts_complete_git_revisions(self, revision: str, selector: str) -> None:
-        value = revision if selector == "rev" else "Release/One"
+        value = revision if selector == "revision" else "Release/One"
         lock = DependencyLock.model_validate(
-            {"vcs": "git", "repository": "source", selector: value, "revision": revision}
+            {
+                "vcs": "git",
+                "repository": "source",
+                "selector": {"kind": selector, "value": value},
+                "revision": revision,
+            }
         )
 
         assert lock.revision == revision
-        assert lock.version == value
-        assert lock.model_dump(exclude_none=True)[selector] == value
+        assert lock.selector is not None
+        assert lock.selector.value == value
+        assert lock.model_dump(mode="json")["selector"] == {"kind": selector, "value": value}
 
-    def test_rejects_conflicting_selectors(self) -> None:
+    def test_rejects_invalid_selector_shape(self) -> None:
         with pytest.raises(pydantic.ValidationError):
             DependencyLock.model_validate(
-                {"vcs": "git", "repository": "source", "revision": "2" * 40, "branch": "main", "tag": "v1"}
+                {
+                    "vcs": "git",
+                    "repository": "source",
+                    "revision": "2" * 40,
+                    "selector": {"kind": ["branch", "tag"], "value": "main"},
+                }
             )
 
     def test_live_filesystem_lock_keeps_omitted_selector(self) -> None:
         lock = DependencyLock.model_validate({"vcs": "filesystem", "repository": "source", "revision": _EMPTY_HASH})
 
-        assert lock.version is None
+        assert lock.selector is None
         assert lock.revision == SourceRevision(_EMPTY_HASH)
 
 
 class TestLockfile:
+    @pytest.mark.parametrize("name,indices", [("ci", (0, 2)), ("formatting", (1,)), ("unused", ()), ("missing", ())])
+    def test_entries_for_dependency__selects_in_stored_order(self, name: str, indices: tuple[int, ...]) -> None:
+        definition = {"vcs": "noop", "repository": "fixture", "revision": "fixture revision"}
+        binding = {"source_path": "@/", "kind": "absent"}
+        lockfile = Lockfile.model_validate(
+            {
+                "version": 1,
+                "dependencies": {name: definition for name in ("ci", "formatting", "unused")},
+                "entries": [
+                    {**binding, "dependency": "ci", "destination": "@/z"},
+                    {**binding, "dependency": "formatting", "destination": "@/middle"},
+                    {**binding, "dependency": "ci", "destination": "@/a"},
+                ],
+            }
+        )
+
+        assert lockfile.entries_for_dependency(DependencyName(name)) == tuple(
+            lockfile.entries[index] for index in indices
+        )
+
+    def test_entries_for_dependency__empty_lockfile(self) -> None:
+        lockfile = Lockfile.model_validate({"version": 1})
+
+        assert not lockfile.entries_for_dependency(DependencyName("ci"))
+
     def test_records_all_baseline_kinds_and_roundtrips(self) -> None:
         binding = {"dependency": "ci", "source_path": "@/", "destination": "@/docs"}
         lockfile = Lockfile.model_validate(
             {
                 "version": 1,
-                "dependencies": {"ci": {"vcs": "git", "repository": "source", "branch": "main", "revision": "1" * 40}},
+                "dependencies": {
+                    "ci": {
+                        "vcs": "git",
+                        "repository": "source",
+                        "selector": {"kind": "branch", "value": "main"},
+                        "revision": "1" * 40,
+                    }
+                },
                 "entries": [
                     {**binding, "destination": "@/license", "kind": "file", "hash": _EMPTY_HASH},
                     {
@@ -57,6 +100,7 @@ class TestLockfile:
         )
 
         assert [entry.kind for entry in lockfile.entries] == ["file", "directory", "absent"]
+        assert lockfile.entries_for_dependency(DependencyName("ci")) == lockfile.entries
         assert Lockfile.model_validate_json(lockfile.model_dump_json()) == lockfile
 
     @pytest.mark.parametrize(
@@ -77,7 +121,12 @@ class TestLockfile:
                 {
                     "version": 1,
                     "dependencies": {
-                        "ci": {"vcs": "git", "repository": "source", "branch": "main", "revision": "1" * 40}
+                        "ci": {
+                            "vcs": "git",
+                            "repository": "source",
+                            "selector": {"kind": "branch", "value": "main"},
+                            "revision": "1" * 40,
+                        }
                     },
                     "entries": [{"dependency": "ci", "source_path": "@/", "destination": "@/docs", **content}],
                 }
@@ -92,7 +141,12 @@ class TestLockfile:
                 {
                     "version": 1,
                     "dependencies": {
-                        "ci": {"vcs": "git", "repository": "source", "branch": "main", "revision": "1" * 40}
+                        "ci": {
+                            "vcs": "git",
+                            "repository": "source",
+                            "selector": {"kind": "branch", "value": "main"},
+                            "revision": "1" * 40,
+                        }
                     },
                     "entries": [
                         {

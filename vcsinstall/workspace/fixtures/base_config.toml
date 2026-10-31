@@ -3,7 +3,7 @@ version = 1
 # [dependencies.shared]
 # vcs = "git"
 # repository = "https://example.com/team/shared.git"
-# branch = "main"
+# selector = { kind = "branch", value = "main" }
 
 # [[entries]]
 # dependency = "shared"

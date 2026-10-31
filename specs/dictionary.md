@@ -21,8 +21,8 @@ The following topics are out of scope:
 - `entry` — a mapping from a path within a dependency's source repository to a destination in the target project; each entry belongs to one dependency.
 - `installation baseline` — the recorded content state of an entry at its dependency's shared locked revision.
 - `file manifest` — the recorded set of selected files within a directory entry, with their canonical paths scoped to the entry root and content hashes at one source state.
-- `managed file` — a file identified by an entry's recorded installation baseline.
-- `unmanaged content` — content in the target project outside the recorded file set, including additional files beneath a directory entry.
+- `managed file` — a file within an entry's exclusively owned destination, including a local addition absent from its recorded baseline.
+- `unmanaged content` — content in the target project outside declared entry destinations.
 - `source backend` — the source kind defining repository identity, version semantics, revision resolution, and content extraction from an available repository view.
 - `repository view` — repository data and version metadata available for source inspection, using cached VCS data, a live directory, or controlled test fixtures.
 - `hosting adapter` — an integration providing repository acquisition, refresh, and supported change-delivery workflows for a compatible source backend; it may use native repository facilities or a hosting service.

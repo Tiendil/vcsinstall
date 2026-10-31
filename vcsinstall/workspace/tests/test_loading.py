@@ -17,7 +17,9 @@ from vcsinstall.workspace import active_workspace
 from vcsinstall.workspace import errors as workspace_errors
 from vcsinstall.workspace import load_workspace
 
-_DEPENDENCY = '\n[dependencies.ci]\nvcs = "git"\nrepository = "../source"\nbranch = "main"\n'
+_DEPENDENCY = (
+    '\n[dependencies.ci]\nvcs = "git"\nrepository = "../source"\nselector = { kind = "branch", value = "main" }\n'
+)
 _LOCK = "version = 1\n" + _DEPENDENCY + 'revision = "' + "1" * 40 + '"\n'
 
 
@@ -85,6 +87,39 @@ class TestLoadWorkspace:
         assert workspace.lockfile is not None
         assert len(workspace.lockfile.entries) == 1
         assert (tmp_path / "vcsinstall.lock").read_text() == lock_text
+
+    @pytest.mark.parametrize("filename", ["vcsinstall.toml", "vcsinstall.lock"])
+    @pytest.mark.parametrize("destination", ["docs/guide", "./docs/guide", "/project/docs/guide", "@/docs/../guide"])
+    def test_noncanonical_destinations_fail_with_configuration_diagnostics(
+        self, tmp_path: Path, filename: str, destination: str
+    ) -> None:
+        config = tmp_path / "vcsinstall.toml"
+        config.write_text("version = 1\n" + _DEPENDENCY)
+        content = "version = 1\n" + _DEPENDENCY if filename == config.name else _LOCK
+        content += '\n[[entries]]\ndependency = "ci"\nsource_path = "@/guide"\n' f'destination = "{destination}"\n'
+        if filename != config.name:
+            content += 'kind = "absent"\n'
+        path = tmp_path / filename
+        path.write_text(content)
+
+        problem = load_workspace(cwd=PathInput(tmp_path)).unwrap_err()[0]
+
+        assert isinstance(problem, config_errors.ValidationFailed)
+        assert problem.path == path
+        assert "destination" in problem.reason
+        assert path.read_text() == content
+        assert not active_workspace.is_set()
+
+    def test_relative_filesystem_repository_locators_are_retained(self, tmp_path: Path) -> None:
+        definition = 'version = 1\n[dependencies.ci]\nvcs = "filesystem"\nrepository = "../source"\n'
+        (tmp_path / "vcsinstall.toml").write_text(definition)
+        (tmp_path / "vcsinstall.lock").write_text(definition + 'revision = "sha256:' + "1" * 64 + '"\n')
+
+        workspace = load_workspace(cwd=PathInput(tmp_path)).unwrap()
+
+        assert workspace.config.dependencies[DependencyName("ci")].repository == "../source"
+        assert workspace.lockfile is not None
+        assert workspace.lockfile.dependencies[DependencyName("ci")].repository == "../source"
 
     def test_no_explicit_path_fallback(self, tmp_path: Path) -> None:
         (tmp_path / "vcsinstall.toml").write_text("version = 1\n")
@@ -180,7 +215,7 @@ class TestLoadWorkspace:
         [
             (
                 "vcsinstall.toml",
-                "version = 1\n" + _DEPENDENCY.replace('branch = "main"', 'branch = "bad..branch"'),
+                "version = 1\n" + _DEPENDENCY.replace('value = "main"', 'value = "bad..branch"'),
                 source_errors.InvalidGitReference,
             ),
             (
@@ -190,13 +225,18 @@ class TestLoadWorkspace:
             ),
             (
                 "vcsinstall.toml",
-                "version = 1\n" + _DEPENDENCY.replace('branch = "main"', 'rev = "HEAD"'),
+                "version = 1\n"
+                + _DEPENDENCY.replace('kind = "branch", value = "main"', 'kind = "revision", value = "HEAD"'),
                 source_errors.InvalidRevision,
             ),
-            ("vcsinstall.lock", _LOCK.replace('branch = "main"\n', ""), source_errors.MissingGitSelector),
             (
                 "vcsinstall.lock",
-                _LOCK.replace('branch = "main"', 'rev = "' + "2" * 40 + '"'),
+                _LOCK.replace('selector = { kind = "branch", value = "main" }\n', ""),
+                source_errors.MissingGitSelector,
+            ),
+            (
+                "vcsinstall.lock",
+                _LOCK.replace('kind = "branch", value = "main"', 'kind = "revision", value = "' + "2" * 40 + '"'),
                 source_errors.RevisionMismatch,
             ),
             (
@@ -227,6 +267,24 @@ class TestLoadWorkspace:
                 assert record["source_" + key] == value
         assert "problem" not in record
 
+    @pytest.mark.parametrize("filename", ["vcsinstall.toml", "vcsinstall.lock"])
+    @pytest.mark.parametrize("vcs", VcsId)
+    def test_rejects_persisted_unresolved_selectors(self, tmp_path: Path, filename: str, vcs: VcsId) -> None:
+        (tmp_path / "vcsinstall.toml").write_text("version = 1\n")
+        declaration = _DEPENDENCY.replace('vcs = "git"', f'vcs = "{vcs}"').replace(
+            'kind = "branch"', 'kind = "unresolved"'
+        )
+        text = "version = 1\n" + declaration
+        if filename.endswith("lock"):
+            text += 'revision = "' + "1" * 40 + '"\n'
+        (tmp_path / filename).write_text(text)
+
+        problem = load_workspace(cwd=PathInput(tmp_path)).unwrap_err()[0]
+
+        assert isinstance(problem, workspace_errors.DependencyValidation)
+        assert problem.path == tmp_path / filename
+        assert isinstance(problem.problem, source_errors.UnsupportedSelector)
+
     def test_explicit_registry_is_scoped_and_validates_both_files(self, tmp_path: Path) -> None:
         config = tmp_path / "vcsinstall.toml"
         lock = tmp_path / "vcsinstall.lock"
@@ -255,7 +313,8 @@ class TestLoadWorkspace:
         result = load_workspace(cwd=PathInput(tmp_path), adapters={**DEFAULT_ADAPTERS, VcsId.git: adapter})
         assert result.is_ok()
         assert len(adapter.dependencies) == 1
-        assert adapter.dependencies[0].branch == "bad..branch"
+        assert adapter.dependencies[0].selector is not None
+        assert adapter.dependencies[0].selector.value == "bad..branch"
         result = load_workspace(cwd=PathInput(tmp_path))
         assert result.is_err()
 

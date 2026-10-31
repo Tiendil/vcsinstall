@@ -30,7 +30,7 @@ A missing directory, unreadable location, or non-directory source root MUST caus
 Acquisition MUST NOT create source history, invent version metadata, or change directory content.
 Access to this view MUST NOT require overwrite authorization or source write permission.
 Live-state fingerprinting, version availability, and extraction MUST follow `specs/behavior/vcs/filesystem.md`.
-Providing a live view MUST NOT imply an immutable retained snapshot; source changes preventing consistent inspection MUST fail under that source contract.
+Providing a live view MUST NOT imply an immutable retained snapshot; availability of a requested fingerprint MUST follow that source contract, with invocation state stability following General behavior in `specs/behavior/cli.md`.
 
 ## Overwrite delivery
 

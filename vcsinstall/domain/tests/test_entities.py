@@ -166,12 +166,13 @@ class TestDependency:
             {"vcs": ""},
             {"repository": ""},
             {"repository": 1},
-            {"branch": ""},
-            {"tag": ""},
-            {"rev": ""},
-            {"branch": "main", "tag": "v1"},
-            {"branch": "main", "rev": "opaque"},
-            {"tag": "v1", "rev": "opaque"},
+            {"selector": {"kind": "branch", "value": ""}},
+            {"selector": {"kind": "tag", "value": ""}},
+            {"selector": {"kind": "revision", "value": ""}},
+            {"selector": {}},
+            {"selector": {"kind": "unknown", "value": "main"}},
+            {"selector": {"kind": "branch", "value": "main", "extra": True}},
+            {"branch": "main"},
         ],
     )
     def test_rejects_invalid_declaration_shape(self, fields: dict[str, object]) -> None:
@@ -179,20 +180,23 @@ class TestDependency:
             Dependency.model_validate({"vcs": "git", "repository": "source", **fields})
 
     def test_preserves_literal_selector_without_backend_policy(self) -> None:
-        dependency = Dependency.model_validate({"vcs": "git", "repository": "source", "tag": "literal fixture"})
+        dependency = Dependency.model_validate(
+            {"vcs": "git", "repository": "source", "selector": {"kind": "tag", "value": "literal fixture"}}
+        )
 
-        assert dependency.version == "literal fixture"
-        assert Dependency.model_validate_json(dependency.model_dump_json()).tag == "literal fixture"
+        assert dependency.selector is not None
+        assert dependency.selector.value == "literal fixture"
+        assert Dependency.model_validate_json(dependency.model_dump_json()).selector == dependency.selector
 
     @pytest.mark.parametrize(
-        "field,value", [("branch", "Release/One"), ("tag", "v1.0+fix%2Fnotes"), ("rev", "a" * 40)]
+        "kind,value", [("branch", "Release/One"), ("tag", "v1.0+fix%2Fnotes"), ("revision", "a" * 40)]
     )
-    def test_version__returns_selected_value(self, field: str, value: str) -> None:
-        dependency = Dependency.model_validate({"vcs": "git", "repository": "../source", field: value})
+    def test_nested_selector_roundtrips(self, kind: str, value: str) -> None:
+        data = {"vcs": "git", "repository": "../source", "selector": {"kind": kind, "value": value}}
+        dependency = Dependency.model_validate(data)
 
-        assert dependency.version == value
-        assert "version" not in dependency.model_dump()
-        assert Dependency.model_validate_json(dependency.model_dump_json()).version == value
+        assert dependency.model_dump(mode="json") == data
+        assert Dependency.model_validate_json(dependency.model_dump_json()).selector == dependency.selector
 
     @pytest.mark.parametrize("backend", ["unknown", "http"])
     def test_rejects_unknown_vcs_ids(self, backend: str) -> None:
@@ -202,7 +206,7 @@ class TestDependency:
     def test_omitted_selector_remains_omitted(self) -> None:
         dependency = Dependency.model_validate({"vcs": "filesystem", "repository": "../source"})
 
-        assert dependency.version is None
+        assert dependency.selector is None
         assert dependency.model_dump(exclude_none=True) == {"vcs": "filesystem", "repository": "../source"}
 
 

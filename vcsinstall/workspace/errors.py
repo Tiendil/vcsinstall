@@ -4,6 +4,7 @@ from typing import ClassVar
 import pydantic
 from llm_tool_cli.core import errors as shared_errors
 from llm_tool_cli.core.entities import ExitCode
+from llm_tool_cli.paths import ProjectPathId
 
 from vcsinstall.core import errors as core_errors
 from vcsinstall.domain import DependencyName
@@ -15,6 +16,36 @@ class InternalError(core_errors.InternalError):
 
 class EnvironmentError(core_errors.EnvironmentError):
     """Root for expected workspace failures."""
+
+
+class MissingBaseline(EnvironmentError):
+    code: str = "missing_baseline"
+    message: str = (
+        "{error.path}: dependency {error.dependency!r} has no installation baseline "
+        "for declared destination {error.destination}."
+    )
+    ways_to_fix: list[str] = [
+        "Restore the entry's recorded installation baseline from version control if lock state was lost.",
+        "Remove the entry declaration if it was added accidentally.",
+    ]
+    path: Path
+    dependency: DependencyName
+    destination: ProjectPathId
+
+
+class OrphanedBaseline(EnvironmentError):
+    code: str = "orphaned_baseline"
+    message: str = (
+        "{error.path}: the installation baseline for dependency {error.dependency!r} at "
+        "{error.destination} has no corresponding configuration entry."
+    )
+    ways_to_fix: list[str] = [
+        "Restore the entry declaration for this dependency and destination if its removal was accidental.",
+        "If the mapping change was intentional, reconcile the obsolete lockfile record with the configuration.",
+    ]
+    path: Path
+    dependency: DependencyName
+    destination: ProjectPathId
 
 
 class DependencyValidation(EnvironmentError):

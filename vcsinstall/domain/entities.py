@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Annotated, NewType, Self
+from typing import Annotated, NewType
 
 import pydantic
 from llm_tool_cli.core.entities import BaseEntity
@@ -24,7 +24,7 @@ DependencyName = NewType(
 RepositoryLocator = NewType("RepositoryLocator", str)
 SelectorValue = NewType(
     "SelectorValue",
-    Annotated[str, pydantic.StringConstraints(min_length=1)],
+    Annotated[str, pydantic.StringConstraints(min_length=1, strip_whitespace=False)],
 )
 SourcePath = NewType(
     "SourcePath",
@@ -39,22 +39,27 @@ class VcsId(StrEnum):
     noop = "noop"
 
 
+class ContentKind(StrEnum):
+    file = "file"
+    directory = "directory"
+    absent = "absent"
+
+
+class SelectorKind(StrEnum):
+    branch = "branch"
+    tag = "tag"
+    revision = "revision"
+    unresolved = "unresolved"
+
+
+class VersionSelector(BaseEntity):
+    kind: SelectorKind
+    value: SelectorValue
+
+
 class Dependency(BaseEntity):
     """A source declaration, independent of adapters and persisted project state."""
 
     vcs: VcsId
     repository: RepositoryLocator = pydantic.Field(min_length=1)
-    branch: SelectorValue | None = None
-    tag: SelectorValue | None = None
-    rev: SelectorValue | None = None
-
-    @property
-    def version(self) -> SelectorValue | None:
-        """Return the selected tag, branch, or revision value, when declared."""
-        return self.tag or self.branch or self.rev
-
-    @pydantic.model_validator(mode="after")
-    def _validate_selection(self) -> Self:
-        if sum(value is not None for value in (self.branch, self.tag, self.rev)) > 1:
-            raise ValueError("At most one of branch, tag, and rev may be present")
-        return self
+    selector: VersionSelector | None = None

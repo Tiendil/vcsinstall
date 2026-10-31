@@ -28,6 +28,7 @@ File URLs MUST support an empty authority or `localhost`, decode their filesyste
 Other authorities MUST fail explicitly as unsupported locators; mounted filesystem locations MAY be addressed through their native paths.
 Query components MUST fail as unsupported rather than be interpreted as filesystem path data.
 Native directory paths MUST also be accepted with explicit `--vcs filesystem` or configured `vcs = "filesystem"`.
+Automatic selection of native directories MUST follow Repository arguments in `specs/behavior/cli.md`; explicit filesystem selection MUST retain live-content semantics even when the directory is also a Git repository.
 The [file URI specification](https://www.rfc-editor.org/rfc/rfc8089.html) defines the local authority and path notation used here.
 
 The normalized native repository locator MUST be the absolute source directory path, with root resolution following Project-root resolution in `specs/behavior/paths.md` in `llm-tool-cli` after applicable home expansion and URI decoding.
@@ -42,12 +43,12 @@ This fingerprint MUST cover every source file, independently of the declared ent
 Changes confined to empty directories MUST NOT change the fingerprint.
 
 An omitted selector MUST mean the directory's current live state.
-Configuration and lock records MUST retain omitted selector fields; locking MUST record the resolved fingerprint in `revision` without inventing a named selector or turning live tracking into a revision pin.
+Configuration and lock records MUST retain an omitted selector; locking MUST record the resolved fingerprint in `revision` without inventing a named selector or turning live tracking into a revision pin.
 CLI selector results MUST use `ref_kind = default` and null `ref` for this selection.
 
-An explicit `rev` MUST be a complete fingerprint in the representation above and MUST select exactly that content state.
+An explicit revision selector MUST be a complete fingerprint in the representation above and MUST select exactly that content state.
 Abbreviations MUST NOT be accepted.
-Branch and tag selectors MUST fail as unsupported before source access.
+Branch and tag selectors MUST fail as unsupported before repository acquisition or content inspection.
 Bare-reference inference MAY recognize a complete revision fingerprint but MUST NOT invent another selector kind.
 
 Freshness checks for live selection MUST inspect the current complete source fingerprint under Source freshness in `specs/behavior/locking.md`.
@@ -65,13 +66,12 @@ If it differs, the requested revision MUST be reported as unavailable; matching 
 The backend MUST NOT reconstruct missing source history from installed files or silently adopt the live fingerprint as an existing lock.
 
 All content prepared for one dependency operation MUST agree with its one selected fingerprint.
-Source changes that prevent consistent preparation MUST cause operational failure before project mutation.
+Within an invocation, source stability MUST follow General behavior in `specs/behavior/cli.md`; verifying availability of a requested fingerprint MUST NOT require subsequent stability checks before copying.
 Unreadable or unsupported objects MUST fail rather than be skipped while fingerprinting or extracting.
 
 The content root MUST be the source directory, with file selection and structural directories following Source file selection and Directories in `specs/behavior/files-and-directories.md`.
 Hidden files and files named after VCS metadata MUST remain ordinary content; VCS ignore rules MUST NOT apply implicitly.
 Symbolic links below the resolved source root MUST be rejected under Filesystem containment in `specs/behavior/paths.md` in `llm-tool-cli`; the root itself MAY be selected through a resolved symlink.
-Source and installed destination locations MUST NOT overlap in either direction; operations creating such an overlap MUST fail before mutation.
 
 Installation and updates MUST follow the ordinary protection and equality rules in `specs/behavior/locking.md`.
 An update using live selection MUST prepare the current source state without requiring the old source fingerprint to remain retrievable when trustworthy entry baselines already exist.

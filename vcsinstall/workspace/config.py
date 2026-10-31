@@ -1,6 +1,6 @@
 """Project configuration declarations."""
 
-from typing import Literal, NewType, Self
+from typing import Literal, Self
 
 import pydantic
 from llm_tool_cli.config.fields import ConfigVersion
@@ -11,20 +11,23 @@ from vcsinstall.domain import (
     DependencyName,
     SourcePath,
 )
-
-DestinationInput = NewType("DestinationInput", str)
+from vcsinstall.workspace.entities import CanonicalPath
 
 
 class Entry(BaseEntity):
     dependency: DependencyName
     source_path: SourcePath
-    destination: DestinationInput = pydantic.Field(min_length=1)
+    destination: CanonicalPath
 
 
 class Config(BaseEntity):
     version: ConfigVersion[Literal[1]]
     dependencies: dict[DependencyName, Dependency] = pydantic.Field(default_factory=dict)
     entries: tuple[Entry, ...] = ()
+
+    def entries_for_dependency(self, name: DependencyName) -> tuple[Entry, ...]:
+        """Return this dependency's entries in their stored order."""
+        return tuple(entry for entry in self.entries if entry.dependency == name)
 
     @pydantic.model_validator(mode="after")
     def _validate_bindings(self) -> Self:

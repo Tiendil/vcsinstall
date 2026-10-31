@@ -24,7 +24,10 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
+    "filelock==4.2.4",
     "llm-tool-cli==0.2.1",
+    "platformdirs==4.13.5",
+    "tomli-w==1.2.0",
 ]
 
 # Uncomment to use the local shared-library checkout during development.

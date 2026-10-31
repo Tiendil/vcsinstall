@@ -42,6 +42,24 @@ Native query parameters MUST retain their transport meaning; vcsinstall MUST NOT
 `@` in a transport address MUST NOT be interpreted as a vcsinstall version suffix.
 Relative filesystem locators MUST use the directory base established by their input contract in `specs/behavior/cli.md` or `specs/behavior/config.md`.
 
+## Repository detection
+
+Detection MUST preserve explicit backend choices and follow the input-specific inference rules in Repository arguments in `specs/behavior/cli.md`.
+An explicit backend option MUST bypass detection and leave interpretation of the supplied locator to the selected backend.
+An already declared backend MUST NOT be re-inferred when loading configuration or using a lock.
+Ambiguous local inputs MAY be recognized through read-only repository metadata, considering specialized backends before ordinary filesystem content.
+Backend-specific malformed or unsupported locator values MUST be ordinary non-matches during normalization and probing rather than operational failures.
+Normalization MUST distinguish a normalized locator from a non-match; a rejected value MUST NOT become an empty or fabricated locator.
+Only a definite non-match MAY continue to the next backend; unreadable metadata or another operational failure MUST fail detection.
+Unexpected internal processing failures MUST follow General principles and Exception boundaries in `specs/architecture/errors.md` rather than become non-matches or ordinary diagnostics.
+An input not recognized by any supported backend MUST fail rather than create a source declaration.
+
+Local detection MUST preserve the supplied root's meaning and MUST NOT inspect an entire content tree solely to choose a backend.
+Remote detection MAY query native transport metadata, but MUST complete within a bounded execution time and retain the native noninteractive authentication contract.
+Detection MUST NOT clone repositories, fetch content objects, or create cache data.
+Detection and failed probes MUST preserve project declarations, locks, and installed content.
+Ownership of common input syntax, native locator interpretation, and probe effects MUST follow Adapter and cache boundaries in `specs/architecture/modules_layout.md`.
+
 ## Source paths
 
 A source path MUST be a canonical `@/` identifier anchored at the selected dependency's repository root at the selected revision.
@@ -70,7 +88,7 @@ The supported source backends MUST be:
 Every supported source backend MUST be available through ordinary backend selection without additional registration or opt-in, independently of hosting selection.
 
 Backend selection MUST be explicit in the normalized repository identity under Repository locators and identity.
-An unknown or unsupported backend MUST fail explicitly without falling back to Git or ordinary filesystem access.
+An explicitly selected unknown or unsupported backend MUST fail without falling back to Git or ordinary filesystem access.
 Creating a backend specification MUST NOT by itself advertise an unimplemented command or capability as available.
 
 Each backend MUST define its supported:
@@ -89,7 +107,7 @@ Source resolution and extraction MUST use an available repository view and MUST 
 - delivery effects or artifact creation.
 
 Unsupported transports or selectors MUST fail explicitly rather than be ignored or reinterpreted as another capability.
-Unsupported command options MUST be rejected under the CLI's invalid-argument contract before source access or external mutation.
+Unsupported command options MUST be rejected under the CLI's invalid-argument contract before repository acquisition, source-content inspection, or external mutation; backend-specific compatibility checks MAY follow the metadata probes needed to identify that backend.
 Read access MUST NOT imply permission to publish.
 Ordinary filesystem and HTTP source notation MUST NOT by itself imply VCS revision history or contribution-branch support.
 
@@ -150,8 +168,11 @@ Only a separately authorized hosting workflow MAY publish changes to a recipient
 ## Repository acquisition and refresh
 
 Acquisition MUST make repository data and version metadata available for source resolution and extraction under the requested operation's revision and freshness requirements in `specs/behavior/locking.md`.
-A repository view MUST identify the declared backend and normalized repository locator; data for a different identity MUST NOT satisfy the request.
-Where applicable, its metadata MUST distinguish observed branch and tag targets from the source's advertised default branch.
+Acquired repository data MUST correspond to the declared backend and normalized repository locator; data for a different identity MUST NOT satisfy the request.
+Configurations where an acquired repository location and an installation destination overlap are outside the supported use cases.
+Acquisition results and resolved source data MUST follow Adapter and cache boundaries in `specs/architecture/modules_layout.md`.
+Backend-specific metadata MUST remain available in the backend's native repository representation rather than impose backend-specific fields on shared source data.
+Where applicable, that metadata MUST distinguish observed branch and tag targets from the source's advertised default branch.
 Acquisition or refresh MUST NOT itself choose a new installation revision or change project declarations, lock state, or installed content.
 
 Valid available data MAY be reused when it satisfies the operation's requirements.
@@ -174,10 +195,11 @@ Named selectors MUST remain distinct from their resolved immutable revisions.
 Default-version inference and selector recording MUST follow Version selection in `specs/behavior/locking.md` and the backend's own contract.
 An unversioned source MAY define its default as the current live content state; it MUST NOT invent a branch or tag to represent that state.
 Bare-selector ambiguity MUST fail under the CLI contract rather than use a client's shorthand precedence.
+Resolution MUST convert an unresolved input selector to a supported branch, tag, or immutable revision selection before producing a resolved source.
 
 Resolution MUST interpret the available view and supplied version metadata; current-source checks MUST use observations satisfying Source freshness in `specs/behavior/locking.md`.
 Source content prepared for one dependency operation MUST belong to the revision selected for that operation under State and shared revisions in that specification.
-A source changing during preparation MUST NOT cause mixed revisions to be installed or recorded as one revision.
+Source and recipient state stability within an invocation MUST follow General behavior in `specs/behavior/cli.md`.
 
 ## Source inspection and extraction
 
@@ -216,9 +238,9 @@ A source root or content kind that cannot be represented by the selected hosting
 A selection without changed content MUST complete without source fetching, hosting requests, or delivery effects once local selection and option validation passes.
 All required source preparation and selected-content checks MUST finish before creating a fork or applying delivery effects.
 
-Creation of a contribution branch MUST protect existing branches from overwrite, including collisions occurring during publication.
+Creation of a contribution branch MUST protect existing branches from overwrite.
 PR retry MAY reuse a verified matching contribution under the hosting contract, but MUST NOT overwrite a conflicting existing branch.
-Direct mode MUST protect the observed destination revision and conflicting source content under its contract; selecting it MUST NOT authorize history rewriting.
+Direct mode MUST protect conflicting destination content under its contract; selecting it MUST NOT authorize history rewriting.
 Delivery results MUST identify the requested mode and its actual completed effects under the CLI output contract.
 
 Publication MUST preserve project state under the `dependency push` operation contract in `specs/behavior/locking.md`.
@@ -232,7 +254,7 @@ The explicit `--mode` values MUST be as follows; required outcomes apply to chan
 | --- | --- | --- |
 | `pr` | Publish a contribution branch and create or recover its hosted review request. | Compatible repository publication and hosted review support. |
 | `branch` | Publish a contribution branch without creating a hosted review. | Native contribution-branch publication. |
-| `direct` | Apply selected changes to an existing destination branch, or confirm they are already present. | Native conditional branch advancement with baseline protection. |
+| `direct` | Apply selected changes to an existing destination branch, or confirm they are already present. | Native branch advancement with baseline protection. |
 | `patch` | Write one contribution patch artifact without remote publication. | Contribution patch generation. |
 | `overwrite` | Apply selected changes directly to the original source. | Explicit direct-overwrite support. |
 

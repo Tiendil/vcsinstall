@@ -30,6 +30,8 @@ Source inspection MUST use supplied local Git data and reference metadata under 
 
 A local Git source MUST provide committed repository content; local working-tree and index changes MUST NOT be included.
 Original-repository preservation MUST follow Native client execution in `specs/behavior/vcs-interaction.md`.
+Local detection under Repository detection in that specification MUST recognize ordinary repository roots, bare repositories, and working trees whose Git metadata is referenced by a gitfile.
+An ordinary subdirectory of a repository MUST NOT be recognized as the enclosing repository's root.
 
 ## Version selectors
 
@@ -40,6 +42,7 @@ Its name MUST be validated as a native Git branch name and MUST NOT be interpret
 Resolution requiring a current branch target MUST use observations refreshed through hosting under Source freshness in `specs/behavior/locking.md`, including remote rewinds and deletions.
 
 Default-version inference MUST use the source's advertised default-branch metadata supplied by hosting and record its actual branch name under Version selection in `specs/behavior/locking.md`.
+The Git source adapter MUST interpret that observation from the available repository's native reference metadata only when the request omits a selector.
 It MUST NOT assume `main` or `master`, select the first advertised branch, or substitute the cache's checked-out branch.
 An ambiguous or unavailable default branch, or one without a resolvable commit, MUST fail before project mutation.
 

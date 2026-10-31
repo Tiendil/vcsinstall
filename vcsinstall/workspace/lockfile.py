@@ -60,6 +60,10 @@ class Lockfile(BaseEntity):
     dependencies: dict[DependencyName, DependencyLock] = pydantic.Field(default_factory=dict)
     entries: tuple[InstallationBaseline, ...] = ()
 
+    def entries_for_dependency(self, name: DependencyName) -> tuple[InstallationBaseline, ...]:
+        """Return this dependency's installation baselines in their stored order."""
+        return tuple(entry for entry in self.entries if entry.dependency == name)
+
     @pydantic.model_validator(mode="after")
     def _validate_bindings(self) -> Self:
         for index, entry in enumerate(self.entries):

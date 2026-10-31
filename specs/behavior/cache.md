@@ -14,12 +14,13 @@ The following are out of scope:
 - version selection, content hashing, and installation-baseline transitions.
 - VCS protocols and hosting-provider APIs.
 - internal checkout layout, locking libraries, and platform-specific synchronization mechanisms.
+- cache protection for VCS subprocesses that outlive the vcsinstall process.
 
 ## Applicability
 
 Repository-cache use MUST follow the source and hosting contracts identified in `specs/behavior/vcs-interaction.md`.
 The repository storage and reuse requirements below MUST apply to either adapter when it uses this cache.
-Operations using only uncached source and hosting capabilities MUST NOT resolve or validate a cache root, acquire its lock, or populate it, including when `--cache-dir` is unusable.
+Operations using only uncached source and hosting capabilities MUST NOT acquire the cache lock, create its root, or populate cached repository data.
 Explicit `cache clean` MUST retain its cache operation contract independently of the current project's source backends.
 Hosting selection and publication to another repository MUST NOT change the original source's cache identity.
 If another repository is itself cached, its storage MUST follow its own backend and normalized locator identity under Repository identity and layout below.
@@ -34,17 +35,18 @@ The directory MUST be interpreted as a filesystem path without project-path nota
 
 Without an override, the cache root MUST be the platform's per-user cache location followed by `vcsinstall`.
 When the platform provides no usable default cache location, the fallback MUST be `<user-home>/.cache/vcsinstall`.
-If neither a default nor a home-based fallback can be resolved, operations requiring a cache MUST fail with guidance to provide `--cache-dir`.
+If neither a default nor a home-based fallback can be resolved, commands that may use the cache MUST fail with guidance to provide `--cache-dir`.
 A directory's absence MUST NOT prevent its selection as a default or explicit cache root.
 
 After selecting the location and expanding home markers, absolute resolution MUST follow the Project-root resolution contract in `specs/behavior/paths.md` in `llm-tool-cli`, with the cache location as the supplied filesystem root.
 The effective root MUST remain the same resolved absolute location throughout an invocation, including cleanup and its result.
 The cache MAY reside outside the target project.
 
-Cache-location resolution and filesystem validation MUST be deferred until an operation needs the cache.
-An existing cache root MUST be a directory.
+Commands that may use the cache MUST select and resolve its root before executing their requested operation, even when the selected backend does not use cached data.
+Filesystem checks needed to read or write cached data MUST remain deferred until those capabilities are used.
+An existing cache root accessed for cached data MUST be a directory.
 Missing directories MUST be created only when an operation needs to store cache data; selecting a root MUST NOT itself create it.
-An unusable explicitly selected path MUST fail without falling back to the default.
+A failure to resolve or access an explicitly selected path MUST fail without falling back to the default.
 Access or creation failure at a selected default root MUST also fail rather than silently switch to another location.
 
 **Example:** If the invocation's working directory is `/work/project/tools`, `--cache-dir ../shared-cache` selects `/work/project/shared-cache`, regardless of the selected configuration file's location.
@@ -137,7 +139,7 @@ Different effective cache roots MUST have independent locks.
 Cache-independent operations MUST NOT acquire or create this lock file.
 
 An operation MUST acquire the lock before reading or changing cached repository data or deleting disposable cache data.
-Exclusive access MUST remain effective for as long as the command or any VCS subprocess it starts accesses that data.
+While the vcsinstall process remains running, exclusive access MUST remain effective for as long as the command or any VCS subprocess it starts accesses that data.
 Sharing the cache MUST preserve repository identity and revision isolation and MUST NOT expose incomplete preparation as valid source data.
 
 When another invocation holds the lock, a command MUST wait for up to 10 seconds to acquire it and proceed if it becomes available within that period.

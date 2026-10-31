@@ -30,12 +30,18 @@ Publication MUST use the selected recipient's native transport and authenticatio
 
 ## Repository acquisition and refresh
 
+Requested remote recognition MUST follow Repository detection in `specs/behavior/vcs-interaction.md`, using native reference metadata without cloning or acquiring content objects.
+A successful connection to an empty Git repository MUST still recognize a Git source; absence of references MUST NOT mean a non-match.
+Authentication failures and timeouts MUST remain operational failures rather than evidence for another source type.
+
 Git's supported native transports and configured authentication facilities MUST retain their native meaning for both acquisition and delivery.
 Acquisition MUST make required local Git objects and source metadata available under Repository acquisition and refresh in `specs/behavior/vcs-interaction.md`, reusing or rebuilding repository data under `specs/behavior/cache.md`.
 Valid available objects MAY satisfy requests for immutable revisions without refreshing unrelated source references.
 
 When freshness is required, observations MUST reflect the declared source's actual branch and tag targets, including moved or deleted refs.
 Default-version discovery MUST provide the source's advertised symbolic `HEAD` and branch metadata without assuming `main` or `master`.
+The acquired repository MUST retain that observation in native reference metadata independently of its administrative `HEAD`.
+Refreshing an unavailable or ambiguous advertised symbolic `HEAD` MUST clear any previously retained default observation rather than preserve a stale default.
 Version interpretation, selector ambiguity, commit verification, and extraction MUST follow `specs/behavior/vcs/git.md` using the supplied view.
 
 **Note:** Git exposes advertised refs and symbolic `HEAD` through its [remote-reference inspection contract](https://git-scm.com/docs/git-ls-remote). The advertised default branch and its selected commit are separate values.
@@ -85,11 +91,8 @@ Branch mode MUST publish the prepared commit to the source repository or the exp
 The contribution branch name MUST be valid for native Git and MUST follow the CLI's explicit or automatic branch-selection rules.
 
 Publication MUST create exactly that new branch in the selected publication repository.
-The absence requirement MUST remain enforced when the remote updates its ref, including when another writer creates the branch after an earlier availability check.
 No existing branch MAY be advanced or replaced in branch mode, even if the proposed update would be a fast-forward.
 A collision MUST cause an operational failure; verified PR retry under `specs/behavior/hosting/github.md` MUST NOT relax branch mode's absence requirement.
-
-**Note:** Git's [conditional push contract](https://git-scm.com/docs/git-push) can require that a destination ref does not exist.
 
 Success MUST identify the actual publication repository, new branch, and full commit identifier while retaining the installation revision under the CLI output contract.
 Branch delivery MUST NOT create a fork or hosted review.
@@ -128,10 +131,9 @@ Direct mode MUST NOT merge or rebase differing content automatically.
 
 When writes are required, direct delivery MUST prepare one commit with parent B under Change application and commit metadata above.
 It MUST preserve all unselected content from B, including upstream changes made since installation.
-Publication MUST advance only the selected branch and only if its ref still equals B.
-A destination ref differing from B when the update is applied, including a moved, deleted, or recreated branch, MUST cause failure without overwriting that state.
+Publication MUST advance only the selected branch to the prepared commit, using invocation state stability under General behavior in `specs/behavior/cli.md`.
 The update MUST be a fast-forward from B; history rewriting and ref deletion MUST NOT be authorized by this mode.
-A failed conditional update MUST NOT be silently retried against a different branch head.
+A failed update MUST NOT be silently retried against a different branch head.
 
 If every selected entry with a contribution already equals its destination content within the contribution scope, direct delivery MUST succeed without creating a commit or updating a ref.
 That verified result MUST identify the observed B as its delivery revision.
@@ -158,7 +160,7 @@ A dependency tracks `main` and has installed a shared guide at commit A.
 The local guide is edited while upstream advances `main` to B by changing an unrelated file.
 
 1. `vcsinstall dependency push guides --mode direct` verifies that the guide at B still matches its baseline at A.
-2. It creates commit C with parent B, containing the edited guide and the unrelated upstream changes, then advances `main` only if it still points to B.
+2. It creates commit C with parent B, containing the edited guide and the unrelated upstream changes, then advances `main` to C.
 3. A retry before updating the installation finds the guide already equal at C and completes without another commit.
 4. `vcsinstall dependency update guides` records C and the guide's matching content as the new installation baseline.
 

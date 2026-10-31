@@ -56,7 +56,7 @@ Later operations MUST use that recorded selector rather than repeat inference.
 
 Establishing a dependency definition without a selector MUST infer the backend's default version under its source contract in `specs/behavior/vcs-interaction.md`.
 The inferred Git branch name MUST be recorded as the dependency lock's branch selection.
-When `dependency add` establishes or explicitly replaces the Git definition, it MUST also write that branch name into configuration.
+When `dependency add` establishes or explicitly redefines the Git definition, it MUST also write that branch name into configuration.
 
 For hand-written Git configuration omitting a selector, a matching branch lock MUST supply the effective selector.
 Without such a lock, an operation establishing the lock MUST infer and record the default branch.
@@ -81,7 +81,7 @@ A tag or revision lock MUST NOT satisfy an omitted Git selector.
 A branch or tag advancing remotely MUST NOT itself make a lock stale relative to configuration.
 
 An entry baseline MUST match a declaration only when its dependency lock matches and its dependency name, canonical source path, and canonical destination agree.
-Configuration comments, declaration ordering, and equivalent destination spelling MUST NOT affect matching.
+Configuration comments and declaration ordering MUST NOT affect matching.
 Local content changes MUST NOT affect declaration matching.
 A complete configuration match MUST require exactly the declared dependency and entry sets, with a matching record for every declaration.
 
@@ -101,7 +101,7 @@ Manifest children MUST retain the entry's one installation baseline under State 
 
 An absent baseline MUST represent source content recorded as absent by an operation supporting deletions.
 It MUST remain distinct from unexpectedly missing managed files whose baseline expects them to exist.
-An absent directory baseline MUST NOT require deleting structural directories or unmanaged descendants.
+An absent baseline MUST NOT require deleting empty structural directories; files beneath the owned destination MUST count as local additions.
 Deleting a managed child within a directory entry MUST produce a local difference while the recorded manifest remains unchanged.
 
 **Example:** A project declares `@/LICENSE` from dependency `ci`, installed at `@/licenses/shared.txt`.
@@ -121,8 +121,8 @@ It MUST NOT create or modify project files.
 Local status MUST distinguish:
 
 - `clean` — Local content agrees with the matching baseline, including expected absence.
-- `modified` — Existing managed content differs from the baseline in bytes or kinds, or a type obstruction exists; missing files or unmanaged additions alone do not produce this status.
-- `missing` — One or more files expected by the matching baseline are absent, including children of an existing directory, while existing managed content otherwise agrees with the baseline.
+- `modified` — Existing regular-file content differs from the baseline, an additional file exists within the owned destination, or a regular file obstructs a required directory; missing files alone do not produce this status.
+- `missing` — One or more regular files expected by the matching baseline are absent, including when an empty directory occupies an expected file position, while all existing files otherwise agree with the baseline.
 - `unlocked` — No matching record exists, so a trustworthy local-change comparison is unavailable.
 
 A missing lockfile MUST classify declared entries as unlocked without creating one.
@@ -130,7 +130,7 @@ An old binding's baseline MUST NOT be presented as the baseline of a new mapping
 Malformed or unreadable state MUST fail rather than produce empty results or invented clean or unlocked states.
 Modified, missing, or unlocked status MUST NOT by itself make inspection fail.
 An absent destination for an empty directory manifest MUST be clean under Directories in `specs/behavior/files-and-directories.md`.
-When missing files coexist with existing managed modifications or type obstructions, `modified` MUST take precedence over `missing`.
+When missing files coexist with local modifications, additions, or obstructing regular files, `modified` MUST take precedence over `missing`.
 
 ## Source integrity and cache independence
 
@@ -145,7 +145,7 @@ Cache reuse and cleanup MUST preserve locked revisions, baselines, and local-con
 Operations requiring the current target of a default, branch, or tag selector MUST refresh source information before resolving that target.
 Current-source observations MUST follow Repository acquisition and refresh in `specs/behavior/vcs-interaction.md`, with selector interpretation following its Version resolution and anchoring contract.
 Stale cached references MUST NOT substitute for a failed refresh or selector resolution.
-A required refresh or resolution failure MUST cause an operational failure identifying the affected dependency.
+A required refresh or resolution failure MUST cause an operational failure under Preparation and consistency below.
 Immutable pins MUST NOT require a refresh solely to search for newer commits and MUST NOT become outdated merely because newer commits or release tags exist.
 
 Freshness comparison MUST compare the dependency's locked immutable revision with the current revision resolved under its effective selector, using complete immutable identifiers.
@@ -154,7 +154,7 @@ The comparison MUST NOT advance the lock or select a different revision for an i
 
 ## Installation protection
 
-Entry addition and declared installation MUST NOT silently overwrite existing modified content or conflicting unmanaged content.
+Entry addition and declared installation MUST NOT silently overwrite existing local modifications or additions that conflict with the selected source.
 Missing selected files MUST be restored under Missing files in `specs/behavior/files-and-directories.md`, including missing children within a partially installed directory.
 Restoring those files MUST NOT bypass the verification of existing content or required source-integrity checks.
 Entry redefinition MUST verify existing content against the previous entry baseline before replacing its declaration or lock record.
@@ -165,15 +165,18 @@ Success MUST leave affected declarations, lock records, and installed content co
 Dependency updates and operations adopting their protection MUST compare each selected entry with its prior baseline and the prepared content at the selected source revision under Local comparison in `specs/behavior/files-and-directories.md`.
 Missing or untrustworthy baselines and source-integrity failures MUST cause operational failure.
 For these installation and update protection checks, genuinely missing file positions MUST NOT by themselves cause verification to fail against either the prior baseline or the selected source content.
-Existing content and type obstructions MUST still be compared throughout the complete scope under Local comparison in `specs/behavior/files-and-directories.md`.
+Existing regular-file content, including obstructing files, MUST still be compared throughout the complete scope under Local comparison in `specs/behavior/files-and-directories.md`.
+Directory presence alone MUST NOT cause an installation or update conflict; complete-tree inspection and root replacement MUST follow Filesystem effects in that specification, including protection of local additions.
 This restoration allowance MUST NOT change exact content equality for hashing, local inspection, or contribution preparation.
 For entries with trustworthy baselines, local-content verification MUST follow these rules:
 
-- When existing local content agrees with the selected source content at every scoped position where local content exists, verification MUST pass even if it differs from the prior baseline. Matching existing files MUST remain untouched, missing selected files MUST be installed, and success MUST record the selected revision and content identity as the new baseline.
+- When existing local content agrees with the selected source content at every position where local content exists, verification MUST pass even if it differs from the prior baseline. Missing selected files MUST be installed, and success MUST record the selected revision and content identity as the new baseline.
 - Otherwise, when existing local content agrees with the prior baseline at every scoped position where local content exists, verification MUST pass, and update MUST apply the selected source content, including restoring missing selected files.
 - When existing local content agrees with neither state across all scoped positions where local content exists, verification MUST fail without overwriting it or advancing any selected dependency lock.
 
-Directory equality MUST cover the complete comparison scope of old and proposed manifest paths; unmanaged descendants MUST remain outside equality unless they occupy a proposed path or obstruct a required directory.
+Directory equality MUST cover the complete actual local file tree, including files absent from both the old and proposed manifests.
+When the complete local file set already matches the selected source, the entry MUST receive no filesystem writes even if its revision or baseline metadata changes.
+Otherwise, successful application MUST replace the entire entry destination under Filesystem effects in `specs/behavior/files-and-directories.md`, including recopying unchanged files within a changed entry.
 Per-file records MUST NOT permit merging independent local and upstream edits when existing local content agrees with neither accepted state across the complete scope of existing local content.
 Only content at the revision selected by the dependency's effective selector MUST be used for this equality check.
 The decision MUST depend on content equality rather than publication history, commit ancestry, or evidence that a contribution was accepted.
@@ -192,9 +195,9 @@ If local `a.txt` differs from both the prior baseline and selected source, updat
 
 Declaring a dependency MUST record its definition in configuration, establish its binding, and resolve and lock its selected immutable revision, including when it has no entries.
 Resolution MUST use Source freshness for tracking selectors and MAY reuse valid cached data for immutable pins.
-Explicit replacement MUST refresh every declared entry at the new shared revision using Updating baselines while preserving dependency membership and entry mappings.
-Replacement permission MUST NOT bypass local-content protection or other validation.
-An identical replacement requiring no declaration, revision, or content changes MUST succeed as unchanged.
+Explicit redefinition MUST refresh every declared entry at the new shared revision using Updating baselines while preserving dependency membership and entry mappings.
+Redefinition permission MUST NOT bypass local-content protection or other validation.
+An identical redefinition requiring no declaration, revision, or content changes MUST succeed as unchanged.
 
 ### `add`
 
@@ -242,7 +245,7 @@ Filesystem overwrite MAY inspect the live source and resolve its resulting publi
 Every entry inspected to determine the changed selection MUST have a matching, trustworthy baseline and inspectable local state.
 Unavailable or inconsistent baselines and unreadable content MUST fail before source fetching, hosting requests, or delivery effects.
 Change detection MUST compare each entry's complete local contribution content with the installation baseline under Contributions in `specs/behavior/files-and-directories.md`; a previous push MUST NOT acknowledge those changes as a new baseline.
-New files within a directory MUST participate automatically, even when ordinary baseline-scoped local inspection reports the entry as clean.
+New files within a directory MUST participate automatically and MUST also count as local modifications during ordinary inspection.
 Unselected entries MUST NOT require local-content verification or contribute changes.
 Publication MUST leave configuration, lockfile bytes, and installed content unchanged and MUST NOT maintain persistent publication history.
 Patch output MUST remain a separately requested artifact under the CLI contract rather than a change to installation state.
@@ -251,7 +254,8 @@ Patch output MUST remain a separately requested artifact under the CLI contract 
 
 Entry removal MUST discard selected declarations and baselines while preserving dependency declarations and shared locks, including after the last entry is removed.
 Missing lock state MUST NOT prevent removal when files are retained, the destination is already absent, or deletion of unverified content is explicitly authorized.
-Deleting directory contents MUST still require recorded ownership under Filesystem effects in `specs/behavior/files-and-directories.md`, including when content verification is waived.
+The selected declared entry roots MUST define deletion ownership under Destination ownership and Filesystem effects in `specs/behavior/files-and-directories.md`.
+Explicit authorization to delete unverified content MAY waive baseline and local-change checks, including for local additions within those roots, but MUST NOT bypass destination containment or authorize deleting outside them.
 Unselected entries, metadata, and content MUST remain unchanged.
 Removed entries MUST stop participating in project operations until declared again.
 
@@ -270,13 +274,18 @@ These inspection operations MUST NOT change declarations, lock state, or install
 
 ## Preparation and consistency
 
+Invocation state stability MUST follow General behavior in `specs/behavior/cli.md`.
+Content verification MUST compare the state observed for the operation with its applicable baselines and selected source content, without rechecking it solely for concurrent external changes.
 Command validation MUST finish before source fetching as required by `specs/behavior/cli.md`.
 Required content checks and source preparation MUST complete for the entire selection before project mutation.
 Validation or preparation failure MUST preserve affected declarations, lock records, and installed content.
 If any selected entry blocks update preparation, every selected dependency lock and installed entry MUST remain unchanged.
 Prior baselines MUST remain in effect until all affected content is successfully installed; partially applied installations MUST NOT be recorded as complete.
 Missing lock state MUST follow the applicable operation contract rather than be reconstructed from arbitrary installed content.
-If applying changes fails after effects have completed, diagnostics MUST identify the failure and partial effects rather than imply rollback or successful installation.
-Locking failure diagnostics MUST identify the affected dependency or entry and the lockfile path as applicable.
+If applying installed-file changes fails, diagnostics MUST retain the original errors and state that installed content may be inconsistent with project records.
+A general inconsistency notice MUST be sufficient; reporting individual completed filesystem changes MUST NOT be required.
+Diagnostics MUST NOT imply rollback or successful installation.
+Failure diagnostics MUST identify the affected dependency or entry unless the command explicitly targets one named dependency or entry.
+Lockfile-access and lock-state failure diagnostics MUST identify the lockfile path as applicable.
 Diagnostics MUST distinguish stale declarations from source-integrity failures, retaining loading and filesystem diagnostics under `specs/behavior/lockfile.md`.
 Diagnostic rendering and exit statuses MUST follow `specs/behavior/cli.md`; lockfile loading and writing failures MUST follow `specs/behavior/lockfile.md`.

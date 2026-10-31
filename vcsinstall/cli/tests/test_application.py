@@ -145,12 +145,17 @@ class TestApplication:
             ["dependency", "add", "-h"],
         ],
     )
-    def test_project_independent_interfaces_ignore_unusable_config(self, tmp_path: Path, arguments: list[str]) -> None:
+    def test_project_independent_interfaces_ignore_unusable_config_and_cache(
+        self, tmp_path: Path, arguments: list[str]
+    ) -> None:
+        cache = tmp_path / "cache-loop"
+        cache.symlink_to(cache)
         result = CliRunner().invoke(
-            application.app, ["--config", str(tmp_path / "missing" / "config.toml"), *arguments]
+            application.app,
+            ["--config", str(tmp_path / "missing" / "config.toml"), "--cache-dir", str(cache), *arguments],
         )
 
         assert result.exit_code == (2 if arguments == ["dependency"] else 0), result.output
         assert not project_config.is_set()
         assert not active_workspace.is_set()
-        assert not list(tmp_path.iterdir())
+        assert list(tmp_path.iterdir()) == [cache]

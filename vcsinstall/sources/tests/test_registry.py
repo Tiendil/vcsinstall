@@ -13,7 +13,7 @@ class TestGetAdapter:
     def test_selects_backend_specific_validation(self, vcs: VcsId) -> None:
         adapter = get_adapter(vcs)
 
-        result = adapter.validate_dependency(make.dependency(vcs=vcs, branch="main"))
+        result = adapter.validate_dependency(make.dependency(vcs=vcs, selector=make.selector("branch", "main")))
 
         assert result.is_ok() == (vcs != VcsId.filesystem)
 

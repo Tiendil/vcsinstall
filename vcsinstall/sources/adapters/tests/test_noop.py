@@ -1,15 +1,37 @@
+from pathlib import Path
+
 import pytest
 
-from vcsinstall.domain import SourceRevision, VcsId
+from vcsinstall.domain import RepositoryLocator, SourceRevision, VcsId
 from vcsinstall.domain.tests import make
 from vcsinstall.sources import errors
 from vcsinstall.sources.adapters.noop import NoopSourceAdapter
 
 
 class TestNoopSourceAdapter:
+    def test_validate_input__accepts_unresolved_opaque_selection(self) -> None:
+        adapter = NoopSourceAdapter()
+        dependency = make.dependency(vcs=VcsId.noop, selector=make.selector("unresolved", "fixture reference"))
+
+        assert adapter.validate_input(dependency).is_ok()
+        assert adapter.validate_dependency(dependency).is_err()
+
+    def test_normalize_repository__empty_fixture_identity_is_a_non_match(self, tmp_path: Path) -> None:
+        assert NoopSourceAdapter().normalize_repository(RepositoryLocator(""), cwd=tmp_path).unwrap() is None
+
+    def test_normalize_repository__preserves_opaque_fixture_notation(self, tmp_path: Path) -> None:
+        repository = RepositoryLocator("opaque://[fixture value")
+
+        assert NoopSourceAdapter().normalize_repository(repository, cwd=tmp_path).unwrap() == repository
+
     @pytest.mark.parametrize(
         "fields",
-        [{}, {"branch": "fixture branch"}, {"tag": "fixture..tag"}, {"rev": "opaque-revision"}],
+        [
+            {},
+            {"selector": {"kind": "branch", "value": "fixture branch"}},
+            {"selector": {"kind": "tag", "value": "fixture..tag"}},
+            {"selector": {"kind": "revision", "value": "opaque-revision"}},
+        ],
     )
     def test_validate_dependency__accepts_opaque_selection(self, fields: dict[str, object]) -> None:
         dependency = make.dependency(vcs=VcsId.noop, repository="fixture-id", **fields)
@@ -18,15 +40,20 @@ class TestNoopSourceAdapter:
 
     @pytest.mark.parametrize(
         "fields",
-        [{}, {"branch": "fixture branch"}, {"tag": "fixture..tag"}, {"rev": "opaque-revision"}],
+        [
+            {},
+            {"selector": {"kind": "branch", "value": "fixture branch"}},
+            {"selector": {"kind": "tag", "value": "fixture..tag"}},
+            {"selector": {"kind": "revision", "value": "opaque-revision"}},
+        ],
     )
-    def test_validate_lock__accepts_opaque_revision(self, fields: dict[str, object]) -> None:
+    def test_validate_revision_lock__accepts_opaque_revision(self, fields: dict[str, object]) -> None:
         dependency = make.dependency(vcs=VcsId.noop, repository="fixture-id", **fields)
 
-        assert NoopSourceAdapter().validate_lock(dependency, SourceRevision("opaque-revision")).is_ok()
+        assert NoopSourceAdapter().validate_revision_lock(dependency, SourceRevision("opaque-revision")).is_ok()
 
-    def test_validate_lock__rejects_empty_revision(self) -> None:
-        result = NoopSourceAdapter().validate_lock(make.dependency(vcs=VcsId.noop), SourceRevision(""))
+    def test_validate_revision_lock__rejects_empty_revision(self) -> None:
+        result = NoopSourceAdapter().validate_revision_lock(make.dependency(vcs=VcsId.noop), SourceRevision(""))
 
         error = result.unwrap_err()[0]
         assert isinstance(error, errors.InvalidRevision)
@@ -34,10 +61,10 @@ class TestNoopSourceAdapter:
         assert error.field == "revision"
         assert error.value == ""
 
-    def test_validate_lock__rejects_mismatching_pin(self) -> None:
-        dependency = make.dependency(vcs=VcsId.noop, rev="first-revision")
+    def test_validate_revision_lock__rejects_mismatching_pin(self) -> None:
+        dependency = make.dependency(vcs=VcsId.noop, selector=make.selector("revision", "first-revision"))
 
-        result = NoopSourceAdapter().validate_lock(dependency, SourceRevision("second-revision"))
+        result = NoopSourceAdapter().validate_revision_lock(dependency, SourceRevision("second-revision"))
 
         error = result.unwrap_err()[0]
         assert isinstance(error, errors.RevisionMismatch)

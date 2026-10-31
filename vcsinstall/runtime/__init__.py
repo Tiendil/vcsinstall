@@ -2,4 +2,5 @@
 
 from vcsinstall.runtime.commands import dependency_add
 
-__all__ = ["dependency_add"]
+__all__ = ["dependency_add", "errors"]
+from vcsinstall.runtime import errors

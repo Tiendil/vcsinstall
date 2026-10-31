@@ -70,7 +70,8 @@ A delivery selection without locally changed content MUST retain the common no-r
 
 ## Simulated acquisition and refresh
 
-Acquisition MUST return a controlled view compatible with the selected source backend, bound to the requested repository identity.
+Remote recognition requests MAY be simulated with controlled match, non-match, or operational-failure results under Repository detection in `specs/behavior/vcs-interaction.md`, without performing real network access or native-client operations.
+Acquisition MUST expose a controlled view compatible with the selected source backend for the requested repository identity, following the acquisition-result contract in Adapter and cache boundaries in `specs/architecture/modules_layout.md`.
 Refresh MUST expose the fixture's current reference observations and availability under Repository acquisition and refresh in `specs/behavior/vcs-interaction.md`.
 Fixtures MUST be able to model moved or deleted references, changed advertised defaults, unavailable old revisions, and failed refresh independently of project locks.
 A failed refresh MUST NOT return stale observations as current.
@@ -85,8 +86,8 @@ Providing a view MUST NOT authorize publication or advance project revisions or 
 Branch and PR simulations MUST prepare the selected changes at the locked base revision, preserve unselected source content, and produce an immutable fixture contribution revision.
 Branch mode MUST create a new fixture branch with the ordinary collision protection.
 
-Direct simulation MUST follow the destination-branch selection, content protection, conditional advancement, and already-present completion rules in `specs/behavior/hosting/git.md`.
-It MUST expose conflicting content and concurrent branch movement as failures rather than unconditional success.
+Direct simulation MUST follow the destination-branch selection, content protection, branch advancement, and already-present completion rules in `specs/behavior/hosting/git.md`.
+It MUST expose conflicting destination content as a failure rather than unconditional success.
 Overwrite simulation MUST follow `specs/behavior/hosting/filesystem.md`, applying changes only to fixture source state and returning its resulting complete fingerprint.
 
 Patch simulation MUST supply the controlled artifact bytes and metadata to the ordinary output-writing boundary without publishing a branch.
@@ -116,7 +117,6 @@ Fixtures MUST be able to represent:
 - missing, ambiguous, or ineligible recipients.
 - unavailable contribution content and unsupported changes.
 - contribution-branch collisions and direct-mode conflicts.
-- concurrent destination-branch movement.
 - failed patch generation or source writes.
 - failed review lookup or creation.
 - failures before effects and after known or uncertain publication, overwrite, fork, or review effects.

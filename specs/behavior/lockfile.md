@@ -53,18 +53,16 @@ Each value MUST be a table with these fields:
 
 - `vcs` — Required nonempty backend name from the recorded declaration.
 - `repository` — Required nonempty normalized native repository locator from the recorded declaration.
-- `branch` — Optional nonempty source branch name, explicitly selected or inferred.
-- `tag` — Optional nonempty requested tag name.
-- `rev` — Optional nonempty requested immutable revision pin.
+- `selector` — Optional requested or inferred version selection under the configuration's Version selection contract.
 - `revision` — Required nonempty resolved immutable revision identifier.
 
-Repository identity and the mutually exclusive selector fields MUST follow the configuration contract.
+Repository identity and the selector structure MUST follow the configuration contract.
 Relative filesystem repository locators MUST retain their project-root-relative meaning.
-Every Git dependency lock MUST contain exactly one of `branch`, `tag`, and `rev`.
-Branch and tag spellings MUST remain literal; they MUST NOT be replaced by resolved commits in their selector fields.
+Every Git dependency lock MUST contain a selector with kind `branch`, `tag`, or `revision`.
+Branch and tag spellings MUST remain literal in `selector.value`; they MUST NOT be replaced by resolved commits.
 
 `revision` MUST use the backend's complete immutable representation under the source contracts identified in `specs/behavior/vcs-interaction.md`.
-For an immutable `rev` selector, `revision` MUST identify that same pinned revision.
+For a selector with kind `revision`, the lock's `revision` MUST identify that same pinned revision.
 Inference and shared-revision semantics MUST follow Version selection and State and shared revisions in `specs/behavior/locking.md`.
 
 ## Installation baselines
@@ -89,6 +87,7 @@ Each item in an entry's `files` MUST be a table containing only:
 - `hash` — Required file content hash under Hash representation below.
 
 Manifest path uniqueness and file-ancestor constraints MUST follow that File manifests contract.
+Manifest membership MUST identify recorded source content rather than limit destination ownership under Destination ownership in `specs/behavior/files-and-directories.md`.
 Directory records MUST NOT appear among these child records.
 Parsing MUST reject duplicate or conflicting child paths and an aggregate entry hash inconsistent with the recorded file manifest under Directory hashes in `specs/behavior/files-and-directories.md`.
 This validation MUST use recorded data alone, without inspecting installed files, sources, or cache data.
@@ -107,8 +106,10 @@ State that requires no logical change MUST leave the lockfile's bytes unchanged.
 Generated state MUST NOT include cache paths, timestamps, or machine-specific checkout locations.
 Repository locators MUST retain their declared meaning, including filesystem sources, under the configuration contract.
 
-Lockfile replacement MUST be atomically visible; failed serialization or replacement MUST preserve the previous file, or leave an initially absent file absent.
-A concurrent lockfile change MUST NOT be silently overwritten with state prepared from an older version.
+Lockfile serialization MUST complete before writing begins.
+Writers MAY update the lockfile directly; atomic replacement is not required.
+A write failure MAY leave partially written content and MUST report the affected path and known completed effects.
+Protection against concurrent updates to the lockfile is not required.
 State consistency before and after writes MUST follow Preparation and consistency in `specs/behavior/locking.md`.
 
 Malformed or unreadable lockfiles MUST fail rather than be replaced with empty state or reported as unlocked.
@@ -127,7 +128,7 @@ version = 1
 [dependencies.ci]
 vcs = "git"
 repository = "https://example.com/team/shared.git"
-branch = "main"
+selector = { kind = "branch", value = "main" }
 revision = "1111111111111111111111111111111111111111"
 
 [[entries]]

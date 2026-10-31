@@ -61,12 +61,12 @@ version = 1
 [dependencies.ci]
 vcs = "git"
 repository = "https://example.com/team/shared.git"
-branch = "main"
+selector = { kind = "branch", value = "main" }
 
 [dependencies.formatting]
 vcs = "git"
 repository = "https://example.com/team/shared.git"
-tag = "v1.0"
+selector = { kind = "tag", value = "v1.0" }
 
 [[entries]]
 dependency = "ci"
@@ -86,9 +86,7 @@ Each value MUST be a table with these fields:
 
 - `vcs` — Required nonempty string identifying the source backend.
 - `repository` — Required nonempty string containing the native repository locator for that backend.
-- `branch` — Optional nonempty string selecting a named branch.
-- `tag` — Optional nonempty string selecting a named tag.
-- `rev` — Optional nonempty string selecting an immutable source revision.
+- `selector` — Optional table containing the requested version selection under Version selection below.
 
 Dependency names MUST be unique and MUST NOT be inferred from repository basenames.
 Different names MAY declare the same repository, including different selectors or independently maintained instances of the same selector.
@@ -111,11 +109,17 @@ When a CLI repository argument was relative to the invocation's working director
 
 ### Version selection
 
-At most one of `branch`, `tag`, and `rev` MUST be present.
+When present, `selector` MUST contain only these required fields:
+
+- `kind` — One of `branch`, `tag`, or `revision`.
+- `value` — The nonempty literal branch name, tag name, or immutable revision identifier for that kind.
+
+Omitting `selector` MUST retain omitted-selector semantics rather than materialize an empty selector or a default kind.
+The unresolved selector kind used during input processing MUST NOT appear in persisted configuration.
 Selector meaning, omitted-selector inference, and reuse of inferred branches MUST follow Version selection in `specs/behavior/locking.md`.
 
-`rev` MUST identify an immutable revision in the backend's complete representation under its source contract in `specs/behavior/vcs-interaction.md`.
-Selector fields MUST be supported by the selected backend under Version resolution and anchoring in `specs/behavior/vcs-interaction.md`.
+A `revision` selector MUST identify an immutable revision in the backend's complete representation under its source contract in `specs/behavior/vcs-interaction.md`.
+The selector kind MUST be supported by the selected backend under Version resolution and anchoring in `specs/behavior/vcs-interaction.md`.
 
 Configuration selector strings MUST NOT undergo URL-fragment or percent decoding.
 
@@ -129,7 +133,7 @@ Each item in `entries` MUST be a table containing these required nonempty string
 
 Each entry MUST refer to an existing dependency declaration.
 Repository and version selection MUST follow State and shared revisions in `specs/behavior/locking.md`.
-File selection, directory semantics, and manifest ownership MUST follow Source file selection, File manifests, and Directories in `specs/behavior/files-and-directories.md`.
+File selection, destination ownership, and directory semantics MUST follow Source file selection, Destination ownership, File manifests, and Directories in `specs/behavior/files-and-directories.md`.
 The CLI's `NAME@/PATH` source reference MUST be represented by separate `dependency` and `source_path` fields.
 Configuration order MUST NOT alter dependency membership or entry identity.
 
@@ -144,11 +148,11 @@ The same source path MAY appear in multiple entries with different destinations.
 
 ### Destinations and entry identity
 
-Configured destinations MUST follow the Mixed path normalization contract in `specs/behavior/paths.md` in `llm-tool-cli`, with the project root as the base for relative filesystem inputs.
+Configured destinations MUST already be canonical `@/` project-path identifiers under `specs/behavior/paths.md` in `llm-tool-cli`, using the same representation as lockfile destinations.
+Ordinary relative or absolute filesystem paths and identifiers requiring normalization MUST fail configuration validation.
 Their meaning MUST remain independent of the invocation's working directory.
 They MUST resolve strictly below the project root under the shared containment contract, including its symbolic-link rules, without requiring an existing target.
 
-New or changed entry declarations written by vcsinstall MUST store `destination` as a canonical `@/` identifier.
 The canonical destination MUST identify the entry at the CLI boundary under Local path arguments and entry selection in `specs/behavior/cli.md`.
 
 Every canonical destination MUST be unique across all entries, including entries belonging to different dependencies.
@@ -164,7 +168,10 @@ Persisted installation state MUST follow the representation in `specs/behavior/l
 
 Commands MUST change configuration only when authorized by their contracts in `specs/behavior/cli.md`.
 Successful edits MUST leave valid configuration and preserve unrelated declarations and their meanings.
-Edits SHOULD preserve existing comments and declaration order.
+Configuration updates MUST serialize the complete updated configuration.
+Preservation of comments, formatting, and declaration order is not required.
+Writers MAY update the configuration file directly; atomic replacement is not required.
+Protection against concurrent updates to the configuration file is not required.
 The state effects of replacing or removing declarations and their failure guarantees MUST follow Operation contracts and Preparation and consistency in `specs/behavior/locking.md`.
 
 ## Starter configuration
@@ -178,7 +185,7 @@ version = 1
 # [dependencies.shared]
 # vcs = "git"
 # repository = "https://example.com/team/shared.git"
-# branch = "main"
+# selector = { kind = "branch", value = "main" }
 
 # [[entries]]
 # dependency = "shared"
@@ -190,4 +197,4 @@ version = 1
 
 Invalid configuration MUST fail as a whole rather than omit invalid declarations or treat malformed content as an empty project.
 Declaration-validation failures MUST identify the affected dependency or entry and the invalid field or conflicting mapping.
-Shared destination-normalization and containment failures MUST preserve the diagnostics defined in `specs/behavior/paths.md` in `llm-tool-cli`.
+Shared destination-containment failures MUST preserve the diagnostics defined in `specs/behavior/paths.md` in `llm-tool-cli`.

@@ -2,7 +2,7 @@
 
 `vcsinstall` is being developed to install files into a target repository from source repositories, record their origins in a lockfile, and push local changes back to their source.
 
-**Development status:** configuration initialization and config/lockfile loading work today, alongside help, version output, and built-in usage documentation. `dependency add` currently validates project files only. Dependency creation, file installation, lockfile writes, and push back are planned.
+**Development status:** `init` creates project configuration, and `dependency add` declares and locks Git and filesystem dependencies. Explicit replacement refreshes existing entries with local-change protection. Help, version output, and built-in usage documentation are available. Entry creation, other dependency commands, and push back are planned.
 
 ## Example
 
@@ -20,6 +20,8 @@ Available today:
 
 - **CLI scaffold** — help, package version output, and built-in usage documentation.
 - **Project configuration** — create a starter with `init`, discover or explicitly select configuration, and validate configuration and existing lock state.
+- **Dependency locking** — add Git or filesystem sources, select branches, tags, or immutable revisions, and explicitly redefine dependencies while protecting local edits.
+- **Source detection** — recognize Git repositories before ordinary directories, probe unqualified remote URLs, and honor explicit backend choices.
 - **Output protocols** — human output, framed output for coding agents, and JSON Lines for programs.
 - **Python entry point** — the same commands through `vcsinstall` and `python -m vcsinstall`.
 
@@ -33,7 +35,7 @@ Planned:
 
 Files shared between repositories can accumulate local edits while their sources continue to change. Keeping their origins and revisions recorded makes it easier to reproduce an installation. Returning useful local changes to the source lets other repositories benefit from them too.
 
-Vcsinstall aims to support that workflow. Repository access and file operations are still to be implemented.
+vcsinstall is building that workflow incrementally, starting with dependency declaration and locking.
 
 ## Quick Usage
 
@@ -92,14 +94,21 @@ vcsinstall --config project/custom.toml init
 
 The parent directory must already exist. Init refuses to overwrite an existing file and creates no lockfile.
 
-The `dependency add NAME REPOSITORY` command is currently an empty operation that loads and validates project files without creating a dependency:
+Declare and lock a source dependency:
 
 ```bash
-vcsinstall dependency add ci git+https://example.com/team/shared.git
-vcsinstall --config project/custom.toml dependency add ci git+https://example.com/team/shared.git
+vcsinstall dependency add ci 'git+https://example.com/team/shared.git#branch=main'
+vcsinstall dependency add local-guides file:///home/user/shared-guides
+vcsinstall dependency add --redefine ci 'git+https://example.com/team/shared.git#tag=v2.0'
 ```
 
 Without `--config`, loading discovers the nearest `vcsinstall.toml` in the current directory or its parents. An explicit path overrides discovery. The selected configuration's parent is the project root, and its fixed sibling `vcsinstall.lock` is the [lockfile](specs/behavior/lockfile.md). A missing lockfile is allowed; an invalid existing lockfile fails validation. Loading changes neither file and does not access sources or installed contents.
+
+Dependency add requires existing configuration and writes both the declaration and its resolved revision. It creates no entry mappings. Git repositories share a per-user cache; global `--cache-dir DIRECTORY` selects another cache root. Dependency add resolves the cache root for every backend. Filesystem sources use their live directory and do not create cache data.
+
+When redefining a dependency with entries, each entry owns its entire destination tree. Extra local files count as local changes and can block replacement. After validation, changed entries are removed and recopied in full; entries already matching the source stay untouched. Keep generated and unrelated files outside these destinations.
+
+Configuration and locks store version selection as a kind/value object, for example `selector = { kind = "branch", value = "main" }`. The lock's separate `revision` records the resolved immutable content ID.
 
 ## Specifications
 

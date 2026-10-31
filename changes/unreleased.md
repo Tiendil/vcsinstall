@@ -1,11 +1,64 @@
+### Migration
+
+- Keep generated and unrelated files outside entry destinations. Each entry now owns its complete destination tree, so extra local files count as local changes and can block updates or ordinary removal.
+- Replace noncanonical `entries[].destination` values in `vcsinstall.toml` with canonical `@/` identifiers, such as `docs/guide` with `@/docs/guide`. Filesystem repository locators retain their native path syntax.
+
 ### Changes
 
-- Separate CLI command groups from application assembly, use typed Typer argument aliases and parsers, and organize tests by their owning modules.
+- Remove the project package, keeping operation guards and local-conflict diagnostics in runtime and destination validation in workspace with tests under their respective owners.
+- Simplify installation failures to preserve original errors with a general inconsistency notice, removing completed-path tracking and per-effect callbacks.
+- Rename workspace persistence helpers and serialized configuration and lockfile values to describe their scope and contents.
+- Validate complete local entry trees and replace changed destination roots by streaming all selected files, leaving already matching entries untouched even when only revision metadata changes.
+- Remove scoped file inspection, per-file deletion planning, and descendant replacement guards in favor of a root-bound filesystem removal primitive.
+- Rename the content protection guard to `validate_no_local_content_conflicts` to make its purpose explicit.
+- Extract per-entry inspection, validation, and plan construction from batch dependency planning.
+- Validate required entry baselines through Workspace before repository acquisition and report missing records with a dedicated missing_baseline diagnostic.
+- Remove the redundant prior dependency-lock argument and existence check from entry planning.
+- Select default hosting through an immutable factory registry, binding cache settings when each adapter is created.
+- Require the same canonical destination type in configuration and lockfile entries and remove repeated destination normalization from runtime and consistency guards.
+- Expose configuration and lockfile consistency guards through Workspace and report orphaned baselines before repository acquisition.
+- Add ordered per-dependency entry queries to Config and Lockfile and use them to simplify runtime planning.
+- Split dependency application into metadata construction, batch entry changes, and result-cell construction.
+- Rename source-adapter `validate_lock` to `validate_revision_lock` to distinguish revision validation from cache synchronization.
+- Classify invalid source input in adapters and propagate validation errors directly from runtime.
+- Delegate dependency input validation and scoped acquisition to source and hosting adapters, requiring both collaborators in runtime.
+- Simplify entry planning and leave self-overlapping source/destination configurations outside supported use cases.
+- Propagate original dependency-add errors without blanket dependency and lockfile context, preserving their codes and diagnostic fields.
+- Require one explicit source adapter in dependency_add instead of a replacement adapter registry, independently of hosting.
+- Rename dependency add's redefinition option from `--replace` to `--redefine` and its Python permission argument to `redefine`.
+- Bind the normalized cache root in an invocation scope and remove cache-root parameters from runtime operations.
+- Prepare repository backends and normalized locators at the CLI boundary and pass Dependency directly to runtime without invocation-directory or backend-option inputs.
+- Represent version selection with VersionSelector and SelectorKind, replacing parallel branch/tag/rev/reference fields and storing selectors as kind/value objects in configuration and locks.
+- Parse repository URLs into source requests, apply selector options and reject conflicts in the CLI, and pass completed intent to runtime.
+- Simplify repository and selector parsing by removing explicit NUL-character guards.
+- Select explicit `--vcs` directly and recognize repository prefixes through ordered adapter probes without a separate backend conflict check.
+- Treat rejected locator formats as ordinary repository non-matches while preserving operational errors and internal exceptions.
+- Detect Git before filesystem sources with native local metadata checks and bounded hosting-owned remote probes, preserving explicit backend choices and probe failures.
+- Share standard URL decoding through domain.urls and remove custom percent-escape validation.
+- Bind acquired repository paths and immutable revisions in ResolvedSource, simplifying hosting and source adapter interfaces and removing RepositoryView.
+- Keep advertised Git HEAD metadata in native cached refs and interpret omitted selectors only in the Git source adapter, removing default-branch fields from shared repository views.
+- Coordinate whole-selection validation and file changes in operation logic, and simplify FSClient to inspection and filesystem execution primitives.
+- Share file-focused ContentTree metadata between source and complete local-tree inspections, retaining file-change protection and structural empty-directory equivalence.
+- Use shared entity string normalization for file metadata.
+- Require prior regular-file inspection for streaming copies and render project metadata without filesystem access or repeated path checks.
+- Assume external state remains stable during an invocation and remove source revalidation, destination rescans, and copy-time rehashing for concurrent-change detection.
+- Separate source metadata inspection from streaming copying through stateless adapters and coordinate installation with plain entry plans.
+- Inspect source files through hashed manifests and copy their contents with bounded Python memory, batching filesystem fingerprinting across dependency entries.
+- Use tomli-w to serialize configuration and lockfiles from their Pydantic representations.
+- Serialize updated configuration directly without preserving comments or formatting.
+- Simplify configuration and lockfile persistence to direct writes without temporary-file staging.
+- Encapsulate filesystem inspection and changes in a root-bound FSClient with read-only access by default for source repositories.
+- Simplify workspace loading and writes by removing configuration and lockfile concurrency protection.
+- Add repository-bound Git clients under vcs_clients and share native repository setup and inspection across adapters and tests.
+- Encapsulate repository cache storage and lock coordination in RepoCache instances.
+- Resolve cache roots in the CLI before commands that may use the cache.
+- Use platformdirs for cache discovery and filelock for cache locking.
+- Implement `dependency add` for Git and filesystem sources, including version selection, revision locks, shared Git caching, and protected dependency replacement.
+- Separate CLI command groups from application assembly, use typed Typer argument and option aliases with semantic parsers, and organize tests by their owning modules.
 - Register all source adapters, including noop, by default and simplify adapter lookup.
 - Separate workspace loading from activation through `Workspace.scope()` and shared context infrastructure.
 - Trust tool-managed destination data when loading configuration and lockfiles.
 - Isolate backend validation in source adapters selected by an explicit registry, sharing pure dependency entities between configuration and lockfile loading.
-- Replace selector objects with a dependency version property while preserving source validation.
 - Remove the repository identity wrapper and validate backend and repository locator fields directly in source definitions.
 - Separate workspace configuration and lockfile models and loading responsibilities into dedicated modules.
 - Add version 1 configuration and lockfile models, project discovery and validation, `init`, and an empty `dependency add` command for the project-loading path.

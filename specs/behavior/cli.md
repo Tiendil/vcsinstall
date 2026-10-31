@@ -51,6 +51,11 @@ vcsinstall MUST treat installed content as files and directories without requiri
 Commands MUST NOT create commits or branches in the target repository or require it to use the same VCS as its sources.
 Command execution MUST NOT require a vcsinstall-specific interactive prompt or launch a commit-message editor.
 
+During one invocation, vcsinstall MUST assume that project state, filesystem content, repositories, and other external state change only through actions initiated by that invocation.
+Concurrent external changes are outside the supported execution model and MUST NOT require repeated state checks or change-detection guards.
+Observed state MAY be reused until the current invocation changes it; subsequent operations MUST account for changes initiated by that invocation.
+This assumption MUST NOT bypass validation of existing state, recorded baselines, requested revision availability, or the shared cache access lock required by `specs/behavior/cache.md`.
+
 The required commands MUST be:
 
 - `init` — Create starter project configuration.
@@ -69,7 +74,7 @@ The required commands MUST be:
 - `version` — Print the installed tool version.
 
 Locking operations and their state changes MUST follow Operation contracts and Preparation and consistency in `specs/behavior/locking.md`.
-File selection, empty-directory behavior, and preservation of unmanaged files MUST follow Source file selection, Directories, and Filesystem effects in `specs/behavior/files-and-directories.md` at each command's applicable boundary.
+File selection, entry destination ownership, empty-directory behavior, and filesystem changes MUST follow Source file selection, Destination ownership, Directories, and Filesystem effects in `specs/behavior/files-and-directories.md` at each command's applicable boundary.
 
 ## Application identity and project files
 
@@ -117,7 +122,7 @@ Configuration-independent commands MUST remain usable with an unusable `--config
 
 ### `--cache-dir DIRECTORY`
 
-Cache-root selection and Cache-independent operations in `specs/behavior/cache.md` MUST govern path interpretation, defaults, and deferred cache access.
+Cache-root selection and Cache-independent operations in `specs/behavior/cache.md` MUST govern path interpretation, defaults, and which commands resolve the cache root.
 Repository identity and layout and Repository reuse and revision isolation in that specification MUST govern cached repositories and their source content.
 
 ## Dependency definitions and source arguments
@@ -132,22 +137,29 @@ Shared revision and baseline semantics MUST follow State and shared revisions in
 Repository argument normalization MUST follow Repository locators and identity in `specs/behavior/vcs-interaction.md` and the selected backend's contract.
 
 `REPOSITORY` MUST accept VCS-qualified URLs of the form `<vcs>+<transport>://...`, including `git+https`, `git+ssh`, and `git+file` for Git.
-The VCS prefix MUST select the backend, and the remainder MUST identify the native repository locator using that backend's transport semantics.
-Native schemes that identify a VCS, such as `git://`, MUST select that VCS when supported.
-An explicit `--vcs` on `dependency add` MUST select the VCS for an unqualified native locator or agree with a VCS already identified by the scheme; a conflict MUST fail as an invalid argument.
-Without an explicit VCS, unqualified local paths and scp-style repository addresses MUST default to Git.
-Other transport-only URL schemes, such as `ssh://`, MUST require an explicit `--vcs` on `dependency add` or a VCS-qualified scheme.
+Without an explicit `--vcs`, the VCS prefix MUST select the backend, and the remainder MUST identify the native repository locator using that backend's transport semantics.
+Native schemes that identify a VCS, such as `git://`, MUST select that VCS when supported and `--vcs` is omitted.
+An explicit `--vcs` on `dependency add` MUST select the requested backend directly without checking agreement with the locator's prefix or native notation.
+The selected backend MUST process the locator and report any resulting format or repository-access failure under its own contract.
+Explicit backend selection MUST take precedence over repository detection and MUST NOT fall back to another backend after a failure.
+If an explicitly selected backend rejects the locator's format, the command MUST report an invalid argument rather than try another backend.
+Scp-style repository addresses without an explicit backend MUST select Git.
+Unqualified local paths MUST be detected as Git before ordinary filesystem sources under Repository detection in `specs/behavior/vcs-interaction.md`.
+A Git repository root MUST select Git; an ordinary directory not recognized by Git MUST select filesystem.
+A directory below a Git repository root MUST NOT select that ancestor repository implicitly.
 
-Without an explicit `--vcs`, plain `file://`, `http://`, and `https://` locators MUST identify ordinary filesystem or HTTP sources rather than imply Git.
+Without an explicit `--vcs`, plain `file://` locators MUST select ordinary filesystem sources.
 Filesystem source behavior MUST follow `specs/behavior/vcs/filesystem.md`.
-HTTP backend support MAY be introduced separately; until supported, HTTP source inputs MUST fail explicitly with guidance to use a VCS-qualified URL when a VCS repository was intended.
-A `.git` suffix or a familiar hosting domain MUST NOT override this distinction.
+Unqualified transport URLs, including `http://`, `https://`, and `ssh://`, MAY select Git only after successful remote metadata recognition under Repository detection in `specs/behavior/vcs-interaction.md`.
+Ordinary HTTP content remains unsupported; a URL not recognized by a supported backend MUST fail explicitly.
+A `.git` suffix or a familiar hosting domain MUST NOT by itself establish a Git source.
 For example, `git+file:///home/user/shared` MUST identify a Git repository, while plain `file:///home/user/shared` MUST identify ordinary filesystem content.
 
 For example, Git's `git+ssh://...` MUST normalize to native `ssh://...`, while an SVN `svn+ssh://...` locator MUST retain the native SVN-over-SSH scheme when passed to its client.
 URL normalization MUST separate vcsinstall's source-version fragment from the native repository locator.
 
 Relative native repository paths MUST resolve against the invocation's working directory; the recorded location MUST retain that meaning on later invocations from other directories.
+Invalid source-version syntax and selector-option conflicts MUST fail before repository probes.
 
 ### Source-version fragments and option aliases
 
@@ -161,7 +173,7 @@ For `dependency add`, a repository URL fragment MUST accept one of:
 Typed selector values MUST be nonempty and retain their literal spelling and case after percent decoding.
 Literal fragment delimiters in repository URLs or selector values MUST be percent-encoded.
 Selector decoding MUST occur exactly once and MUST preserve literal `+` characters.
-An empty fragment, unknown selector kind, malformed escape, or combination of selectors MUST fail as an invalid argument.
+An empty fragment, unknown selector kind, or combination of selectors MUST fail as an invalid argument.
 Unescaped `&` MUST NOT combine selectors; a literal `&` in a selector value MUST be percent-encoded.
 Fragment syntax MUST apply only to URL-form locators; unqualified filesystem paths and scp-style addresses MUST retain their native literal meaning.
 
@@ -172,7 +184,7 @@ Resolved selector behavior MUST follow Version selection in `specs/behavior/lock
 
 Dependency add MUST accept these source options:
 
-- `--vcs VCS` — Select or assert the VCS under the locator rules above.
+- `--vcs VCS` — Select the VCS under the locator rules above.
 - `--branch BRANCH` — Alias for the `branch` fragment selector.
 - `--tag TAG` — Alias for the `tag` fragment selector.
 - `--rev REVISION` — Alias for the `rev` fragment selector.
@@ -181,7 +193,7 @@ These options MUST NOT be required when the URL supplies the backend and version
 `--branch`, `--tag`, and `--rev` MUST be mutually exclusive and MUST NOT be combined with a version fragment, even when the selections appear equivalent.
 Equivalent URL-fragment and option forms MUST produce the same normalized declaration and selector semantics.
 
-Without a version fragment or option, `dependency add`, including with `--replace`, MUST use default-version inference under Version selection in `specs/behavior/locking.md`.
+Without a version fragment or option, `dependency add`, including with `--redefine`, MUST use default-version inference under Version selection in `specs/behavior/locking.md`.
 Revision arguments MAY use abbreviations accepted under that contract.
 CLI-generated declarations MUST follow the separate repository and selector fields in `specs/behavior/config.md`.
 
@@ -212,6 +224,7 @@ The reference `ci@/notes%20+draft#1?.md` preserves the filename `notes%20+draft#
 
 `DESTINATION` and `ENTRY_PATH` arguments MUST follow the Mixed path normalization contract in `specs/behavior/paths.md` in `llm-tool-cli`, using the selected project root and the invocation's working directory as the base for relative filesystem inputs.
 They MUST accept canonical `@/` identifiers and contained filesystem paths, including absolute paths and paths whose targets do not yet exist.
+The CLI MUST normalize accepted path arguments before constructing entry declarations or matching persisted destinations.
 Shared path diagnostics MUST retain their native information.
 
 Destination validity and entry identity MUST follow Destinations and entry identity in `specs/behavior/config.md`.
@@ -254,10 +267,10 @@ It MUST normalize the repository and version selection under the source argument
 It MUST NOT create entry mappings implicitly.
 Names and command shape MUST be validated before fetching sources or changing project files.
 
-Without `--replace`, an already declared name MUST fail as an invalid argument, including an identical repeat.
-The error MUST identify the name and explain that intentional redefinition requires `--replace`.
-`--replace` MUST authorize explicit dependency replacement under that operation contract.
-For a new name, `--replace` MUST still create the dependency normally.
+Without `--redefine`, an already declared name MUST fail as an invalid argument, including an identical repeat.
+The error MUST identify the name and explain that intentional redefinition requires `--redefine`.
+`--redefine` MUST authorize explicit dependency redefinition under that operation contract.
+For a new name, `--redefine` MUST still create the dependency normally.
 
 Examples:
 
@@ -265,7 +278,7 @@ Examples:
 vcsinstall dependency add ci 'git+https://example.com/team/shared.git#branch=main'
 vcsinstall dependency add formatting 'git+https://example.com/team/shared.git#tag=v1.0'
 vcsinstall dependency add --vcs git --branch main ci-native https://example.com/team/shared.git
-vcsinstall dependency add --replace formatting 'git+https://example.com/team/shared.git#tag=v2.0'
+vcsinstall dependency add --redefine formatting 'git+https://example.com/team/shared.git#tag=v2.0'
 ```
 
 ### `vcsinstall dependency list` command
@@ -499,8 +512,8 @@ Both removal modes MUST invoke the `remove` operation contract in `specs/behavio
 
 ### Removing installed content
 
-Without `--keep-files`, remove MUST delete the selected entries' managed files under Filesystem effects in `specs/behavior/files-and-directories.md`.
-Directory removal MUST use recorded manifests and MAY leave destination directories containing unmanaged files.
+Without `--keep-files`, remove MUST delete each selected destination root and its complete contents under Filesystem effects in `specs/behavior/files-and-directories.md`.
+Local additions within a directory entry MUST count as local modifications during verification.
 Existing content that is locally modified or cannot be verified against a trustworthy locked baseline MUST cause an operational failure unless `--force` is supplied.
 Verification MUST use Local comparison in `specs/behavior/files-and-directories.md` and Local state inspection in `specs/behavior/locking.md`.
 
@@ -508,8 +521,8 @@ Already missing installed files or directories MUST NOT by themselves prevent re
 Any remaining content scheduled for deletion MUST still satisfy the applicable verification rules.
 
 `--force` MUST waive only local-content and baseline-verification refusals for selected entries.
-It MUST NOT authorize deleting unmanaged descendants or infer ownership from the current directory contents.
-If a nonempty directory has no structurally valid recorded manifest identifying its managed files, removal requiring content deletion MUST fail even with `--force`, with guidance to use `--keep-files`.
+The declared entry roots MUST define the authorized deletion boundaries, including their local additions; missing baseline records MUST NOT by themselves prevent forced deletion.
+It MUST NOT authorize deleting content outside those roots.
 It MUST NOT bypass destination validation or ignore failures while changing files or project metadata.
 
 ### Keeping installed content
@@ -697,7 +710,7 @@ Direct delivery MUST use `pushed` for entries with contribution changes verified
 For filesystem overwrite, `push_repository` MUST identify the original source directory and `push_revision` MUST be the resulting complete source fingerprint.
 For patch delivery, `patch_file` MUST identify the same complete artifact for each exported entry; repository and review effect fields MUST be null, while `hosting_provider` MUST identify the selected implementation.
 The `revision` field MUST continue to identify the installation baseline rather than the newly published source revision.
-An entry delivered solely because of new local directory files MAY report `status = clean` while its outcome is `pushed` or `exported`, because ordinary local status MUST continue to describe its recorded baseline ownership.
+New local directory files MUST produce `status = modified` until a successful installation or update records matching source content as the baseline; publication alone MUST NOT change that status.
 
 ### Removal records
 

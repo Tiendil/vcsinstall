@@ -22,6 +22,8 @@ from vcsinstall.workspace.lockfile import (
     LockfilePath,
     load_lockfile,
 )
+from vcsinstall.workspace.persistence import WorkspaceFileUpdates, serialize_workspace_changes, write_workspace_files
+from vcsinstall.workspace.validation import validate_destinations
 
 __all__ = [
     "AbsentBaseline",
@@ -46,5 +48,9 @@ __all__ = [
     "active_workspace",
     "load_lockfile",
     "load_workspace",
+    "WorkspaceFileUpdates",
+    "serialize_workspace_changes",
+    "write_workspace_files",
+    "validate_destinations",
     "errors",
 ]

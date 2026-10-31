@@ -9,6 +9,8 @@ from vcsinstall.sources.interfaces import SourceAdapter
 
 type AdapterRegistry = Mapping[VcsId, SourceAdapter]
 
+DETECTION_ORDER = (VcsId.git, VcsId.filesystem, VcsId.noop)
+
 DEFAULT_ADAPTERS: AdapterRegistry = MappingProxyType(
     {
         VcsId.git: GitSourceAdapter(),
