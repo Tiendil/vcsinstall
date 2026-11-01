@@ -135,6 +135,7 @@ Shared revision and baseline semantics MUST follow State and shared revisions in
 ### Repository arguments
 
 Repository argument normalization MUST follow Repository locators and identity in `specs/behavior/vcs-interaction.md` and the selected backend's contract.
+After separating version fragments, modeled repository locator strings MUST adopt that contract's surrounding-whitespace stripping.
 
 `REPOSITORY` MUST accept VCS-qualified URLs of the form `<vcs>+<transport>://...`, including `git+https`, `git+ssh`, and `git+file` for Git.
 Without an explicit `--vcs`, the VCS prefix MUST select the backend, and the remainder MUST identify the native repository locator using that backend's transport semantics.
@@ -170,7 +171,8 @@ For `dependency add`, a repository URL fragment MUST accept one of:
 - `#rev=REVISION` — Pin an immutable source revision.
 - `#REF` — Infer a branch, tag, or immutable revision from a bare reference.
 
-Typed selector values MUST be nonempty and retain their literal spelling and case after percent decoding.
+Selector values MUST adopt whitespace stripping under Version selection in `specs/behavior/config.md`, after percent decoding for URL fragments or directly for option values.
+Typed selector values MUST be nonempty after stripping and retain their remaining literal spelling and case.
 Literal fragment delimiters in repository URLs or selector values MUST be percent-encoded.
 Selector decoding MUST occur exactly once and MUST preserve literal `+` characters.
 An empty fragment, unknown selector kind, or combination of selectors MUST fail as an invalid argument.
@@ -213,7 +215,8 @@ Unknown names MUST fail before fetching sources or changing project files.
 The name preceding the first `@/` MUST be an exact dependency name under Dependencies in `specs/behavior/config.md`.
 The suffix beginning at that `@/` MUST be normalized directly into `SOURCE_PATH` under Source paths in `specs/behavior/vcs-interaction.md`.
 `NAME@/` MUST select the dependency's repository root, represented by `@/`.
-Source references MUST preserve literal path text under the Source paths input-normalization contract in `specs/behavior/vcs-interaction.md`, without URL or percent decoding, and MUST NOT interpret query or fragment syntax.
+Source-path strings extracted from references MUST adopt whitespace stripping under Path-string normalization in `specs/behavior/files-and-directories.md`.
+After that stripping, source references MUST preserve literal path text under the Source paths input-normalization contract in `specs/behavior/vcs-interaction.md`, without URL or percent decoding, and MUST NOT interpret query or fragment syntax.
 Raw repository URLs and per-entry version options MUST NOT be accepted by `add`.
 
 **Example:** `ci@/specs` selects dependency `ci` with source path `@/specs`, while `ci@/` selects that dependency's repository root.
@@ -225,6 +228,7 @@ The reference `ci@/notes%20+draft#1?.md` preserves the filename `notes%20+draft#
 `DESTINATION` and `ENTRY_PATH` arguments MUST follow the Mixed path normalization contract in `specs/behavior/paths.md` in `llm-tool-cli`, using the selected project root and the invocation's working directory as the base for relative filesystem inputs.
 They MUST accept canonical `@/` identifiers and contained filesystem paths, including absolute paths and paths whose targets do not yet exist.
 The CLI MUST normalize accepted path arguments before constructing entry declarations or matching persisted destinations.
+Modeled path strings MUST also adopt surrounding-whitespace stripping under Path-string normalization in `specs/behavior/files-and-directories.md` before declaration validation or destination matching.
 Shared path diagnostics MUST retain their native information.
 
 Destination validity and entry identity MUST follow Destinations and entry identity in `specs/behavior/config.md`.

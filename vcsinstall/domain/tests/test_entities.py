@@ -169,6 +169,9 @@ class TestDependency:
             {"selector": {"kind": "branch", "value": ""}},
             {"selector": {"kind": "tag", "value": ""}},
             {"selector": {"kind": "revision", "value": ""}},
+            {"selector": {"kind": "branch", "value": " \t\n"}},
+            {"selector": {"kind": "tag", "value": " \t\n"}},
+            {"selector": {"kind": "revision", "value": " \t\n"}},
             {"selector": {}},
             {"selector": {"kind": "unknown", "value": "main"}},
             {"selector": {"kind": "branch", "value": "main", "extra": True}},
@@ -179,9 +182,9 @@ class TestDependency:
         with pytest.raises(pydantic.ValidationError):
             Dependency.model_validate({"vcs": "git", "repository": "source", **fields})
 
-    def test_preserves_literal_selector_without_backend_policy(self) -> None:
+    def test_normalizes_selector_without_backend_policy(self) -> None:
         dependency = Dependency.model_validate(
-            {"vcs": "git", "repository": "source", "selector": {"kind": "tag", "value": "literal fixture"}}
+            {"vcs": "git", "repository": "source", "selector": {"kind": "tag", "value": " \tliteral fixture\n"}}
         )
 
         assert dependency.selector is not None
@@ -191,9 +194,9 @@ class TestDependency:
     @pytest.mark.parametrize(
         "kind,value", [("branch", "Release/One"), ("tag", "v1.0+fix%2Fnotes"), ("revision", "a" * 40)]
     )
-    def test_nested_selector_roundtrips(self, kind: str, value: str) -> None:
+    def test_nested_selector_normalization_roundtrips(self, kind: str, value: str) -> None:
         data = {"vcs": "git", "repository": "../source", "selector": {"kind": kind, "value": value}}
-        dependency = Dependency.model_validate(data)
+        dependency = Dependency.model_validate({**data, "selector": {"kind": kind, "value": f" \t{value}\n"}})
 
         assert dependency.model_dump(mode="json") == data
         assert Dependency.model_validate_json(dependency.model_dump_json()).selector == dependency.selector

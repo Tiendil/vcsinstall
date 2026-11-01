@@ -34,7 +34,8 @@ They MUST be supplied independently; selecting one MUST NOT implicitly enable an
 
 Repository identity MUST consist of the source backend and its normalized native repository locator, independently of equivalent input syntax.
 Version selectors and resolved revisions MUST NOT form part of repository identity.
-Normalization MUST preserve the locator's native meaning, including transport and authority, under the selected backend's contract.
+Modeled repository locator strings MUST have leading and trailing whitespace, including spaces, stripped before their validated text establishes repository identity.
+After this stripping, normalization MUST preserve the locator's native meaning, including transport and authority, under the selected backend's contract.
 Different locators MUST NOT be equated merely through matching basenames or assumed equivalence between HTTPS and SSH addresses.
 
 Normalized native locators MUST exclude vcsinstall's source-version fragments.
@@ -65,13 +66,14 @@ Ownership of common input syntax, native locator interpretation, and probe effec
 A source path MUST be a canonical `@/` identifier anchored at the selected dependency's repository root at the selected revision.
 The prefix MUST refer to that repository root independently of the target project's root, the invocation's working directory, or the repository's acquisition location.
 `@/` MUST identify the repository root itself.
-Normalization MUST follow the Normalization contract in `specs/behavior/paths.md` in `llm-tool-cli`, retaining its canonical result as source-path identity.
+Source-path strings MUST first apply whitespace stripping under Path-string normalization in `specs/behavior/files-and-directories.md`.
+Subsequent lexical normalization MUST follow the Normalization contract in `specs/behavior/paths.md` in `llm-tool-cli`, retaining its canonical result as source-path identity.
 Inputs without the `@/` prefix MUST be rejected at boundaries accepting a source-path identifier; CLI source references MUST separate the dependency name from the source-path identifier under Source arguments in `specs/behavior/cli.md`.
 
 Source paths MUST NOT imply hosting-specific package discovery or modify the dependency's repository locator or version selector.
 They MUST NOT be interpreted as package names or expanded as globs.
 Source paths MUST NOT undergo local filesystem resolution, home expansion, URL or percent decoding, or interpretation relative to the target project.
-Ordinary path-segment text MUST retain its literal meaning under the shared normalization contract.
+After modeled path-string stripping, ordinary path-segment text MUST retain its literal meaning under the shared normalization contract.
 
 **Example:** `@/guides/../LICENSE` normalizes to `@/LICENSE`, and `@/.` normalizes to `@/`.
 
@@ -158,7 +160,7 @@ Filesystem and noop source or hosting access MUST NOT require or invoke a VCS ex
 
 Client invocations MUST use locator syntax supported by the selected installed client, preserving locator meaning under Repository locators and identity.
 Repository locators, selectors, and paths MUST be passed as data without allowing them to become shell commands or unintended client options.
-Paths MUST retain their literal meaning even when a native client ordinarily interprets them as patterns or revision syntax.
+After applicable modeled path-string stripping, paths MUST retain their literal meaning even when a native client ordinarily interprets them as patterns or revision syntax.
 Native client output MUST follow the CLI's protocol-delivery contract rather than be copied directly into the result stream.
 
 Source inspection MUST NOT alter an original repository's working files or administrative state.
@@ -216,9 +218,10 @@ Extraction MUST distinguish:
 
 An inspection or retrieval failure MUST NOT be reported as source-path absence.
 Whether absence can establish or update an entry MUST follow `specs/behavior/locking.md`.
-Extraction MUST preserve literal names and file bytes without applying package discovery or application-specific layout rules.
+Extracted file-path metadata MUST adopt whitespace stripping under Path-string normalization in `specs/behavior/files-and-directories.md`.
+After that stripping, extraction MUST preserve literal names and file bytes without applying package discovery or application-specific layout rules.
 
-Unsupported source objects or names that cannot be represented safely at the destination MUST fail before project mutation rather than be omitted, followed, or renamed silently.
+Unsupported source objects or names that cannot be represented safely at the destination MUST fail before project mutation rather than be omitted, followed, or renamed beyond the specified path-string normalization.
 Symbolic links MUST NOT bypass source or destination containment.
 Prepared source content MUST satisfy Content identity in `specs/behavior/files-and-directories.md` and Source integrity and cache independence in `specs/behavior/locking.md`.
 

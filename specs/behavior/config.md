@@ -53,7 +53,9 @@ Configuration tables MUST accept only the fields defined for them in this specif
 The supported schema version MUST be `1`; version values and diagnostics MUST follow the Version contract in `specs/behavior/config.md` in `llm-tool-cli`.
 A missing `version`, including in an empty document, MUST cause a schema-validation failure.
 A file containing only `version = 1` MUST describe a valid project with no dependencies or entries.
-Literal path and selector text MUST be preserved except for the normalization explicitly required by its owning contract.
+Path strings MUST apply surrounding-whitespace stripping under Path-string normalization in `specs/behavior/files-and-directories.md` before path validation.
+Remaining literal path text MUST be preserved except for normalization explicitly required by its owning contract.
+Repository locator normalization MUST follow Repository locators and identity in `specs/behavior/vcs-interaction.md`; selector text MUST follow Version selection below.
 
 ```toml
 version = 1
@@ -121,6 +123,7 @@ Selector meaning, omitted-selector inference, and reuse of inferred branches MUS
 A `revision` selector MUST identify an immutable revision in the backend's complete representation under its source contract in `specs/behavior/vcs-interaction.md`.
 The selector kind MUST be supported by the selected backend under Version resolution and anchoring in `specs/behavior/vcs-interaction.md`.
 
+Selector values MUST strip leading and trailing whitespace before nonempty and backend-specific validation, preserving the remaining literal text and case.
 Configuration selector strings MUST NOT undergo URL-fragment or percent decoding.
 
 ## Entries
@@ -148,7 +151,7 @@ The same source path MAY appear in multiple entries with different destinations.
 
 ### Destinations and entry identity
 
-Configured destinations MUST already be canonical `@/` project-path identifiers under `specs/behavior/paths.md` in `llm-tool-cli`, using the same representation as lockfile destinations.
+After surrounding-whitespace stripping, configured destinations MUST already be canonical `@/` project-path identifiers under `specs/behavior/paths.md` in `llm-tool-cli`, using the same representation as lockfile destinations.
 Ordinary relative or absolute filesystem paths and identifiers requiring normalization MUST fail configuration validation.
 Their meaning MUST remain independent of the invocation's working directory.
 They MUST resolve strictly below the project root under the shared containment contract, including its symbolic-link rules, without requiring an existing target.

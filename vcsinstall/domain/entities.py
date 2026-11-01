@@ -24,7 +24,7 @@ DependencyName = NewType(
 RepositoryLocator = NewType("RepositoryLocator", str)
 SelectorValue = NewType(
     "SelectorValue",
-    Annotated[str, pydantic.StringConstraints(min_length=1, strip_whitespace=False)],
+    Annotated[str, pydantic.StringConstraints(min_length=1, strip_whitespace=True)],
 )
 SourcePath = NewType(
     "SourcePath",

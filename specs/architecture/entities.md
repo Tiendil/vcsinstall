@@ -79,12 +79,15 @@ Entities SHOULD inherit it unless direct Pydantic use has a specific reason, suc
 
 Shared defaults SHOULD:
 
-- strip surrounding string whitespace.
 - validate defaults.
 - reject unknown fields.
 - prefer immutable values.
 - validate assignment when mutation is enabled.
 - avoid attribute-based construction unless a boundary needs it.
+
+String fields MUST use the shared base's stripping of leading and trailing whitespace, including spaces, before field validation unless their owning behavior contract explicitly requires literal whitespace preservation.
+Whitespace inside the remaining string MUST stay unchanged.
+File-path fields MUST follow Path-string normalization in `specs/behavior/files-and-directories.md`; selector values MUST follow whitespace stripping under Version selection in `specs/behavior/config.md`.
 
 Entities SHOULD use Pydantic fields/validators for:
 

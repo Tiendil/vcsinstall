@@ -6,7 +6,7 @@ This document describes entry destination ownership and how complete file trees 
 
 ## Scope
 
-This specification covers file selection, manifest meaning, directory creation and removal, content identity, and preservation guarantees at local filesystem and source-content boundaries.
+This specification covers modeled path-text normalization, file selection, manifest meaning, directory creation and removal, content identity, and preservation guarantees at local filesystem and source-content boundaries.
 The following are out of scope:
 
 - configuration, lockfile, and CLI syntax.
@@ -21,6 +21,20 @@ Source paths and backend content roots MUST follow Source paths in `specs/behavi
 Local access MUST follow the containment and symbolic-link contracts in `specs/behavior/paths.md` in `llm-tool-cli`.
 Baseline establishment and operation-specific verification MUST follow `specs/behavior/locking.md`.
 Persisted manifests and hash representations MUST follow `specs/behavior/lockfile.md`.
+
+## Path-string normalization
+
+Path strings in declarations, baselines, and inspected file metadata MUST have leading and trailing whitespace, including spaces, stripped before lexical normalization or canonical-identifier validation.
+Stripping MUST apply to the complete modeled string rather than independently to every path segment.
+Whitespace remaining inside that string MUST retain its literal meaning.
+Canonical identifiers used for matching, persistence, and content hashes MUST use the resulting text.
+These rules MUST apply to file-path metadata discovered during source and local filesystem inspection as well as user-supplied model data.
+Stripping MUST NOT waive path uniqueness or complete-tree content protection; distinct inspected paths that collapse to one identifier MUST fail before effects rather than silently omit a file.
+
+**Example:** The modeled path string `"  @/docs/guide.md  "` becomes `"@/docs/guide.md"`, while `"@/docs/Project Plan.md"` keeps its internal space.
+
+This is vcsinstall's model-level normalization; shared path utilities and filesystem-path values outside these string models MUST retain their own contracts.
+File bytes MUST NOT undergo whitespace stripping.
 
 ## Configuration and lockfile roles
 
@@ -80,12 +94,11 @@ A directory mapping MUST remain one entry with one manifest, independently of it
 Manifest children MUST NOT become independently versioned entries.
 Every file MUST use the dependency's shared locked revision.
 
-Paths within a directory manifest MUST use canonical `@/` identifiers under Identifiers and Identifier checks in `specs/behavior/paths.md` in `llm-tool-cli`, with the entry root as the identifier root.
+Paths within a directory manifest MUST apply whitespace stripping under Path-string normalization before using canonical `@/` identifiers under Identifiers and Identifier checks in `specs/behavior/paths.md` in `llm-tool-cli`, with the entry root as the identifier root.
 Every child identifier MUST be strictly below that root; `@/` MUST NOT identify a directory-manifest child.
 Manifest paths MUST retain this canonical spelling, including the `@/` prefix, in persisted records, comparisons, and content hashes.
 Manifest paths MUST be unique, and one file path MUST NOT be an ancestor of another file path.
 Names MUST NOT undergo Unicode normalization or case folding.
-Input models MAY use the shared entity string-normalization defaults before path validation; preservation of surrounding whitespace is not required.
 Paths MUST NOT undergo home or glob expansion.
 Every listed child MUST be a regular file; directories MUST be inferred from file paths.
 An empty directory selection MUST have an empty manifest.
@@ -136,7 +149,7 @@ Directory permissions and the existence of otherwise empty directories MUST NOT 
 
 ## Content identity
 
-Content identity MUST depend on selected file paths, kinds, and exact bytes.
+Content identity MUST depend on selected file paths after Path-string normalization, kinds, and exact bytes.
 The same selected content MUST produce the same identity independently of the backend, cache location, and destination name.
 VCS revision identifiers MUST NOT substitute for installed-content hashes.
 Hashes MUST use SHA-256 with the stored representation in Hash representation in `specs/behavior/lockfile.md`.

@@ -153,6 +153,43 @@ class TestDependencyAdd:
             assert declared["selector"]["value"] == revision
         assert not list(source.glob(".vcsinstall*"))
 
+    @pytest.mark.parametrize("kind", ["branch", "tag", "rev"])
+    @pytest.mark.parametrize("form", ["option", "fragment"])
+    def test_selector_whitespace_is_stripped(self, config: Path, tmp_path: Path, kind: str, form: str) -> None:
+        source = tmp_path / "source"
+        client = create_repository(source)
+        revision = client.resolve_commit("HEAD").unwrap()
+        client.create_tag("release").unwrap()
+        value = {"branch": "trunk", "tag": "release", "rev": revision[:12]}[kind]
+        locator = "git+" + source.as_uri()
+        arguments = (
+            ["--" + kind, f" \t{value}\n", "ci", locator]
+            if form == "option"
+            else ["ci", locator + f"#{kind}=%20%09{value}%0A"]
+        )
+
+        code, records, output = invoke_add(config, tmp_path / "cache", *arguments)
+
+        assert code == 0, output
+        expected = revision if kind == "rev" else value
+        assert records[0]["ref"] == expected
+        assert records[0]["revision"] == revision
+        for path in (config, config.with_name("vcsinstall.lock")):
+            selector = tomllib.loads(path.read_text())["dependencies"]["ci"]["selector"]
+            assert selector == {"kind": "revision" if kind == "rev" else kind, "value": expected}
+
+    @pytest.mark.parametrize("kind", ["branch", "tag", "rev"])
+    def test_whitespace_only_selector_option_is_rejected(self, config: Path, tmp_path: Path, kind: str) -> None:
+        cache = tmp_path / "cache"
+        before = config.read_bytes()
+
+        code, _, output = invoke_add(config, cache, "--" + kind, " \t\n", "ci", "git+https://example.com/repo")
+
+        assert code == 2, output
+        assert config.read_bytes() == before
+        assert not config.with_name("vcsinstall.lock").exists()
+        assert not cache.exists()
+
     def test_default_replacement_refreshes_and_reinfers(self, config: Path, tmp_path: Path) -> None:
         source = tmp_path / "source"
         client = create_repository(source)
@@ -212,6 +249,8 @@ class TestDependencyAdd:
             ("git+https://example.com/shared#", []),
             ("git+https://example.com/shared#branch=main&tag=v1", []),
             ("git+https://example.com/shared#branch=main", ["--tag", "v1"]),
+            ("git+https://example.com/shared#branch=%20", []),
+            ("git+https://example.com/shared#%20", []),
             ("git+https://example.com/shared", ["--vcs", "filesystem"]),
             ("file:///missing", ["--branch", "main"]),
             ("/missing", ["--branch", "main", "--tag", "v1"]),

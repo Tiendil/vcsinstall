@@ -23,6 +23,10 @@ class TestParseRepository:
             ("git+ssh://user@host/team/repo#tag=Release+%252F", "git+ssh://user@host/team/repo", "tag", "Release+%2F"),
             ("https://host/team/repo#rev=abc123", "https://host/team/repo", "revision", "abc123"),
             ("git://host/team/repo#Main+%252F", "git://host/team/repo", "unresolved", "Main+%2F"),
+            ("git+https://host/repo#branch=%20%09Main+fix%20", "git+https://host/repo", "branch", "Main+fix"),
+            ("git+https://host/repo#tag=%20Release%20", "git+https://host/repo", "tag", "Release"),
+            ("git+https://host/repo#rev=%20abc123%20", "git+https://host/repo", "revision", "abc123"),
+            ("git+https://host/repo#%20Main%20", "git+https://host/repo", "unresolved", "Main"),
             ("user@host:team/repo#literal", "user@host:team/repo#literal", None, None),
             ("../repo#branch=literal", "../repo#branch=literal", None, None),
             ("file:///a%20b#tag=release", "file:///a%20b", "tag", "release"),
@@ -45,7 +49,21 @@ class TestParseRepository:
     def test_invalid_locators_return_shared_diagnostic(self, locator: str) -> None:
         assert parse_repository(RepositoryLocator(locator)).is_err(InvalidArguments)
 
-    @pytest.mark.parametrize("fragment", ["", "wat=x", "branch=", "branch=x&tag=y", "branch=x#tag=y", "branch=x=y"])
+    @pytest.mark.parametrize(
+        "fragment",
+        [
+            "",
+            "wat=x",
+            "branch=",
+            "branch=x&tag=y",
+            "branch=x#tag=y",
+            "branch=x=y",
+            "branch=%20",
+            "tag=%09",
+            "rev=%0A",
+            "%20",
+        ],
+    )
     def test_invalid_fragments_return_shared_diagnostic(self, fragment: str) -> None:
         parsed = parse_repository(RepositoryLocator("git+https://host/repo#" + fragment))
 

@@ -41,6 +41,7 @@ The supported lockfile schema version MUST be `1`.
 Version validation and diagnostics MUST follow the Version contract in `specs/behavior/config.md` in `llm-tool-cli`; missing versions, including empty documents, MUST fail schema validation.
 Lockfile and configuration schema versions MUST be validated independently.
 A file containing only `version = 1` MUST be a valid lockfile with no recorded dependencies or entries.
+Recorded path strings MUST apply surrounding-whitespace stripping under Path-string normalization in `specs/behavior/files-and-directories.md` before canonical-path validation, matching, or manifest hashing.
 
 Parsing and schema validation MUST NOT fetch sources, require a VCS executable, access the repository cache, or inspect installed content.
 Loading MUST validate recorded structure independently of whether it matches active configuration.
@@ -59,7 +60,7 @@ Each value MUST be a table with these fields:
 Repository identity and the selector structure MUST follow the configuration contract.
 Relative filesystem repository locators MUST retain their project-root-relative meaning.
 Every Git dependency lock MUST contain a selector with kind `branch`, `tag`, or `revision`.
-Branch and tag spellings MUST remain literal in `selector.value`; they MUST NOT be replaced by resolved commits.
+After selector whitespace stripping under Version selection in `specs/behavior/config.md`, branch and tag spellings MUST remain literal in `selector.value`; they MUST NOT be replaced by resolved commits.
 
 `revision` MUST use the backend's complete immutable representation under the source contracts identified in `specs/behavior/vcs-interaction.md`.
 For a selector with kind `revision`, the lock's `revision` MUST identify that same pinned revision.

@@ -31,6 +31,7 @@ Native directory paths MUST also be accepted with explicit `--vcs filesystem` or
 Automatic selection of native directories MUST follow Repository arguments in `specs/behavior/cli.md`; explicit filesystem selection MUST retain live-content semantics even when the directory is also a Git repository.
 The [file URI specification](https://www.rfc-editor.org/rfc/rfc8089.html) defines the local authority and path notation used here.
 
+Modeled repository locator strings MUST adopt surrounding-whitespace stripping under Repository locators and identity in `specs/behavior/vcs-interaction.md`.
 The normalized native repository locator MUST be the absolute source directory path, with root resolution following Project-root resolution in `specs/behavior/paths.md` in `llm-tool-cli` after applicable home expansion and URI decoding.
 Relative locators MUST use the respective bases established by `specs/behavior/cli.md` and `specs/behavior/config.md`.
 Equivalent file-URL and native-path forms selecting the same normalized root MUST have the same repository identity.
@@ -70,6 +71,7 @@ Within an invocation, source stability MUST follow General behavior in `specs/be
 Unreadable or unsupported objects MUST fail rather than be skipped while fingerprinting or extracting.
 
 The content root MUST be the source directory, with file selection and structural directories following Source file selection and Directories in `specs/behavior/files-and-directories.md`.
+Inspected file-path strings MUST adopt surrounding-whitespace stripping under Path-string normalization in that specification, without stripping file bytes.
 Hidden files and files named after VCS metadata MUST remain ordinary content; VCS ignore rules MUST NOT apply implicitly.
 Symbolic links below the resolved source root MUST be rejected under Filesystem containment in `specs/behavior/paths.md` in `llm-tool-cli`; the root itself MAY be selected through a resolved symlink.
 

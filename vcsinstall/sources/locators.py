@@ -46,35 +46,39 @@ def parse_repository(repository: RepositoryLocator) -> Result[SourceRequest]:  #
     native = str(repository)
     if not native:
         return Err([InvalidArguments(reason="A nonempty repository locator is required.")])
-    if urls.is_url(native):
-        try:
-            url = urlsplit(native)
-        except ValueError as exc:
-            return Err([InvalidArguments(reason=str(exc))])
-        native = native.split("#", 1)[0]
-        if "#" in repository:
-            fragment = url.fragment
-            if not fragment or "&" in fragment or "#" in fragment:
-                return Err(
-                    [
-                        InvalidArguments(
-                            reason="Supply one nonempty source-version fragment, without combining selectors."
-                        )
-                    ]
-                )
-            if "=" in fragment:
-                kind, value = fragment.split("=", 1)
-                if kind not in ("branch", "tag", "rev") or not value or "=" in value:
-                    return Err([InvalidArguments(reason="Expected #branch=BRANCH, #tag=TAG, #rev=REVISION, or #REF.")])
-                selector = VersionSelector(
-                    kind={"branch": SelectorKind.branch, "tag": SelectorKind.tag, "rev": SelectorKind.revision}[kind],
-                    value=SelectorValue(urls.decode_url(value)),
-                )
-            else:
-                selector = VersionSelector(
-                    kind=SelectorKind.unresolved, value=SelectorValue(urls.decode_url(fragment))
-                )
     try:
+        if urls.is_url(native):
+            try:
+                url = urlsplit(native)
+            except ValueError as exc:
+                return Err([InvalidArguments(reason=str(exc))])
+            native = native.split("#", 1)[0]
+            if "#" in repository:
+                fragment = url.fragment
+                if not fragment or "&" in fragment or "#" in fragment:
+                    return Err(
+                        [
+                            InvalidArguments(
+                                reason="Supply one nonempty source-version fragment, without combining selectors."
+                            )
+                        ]
+                    )
+                if "=" in fragment:
+                    kind, value = fragment.split("=", 1)
+                    if kind not in ("branch", "tag", "rev") or not value or "=" in value:
+                        return Err(
+                            [InvalidArguments(reason="Expected #branch=BRANCH, #tag=TAG, #rev=REVISION, or #REF.")]
+                        )
+                    selector = VersionSelector(
+                        kind={"branch": SelectorKind.branch, "tag": SelectorKind.tag, "rev": SelectorKind.revision}[
+                            kind
+                        ],
+                        value=SelectorValue(urls.decode_url(value)),
+                    )
+                else:
+                    selector = VersionSelector(
+                        kind=SelectorKind.unresolved, value=SelectorValue(urls.decode_url(fragment))
+                    )
         request = SourceRequest(repository=RepositoryLocator(native), selector=selector)
     except pydantic.ValidationError as exc:
         return Err([InvalidArguments(reason=str(exc)).with_cause(exc)])
