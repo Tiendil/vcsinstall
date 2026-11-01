@@ -3,6 +3,7 @@ import subprocess  # noqa: S404 — Simulate the native command boundary for fai
 from pathlib import Path
 
 import pytest
+from llm_tool_cli.core.result import Ok
 from pytest_mock import MockerFixture
 
 from vcsinstall.domain import RepositoryLocator, VcsId
@@ -190,7 +191,115 @@ class TestGitClient:
 
         assert client.resolve_commit(revision).unwrap() == revision
         assert client.resolve_commit(revision[:12]).unwrap() == revision
+        assert client.resolve_commit(revision.upper()).unwrap() == revision
+        assert client.resolve_commit(revision[:12].upper()).unwrap() == revision
         assert client.resolve_commit("refs/heads/trunk", peel=True).unwrap() == revision
+
+    @pytest.mark.parametrize("object_format", ["sha1", "sha256"])
+    @pytest.mark.parametrize("reference_kind", ["branch", "tag"])
+    @pytest.mark.parametrize("abbreviated", [False, True])
+    def test_resolve_commit__hexadecimal_identifiers_ignore_reference_names(
+        self, tmp_path: Path, object_format: str, reference_kind: str, abbreviated: bool
+    ) -> None:
+        client = create_repository(tmp_path / "source", object_format=object_format)
+        previous = client.resolve_commit("HEAD").unwrap()
+        (client.path / "guide.txt").write_bytes(b"newer content")
+        current = client.commit("Advance source", all_tracked=True).unwrap()
+        name = previous[:12] if abbreviated else previous
+        if reference_kind == "branch":
+            client.create_branch(name).unwrap()
+        else:
+            client.create_tag(name).unwrap()
+
+        assert client.resolve_commit(name).unwrap() == previous
+        namespace = "heads" if reference_kind == "branch" else "tags"
+        assert client.resolve_commit(f"refs/{namespace}/{name}", peel=True).unwrap() == current
+
+    @pytest.mark.parametrize("object_format", ["sha1", "sha256"])
+    @pytest.mark.parametrize("object_name", ["HEAD", "HEAD^{tree}", "HEAD:guide.txt"])
+    def test_resolve_object_id__resolves_local_objects(
+        self, tmp_path: Path, object_format: str, object_name: str
+    ) -> None:
+        client = create_repository(tmp_path / "source", object_format=object_format)
+        identifier = client.resolve_object(object_name).unwrap()
+
+        assert client.resolve_object_id(identifier).unwrap() == identifier
+        assert client.resolve_object_id(identifier[:12]).unwrap() == identifier
+        assert client.resolve_object_id(identifier.upper()).unwrap() == identifier
+
+    def test_resolve_object__rejects_reference_without_matching_object(self, client: GitClient) -> None:
+        prefix = next(
+            value for value in ("0000", "1111", "2222", "3333") if client.resolve_object_id(value).unwrap() is None
+        )
+        client.create_branch(prefix).unwrap()
+
+        assert client.resolve_object_id(prefix).unwrap() is None
+        problem = client.resolve_object(prefix).unwrap_err()[0]
+
+        assert isinstance(problem, errors.ObjectIdResolution)
+        assert problem.repository == client.repository
+        assert problem.value == prefix
+        assert problem.matches == 0
+        assert problem.ways_to_fix
+
+    def test_resolve_object_id__rejects_ambiguous_object_prefix(
+        self, client: GitClient, mocker: MockerFixture
+    ) -> None:
+        matches = (GitObjectId("a" * 40), GitObjectId("a" * 39 + "b"))
+        mocker.patch.object(
+            GitClient, "run", return_value=Ok(b"\n".join(value.encode("ascii") for value in matches) + b"\n")
+        )
+
+        problem = client.resolve_object_id("aaaa").unwrap_err()[0]
+
+        assert isinstance(problem, errors.ObjectIdResolution)
+        assert problem.repository == client.repository
+        assert problem.value == "aaaa"
+        assert problem.matches == 2
+
+    def test_resolve_object__preserves_object_query_failure(self, tmp_path: Path) -> None:
+        client = GitClient(path=tmp_path / "missing", repository=RepositoryLocator("source"))
+
+        problem = client.resolve_object("abcd").unwrap_err()[0]
+
+        assert isinstance(problem, errors.CommandFailed)
+        assert problem.repository == client.repository
+        assert problem.returncode
+
+    @pytest.mark.parametrize(
+        "object_format,value,expected",
+        [
+            ("sha1", "0" * 40, True),
+            ("sha1", "0" * 64, False),
+            ("sha1", "abcd", False),
+            ("sha1", "g" * 40, False),
+            ("sha1", "A" * 40, True),
+            ("sha256", "0" * 64, True),
+            ("sha256", "0" * 40, False),
+            ("sha256", "0" * 12, False),
+            ("sha256", "g" * 64, False),
+        ],
+    )
+    def test_is_full_object_id__checks_repository_format_without_requiring_object(
+        self, tmp_path: Path, object_format: str, value: str, expected: bool
+    ) -> None:
+        client = create_repository(tmp_path / "source", object_format=object_format)
+
+        assert client.is_full_object_id(value).unwrap() == expected
+
+    def test_is_full_object_id__preserves_command_failure(self, tmp_path: Path) -> None:
+        client = GitClient(path=tmp_path / "missing", repository=RepositoryLocator("source"))
+
+        assert client.is_full_object_id("a" * 40).is_err(errors.CommandFailed)
+
+    def test_is_full_object_id__rejects_unsupported_format(self, client: GitClient, mocker: MockerFixture) -> None:
+        mocker.patch.object(GitClient, "run", return_value=Ok(b"unsupported\n"))
+
+        problem = client.is_full_object_id("a" * 40).unwrap_err()[0]
+
+        assert isinstance(problem, errors.CommandFailed)
+        assert problem.repository == client.repository
+        assert "unsupported" in problem.reason
 
     @pytest.mark.parametrize("object_name", ["HEAD^{tree}", "HEAD:guide.txt", "refs/tags/release"])
     def test_resolve_commit__rejects_noncommit_objects(self, client: GitClient, object_name: str) -> None:

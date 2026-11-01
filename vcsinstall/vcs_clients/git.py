@@ -178,8 +178,45 @@ class GitClient:
     def delete_tag(self, name: str) -> Result[None]:
         return self.run(["tag", "--delete", "--", name]).map(lambda _: None)
 
+    @unwrap_to_error
+    def resolve_object_id(self, value: str) -> Result[GitObjectId | None]:
+        """Resolve a hexadecimal ID or prefix locally, returning None when absent."""
+        matches = self.run(["rev-parse", f"--disambiguate={value.lower()}"]).unwrap().splitlines()
+        if len(matches) > 1:
+            return Err([errors.ObjectIdResolution(repository=self.repository, value=value, matches=len(matches))])
+        return Ok(GitObjectId(matches[0].decode("ascii")) if matches else None)
+
+    @unwrap_to_error
+    def is_full_object_id(self, value: str) -> Result[bool]:
+        """Check full hexadecimal spelling against this repository's storage format."""
+        object_format = self.run(["rev-parse", "--show-object-format"]).unwrap().strip()
+        length = {b"sha1": 40, b"sha256": 64}.get(object_format)
+        if length is None:
+            return Err(
+                [
+                    errors.CommandFailed(
+                        vcs=VcsId.git,
+                        repository=self.repository,
+                        reason=f"Unsupported Git object format: {object_format!r}.",
+                    )
+                ]
+            )
+        return Ok(len(value) == length and is_git_object_id_input(value))
+
+    def fetch_references(self) -> Result[None]:
+        """Fetch current branch and tag objects into the mirrored namespaces."""
+        return self.run(
+            ["fetch", "--force", "--prune", "origin", "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"]
+        ).map(lambda _: None)
+
+    @unwrap_to_error
     def resolve_object(self, value: str) -> Result[GitObjectId]:
-        """Resolve a native revision expression to an object of any kind."""
+        """Resolve hexadecimal object IDs directly and other native revision expressions."""
+        if is_git_object_id_input(value):
+            identifier = self.resolve_object_id(value).unwrap()
+            if identifier is None:
+                return Err([errors.ObjectIdResolution(repository=self.repository, value=value, matches=0)])
+            return Ok(identifier)
         return self.run(["rev-parse", "--verify", "--end-of-options", value]).map(
             lambda output: GitObjectId(output.decode("ascii").strip())
         )

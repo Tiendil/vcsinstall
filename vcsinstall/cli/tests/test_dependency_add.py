@@ -153,6 +153,74 @@ class TestDependencyAdd:
             assert declared["selector"]["value"] == revision
         assert not list(source.glob(".vcsinstall*"))
 
+    @pytest.mark.parametrize("object_format", ["sha1", "sha256"])
+    @pytest.mark.parametrize("reference_kind", ["branch", "tag"])
+    def test_revision_pin_ignores_hexadecimal_reference(
+        self, config: Path, tmp_path: Path, object_format: str, reference_kind: str
+    ) -> None:
+        client = create_repository(tmp_path / "source", object_format=object_format)
+        previous = client.resolve_commit("HEAD").unwrap()
+        (client.path / "guide.txt").write_bytes(b"newer content")
+        client.commit("Advance source", all_tracked=True).unwrap()
+        value = previous[:12]
+        if reference_kind == "branch":
+            client.create_branch(value).unwrap()
+        else:
+            client.create_tag(value).unwrap()
+
+        code, records, output = invoke_add(config, tmp_path / "cache", "--rev", value, "ci", str(client.path))
+
+        assert code == 0, output
+        assert records[0]["revision"] == previous
+        for path in (config, config.with_name("vcsinstall.lock")):
+            dependency = tomllib.loads(path.read_text())["dependencies"]["ci"]
+            assert dependency["selector"] == {"kind": "revision", "value": previous}
+
+    @pytest.mark.parametrize("object_format", ["sha1", "sha256"])
+    def test_new_abbreviated_revision_is_acquired_from_populated_cache(
+        self, config: Path, tmp_path: Path, object_format: str
+    ) -> None:
+        client = create_repository(tmp_path / "source", object_format=object_format)
+        previous = client.resolve_commit("HEAD").unwrap()
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", str(client.path))[0] == 0
+        (client.path / "guide.txt").write_bytes(b"newer content")
+        revision = client.commit("Advance source", all_tracked=True).unwrap()
+
+        code, records, output = invoke_add(config, cache, "--rev", revision[:12], "pinned", str(client.path))
+
+        assert code == 0, output
+        assert records[0]["revision"] == revision
+        for path in (config, config.with_name("vcsinstall.lock")):
+            dependency = tomllib.loads(path.read_text())["dependencies"]["pinned"]
+            assert dependency["selector"] == {"kind": "revision", "value": revision}
+        locked = tomllib.loads(config.with_name("vcsinstall.lock").read_text())["dependencies"]
+        assert locked["ci"]["revision"] == previous
+
+    def test_missing_abbreviated_revision_fetch_failure_preserves_project(self, config: Path, tmp_path: Path) -> None:
+        client = create_repository(tmp_path / "source")
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", str(client.path))[0] == 0
+        declare_entry(config, source="@/guide.txt", destination="@/installed", files=b"original\n")
+        installed = tmp_path / "installed"
+        installed.write_bytes(b"original\n")
+        (client.path / "guide.txt").write_bytes(b"newer content")
+        revision = client.commit("Advance source", all_tracked=True).unwrap()
+        before = (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes(), installed.read_bytes())
+        client.path.rename(tmp_path / "unavailable-source")
+
+        code, records, output = invoke_add(
+            config, cache, "--vcs", "git", "--rev", revision[:12], "--redefine", "ci", str(client.path)
+        )
+
+        assert code == ExitCode.environment_error, output
+        assert records[0]["code"] == "vcs_command_failed"
+        assert (
+            config.read_bytes(),
+            config.with_name("vcsinstall.lock").read_bytes(),
+            installed.read_bytes(),
+        ) == before
+
     @pytest.mark.parametrize("kind", ["branch", "tag", "rev"])
     @pytest.mark.parametrize("form", ["option", "fragment"])
     def test_selector_whitespace_is_stripped(self, config: Path, tmp_path: Path, kind: str, form: str) -> None:

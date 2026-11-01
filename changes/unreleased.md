@@ -5,6 +5,9 @@
 
 ### Changes
 
+- Encapsulate strict local Git object resolution and repository-format completeness checks behind focused client methods.
+- Resolve hexadecimal Git revision pins through object identifiers so same-named branches and tags cannot redirect them.
+- Acquire missing abbreviated Git commits from populated caches while retaining direct full-ID fetching and reuse of available pinned objects.
 - Strip surrounding whitespace from selector values consistently in CLI options, URL fragments, configuration, and locks, rejecting values that become empty.
 - Make surrounding-whitespace stripping explicit across path, configuration, CLI, and source specifications while preserving file bytes.
 - Remove the project package, keeping operation guards and local-conflict diagnostics in runtime and destination validation in workspace with tests under their respective owners.

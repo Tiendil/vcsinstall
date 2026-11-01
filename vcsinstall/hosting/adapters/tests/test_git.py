@@ -52,6 +52,41 @@ class TestGitHostingAdapter:
             pass
 
     @pytest.mark.parametrize(
+        "object_format,prefix_length", [("sha1", 12), ("sha1", 40), ("sha256", 12), ("sha256", 40), ("sha256", 64)]
+    )
+    def test_acquire__retrieves_missing_revision_from_populated_cache(
+        self, tmp_path: Path, object_format: str, prefix_length: int
+    ) -> None:
+        client = create_repository(tmp_path / "source", object_format=object_format)
+        dependency = make.dependency(repository=str(client.path))
+        hosting = GitHostingAdapter(root=CacheRootPath(tmp_path / "cache"))
+        with hosting.acquire(dependency) as acquired:
+            acquired.unwrap()
+        (client.path / "guide.txt").write_bytes(b"new commit")
+        revision = client.commit("Advance source", all_tracked=True).unwrap()
+        pinned = dependency.replace(selector=make.selector("revision", revision[:prefix_length]))
+
+        with hosting.acquire(pinned) as acquired:
+            cached = GitClient(path=acquired.unwrap(), repository=dependency.repository)
+            assert cached.resolve_commit(revision[:prefix_length]).unwrap() == revision
+
+    @pytest.mark.parametrize("abbreviated", [False, True])
+    def test_acquire__reuses_cached_pin_without_source_access(self, tmp_path: Path, abbreviated: bool) -> None:
+        client = create_repository(tmp_path / "source")
+        dependency = make.dependency(repository=str(client.path))
+        revision = client.resolve_commit("HEAD").unwrap()
+        hosting = GitHostingAdapter(root=CacheRootPath(tmp_path / "cache"))
+        with hosting.acquire(dependency) as acquired:
+            acquired.unwrap()
+        client.path.rename(tmp_path / "unavailable-source")
+        value = revision[:12] if abbreviated else revision
+        pinned = dependency.replace(selector=make.selector("revision", value))
+
+        with hosting.acquire(pinned) as acquired:
+            cached = GitClient(path=acquired.unwrap(), repository=dependency.repository)
+            assert cached.resolve_commit(value).unwrap() == revision
+
+    @pytest.mark.parametrize(
         "value",
         [
             "",

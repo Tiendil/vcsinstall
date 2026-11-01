@@ -61,10 +61,11 @@ class GitHostingAdapter:
                 )
         selector = dependency.selector
         if selector is None or selector.kind != SelectorKind.revision:
-            client.run(
-                ["fetch", "--force", "--prune", "origin", "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"]
-            ).unwrap()
+            client.fetch_references().unwrap()
             client.refresh_remote_head().unwrap()
-        elif client.run(["cat-file", "-e", selector.value]).is_err():
-            client.run(["fetch", "origin", selector.value]).unwrap()
+        elif client.resolve_object_id(selector.value).unwrap() is None:
+            if client.is_full_object_id(selector.value).unwrap():
+                client.run(["fetch", "origin", selector.value.lower()]).unwrap()
+            else:
+                client.fetch_references().unwrap()
         return Ok(path)

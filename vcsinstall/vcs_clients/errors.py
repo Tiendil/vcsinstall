@@ -23,6 +23,20 @@ class CommandFailed(EnvironmentError):
     returncode: int | None = None
 
 
+class ObjectIdResolution(EnvironmentError):
+    code: str = "git_object_id_resolution_failed"
+    message: str = (
+        "Git object identifier {error.value!r} in repository {error.repository!r} matches "
+        "{error.matches} available objects; expected exactly one."
+    )
+    ways_to_fix: list[str] = [
+        "Use a complete commit identifier or an unambiguous hexadecimal abbreviation available in the repository."
+    ]
+    repository: RepositoryLocator
+    value: str
+    matches: int
+
+
 class InvalidCommit(EnvironmentError):
     code: str = "git_invalid_commit"
     message: str = "Git object {error.value!r} in repository {error.repository!r} is not a commit."
