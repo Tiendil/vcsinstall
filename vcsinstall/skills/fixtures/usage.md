@@ -1,9 +1,9 @@
 # `vcsinstall` Usage
 
 `vcsinstall` is being developed to install files into a repository from other repositories, with lockfile and push-back support.
-The current CLI provides help, version information, this usage document, configuration initialization, and dependency declaration and locking.
+The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration and locking, and entry installation.
 `dependency add` supports Git and ordinary filesystem sources, including protected replacement of existing dependency entries.
-Entry creation, other dependency operations, general installation, and push-back commands are not implemented yet.
+Other dependency operations, general installation, and push-back commands are not implemented yet.
 
 ## Commands
 
@@ -13,12 +13,13 @@ vcsinstall version
 vcsinstall skill usage
 vcsinstall init
 vcsinstall dependency add ci 'git+https://example.com/team/shared.git#branch=main'
+vcsinstall add ci@/specs @/specs/shared
 ```
 
 `python -m vcsinstall` exposes the same CLI as the `vcsinstall` executable.
 The `skill` command defaults to the `usage` document.
 Help, version, and skill commands work without project configuration.
-Init creates configuration; dependency add requires existing valid configuration.
+Init creates configuration; dependency add and add require existing valid configuration.
 Dependency add resolves the selected revision, writes its declaration and lock, and creates no entry mappings.
 
 ## Adding dependencies
@@ -39,6 +40,25 @@ An existing name requires `--redefine`, even for an identical declaration. Redef
 
 Git sources require the installed Git client and use a shared per-user cache. Put `--cache-dir DIRECTORY` before `dependency` to override its root. Dependency add resolves the cache root for every backend. Filesystem sources do not create cache data. Project-independent commands do not resolve or access the cache. Native authentication remains owned by Git.
 Automation success emits a `dependency` record, followed by ordered `installation` records for refreshed entries. Errors use the selected shared protocol.
+
+## Adding entries
+
+```bash
+vcsinstall add ci@/specs @/specs/shared
+vcsinstall add ci@/LICENSE @/licenses/shared.txt
+vcsinstall add --redefine ci@/guides @/docs/shared
+vcsinstall add --allow-outdated ci@/examples @/examples/shared
+```
+
+Add declares and installs exactly one file or complete directory from an existing dependency's matching lock. It keeps that shared revision and all other entries unchanged. A missing or mismatching dependency lock requires `install` or `dependency update NAME` before adding entries; those commands are planned, so use `dependency add --redefine` for an existing dependency where applicable in the current CLI.
+
+Sources use `NAME@/PATH`, with `NAME@/` selecting the repository root. Source paths retain literal percent signs, plus signs, query characters, and fragment characters; quote them for your shell when needed. Repository URLs and version options belong to `dependency add`.
+The destination is the exact final file or directory path. It accepts `@/` project identifiers, contained absolute paths, or paths relative to the invocation directory. An existing directory does not append the source basename. Destinations cannot overlap another entry or either project file.
+
+An already declared destination requires `--redefine`, even for an identical mapping. Redefinition may change the owning dependency but still verifies the previous baseline and protects local edits and additions. Identical redefinitions report `unchanged`; missing selected files are restored. Files already equal to selected source content receive no writes. Empty directory selections record an empty manifest without requiring a destination directory.
+
+Add refreshes and checks the dependency's effective selector against its locked revision. A moved branch, tag, or live filesystem fingerprint fails unless `--allow-outdated` is supplied; `--redefine` grants no freshness permission. Even with `--allow-outdated`, refresh and resolution must succeed and the locked source path must remain available. Filesystem sources retain no historical snapshots, so a changed live source cannot reproduce an old fingerprint.
+Put global `--cache-dir DIRECTORY` before `add` to override the shared Git cache. Both add commands resolve its root for every backend; filesystem sources do not create cache data. Automation success emits one metadata-only `installation` record with operation `add`, status `clean`, and outcome `installed` or `unchanged`.
 
 ## Protocols
 

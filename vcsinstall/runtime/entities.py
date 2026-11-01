@@ -8,7 +8,7 @@ class EntryPlan(BaseEntity):
     entry: Entry
     source: ContentTree
     observed: ContentTree
-    previous: InstallationBaseline
+    previous: InstallationBaseline | None
     baseline: InstallationBaseline
 
     @property

@@ -26,6 +26,11 @@ from vcsinstall.sources.locators import normalize_local_repository
 
 
 def _validate_revision(value: str, *, field: str) -> Result[None]:
+    """Require a full lowercase SHA-256 fingerprint with its prefix.
+
+    Example: 'sha256:' followed by 64 lowercase 'a' characters passes;
+    'sha256:1234' and a bare 64-character digest fail.
+    """
     if re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None:
         return Err([errors.InvalidRevision(vcs=VcsId.filesystem, field=field, value=value)])
     return Ok(None)
@@ -50,6 +55,14 @@ def _inspect_source(dependency: Dependency, path: Path) -> Result[ContentTree]:
 
 class FilesystemSourceAdapter:
     vcs = VcsId.filesystem
+
+    def selectors_match(self, declared: VersionSelector | None, recorded: VersionSelector | None) -> bool:
+        """Compare optional filesystem selectors exactly, without inspecting live content.
+
+        Example: None matches None; it does not match an explicit revision
+        pin, even if that pin happens to identify the current live files.
+        """
+        return declared == recorded
 
     def normalize_repository(self, repository: RepositoryLocator, *, cwd: Path) -> Result[RepositoryLocator | None]:
         if not repository:
@@ -130,6 +143,12 @@ class FilesystemSourceAdapter:
         return client.copy_file(source_path, output)
 
     def validate_input(self, dependency: Dependency) -> Result[None]:
+        """Accept omitted selectors or full fingerprints, including unresolved pin input.
+
+        Example: unresolved 'sha256:' followed by 64 'a' characters passes as
+        pin intent. Branch 'main' and unresolved 'release' are rejected as
+        InvalidArguments; the source directory is not fingerprinted here.
+        """
         selector = dependency.selector
         if selector is not None and selector.kind == SelectorKind.unresolved:
             dependency = dependency.replace(selector=selector.replace(kind=SelectorKind.revision))
@@ -138,6 +157,12 @@ class FilesystemSourceAdapter:
         )
 
     def validate_dependency(self, dependency: Dependency) -> Result[None]:
+        """Allow no selector or a complete fingerprint pin in a stored declaration.
+
+        Example: an omitted selector passes, and revision 'sha256:' followed
+        by 64 lowercase 'a' characters passes. Branch 'main' and a shortened
+        revision 'sha256:1234' fail without accessing the directory.
+        """
         selector = dependency.selector
         if selector is None:
             return Ok(None)
@@ -147,6 +172,12 @@ class FilesystemSourceAdapter:
 
     @unwrap_to_error
     def validate_revision_lock(self, dependency: Dependency, revision: SourceRevision) -> Result[None]:
+        """Check fingerprint spelling and equality with an explicit pin, without I/O.
+
+        Example: pin 'sha256:' plus 64 'a' characters cannot record a
+        fingerprint containing 64 'b' characters. With no selector, either
+        complete fingerprint passes; live-source availability is checked later.
+        """
         self.validate_dependency(dependency).unwrap()
         _validate_revision(revision, field="revision").unwrap()
         selector = dependency.selector

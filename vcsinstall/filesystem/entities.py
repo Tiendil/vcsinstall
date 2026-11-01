@@ -15,6 +15,11 @@ class FileInfo(BaseEntity):
     @pydantic.field_validator("path")
     @classmethod
     def _validate_path(cls, value: ProjectPathId) -> ProjectPathId:
+        """Require canonical, UTF-8-encodable file metadata paths without NUL bytes.
+
+        Example: '@/guide.md' and the standalone-file position '@/' pass;
+        'guide.md', noncanonical '@/docs/../guide', and paths containing NUL fail.
+        """
         if not is_project_path_id(value) or "\x00" in value:
             raise ValueError("File metadata requires canonical repository-relative identifiers.")
         value.encode("utf-8")

@@ -209,7 +209,7 @@ Before installation, Source freshness MUST compare the locked revision with the 
 A difference MUST fail before project mutation unless the caller explicitly permits use of the outdated locked revision.
 That permission MUST NOT bypass a failed freshness check, missing or mismatching lock, unavailable source path, or Installation protection.
 Success MUST record the entry mapping in configuration and its content identity at the dependency's shared revision.
-An entry replacement requiring no declaration or content changes MUST succeed as unchanged after all checks pass.
+An entry redefinition requiring no declaration or content changes MUST succeed as unchanged after all checks pass.
 
 ### `install`
 

@@ -10,13 +10,13 @@ from llm_tool_cli.core.context import ContextValue
 from llm_tool_cli.core.entities import BaseEntity
 from llm_tool_cli.core.errors import EnvironmentErrors
 from llm_tool_cli.core.result import Ok, Result, unwrap_to_error
-from llm_tool_cli.paths import PathInput, ProjectConfigPath, ProjectRootPath
+from llm_tool_cli.paths import PathInput, ProjectConfigPath, ProjectPathId, ProjectRootPath
 
 from vcsinstall.domain import Dependency, DependencyName, SourceRevision
-from vcsinstall.sources import DEFAULT_ADAPTERS, AdapterRegistry, get_adapter
+from vcsinstall.sources import DEFAULT_ADAPTERS, AdapterRegistry, SourceAdapter, get_adapter
 from vcsinstall.workspace import errors, validation
-from vcsinstall.workspace.config import Config
-from vcsinstall.workspace.lockfile import Lockfile, LockfilePath, load_lockfile
+from vcsinstall.workspace.config import Config, Entry
+from vcsinstall.workspace.lockfile import DependencyLock, InstallationBaseline, Lockfile, LockfilePath, load_lockfile
 
 
 class Workspace(BaseEntity):
@@ -30,12 +30,46 @@ class Workspace(BaseEntity):
         return ProjectRootPath(self.config_path.parent)
 
     def validate_no_orphaned_baselines(self, dependency: DependencyName) -> Result[None]:
-        """Require recorded installations to remain declared for this dependency."""
+        """Require recorded installations to remain declared for this dependency.
+
+        Example: a ci baseline at '@/old' fails when no ci declaration owns
+        that destination, even if another dependency now declares it.
+        """
         return validation.validate_no_orphaned_baselines(self, dependency)
 
     def validate_no_missing_baselines(self, dependency: DependencyName) -> Result[None]:
-        """Require an existing baseline for every declared destination of this dependency."""
+        """Require an existing baseline for every declared destination of this dependency.
+
+        Example: ci declaring '@/docs' fails when no ci baseline records that
+        destination; missing baselines of unselected dependencies are ignored.
+        """
         return validation.validate_no_missing_baselines(self, dependency)
+
+    def require_matching_dependency_lock(
+        self, dependency: DependencyName, *, source: SourceAdapter
+    ) -> Result[DependencyLock]:
+        """Compare prepared repository locators and selectors, returning the existing lock without I/O.
+
+        Example: a Git branch 'main' declaration cannot reuse a tag 'main'
+        lock. A matching record is returned without resolving a newer revision.
+        """
+        return validation.require_matching_dependency_lock(self, dependency, source=source)
+
+    def require_entry_baseline(self, entry: Entry) -> Result[InstallationBaseline]:
+        """Require a recorded baseline at the supplied declaration's destination.
+
+        Example: an entry at '@/docs' returns its prior baseline there; no
+        recorded baseline produces MissingBaseline rather than inventing one.
+        """
+        return validation.require_entry_baseline(self, entry)
+
+    def validate_destination_ownership(self, destination: ProjectPathId) -> Result[None]:
+        """Check destination ownership without authorizing replacement or accessing files.
+
+        Example: existing '@/docs' rejects proposed '@/docs/guide', while the
+        exact destination '@/docs' is left for runtime's replacement check.
+        """
+        return validation.validate_destination_ownership(self, destination)
 
     @contextmanager
     def scope(self) -> Iterator[None]:
@@ -55,6 +89,13 @@ def _validate_source(
     adapters: AdapterRegistry,
     revision: SourceRevision | None = None,
 ) -> Result[None]:
+    """Validate backend fields and attach the dependency name and project-file path to errors.
+
+    Example: Git branch 'bad..branch' for dependencies.ci becomes a
+    DependencyValidation error identifying ci and the selected configuration
+    file. Supplying revision also validates the recorded lock fields.
+    """
+
     def with_context(problems: EnvironmentErrors) -> EnvironmentErrors:
         return [errors.DependencyValidation(path=path, dependency=name, problem=problem) for problem in problems]
 
@@ -83,14 +124,14 @@ def _prepare_workspace(config: Config, *, adapters: AdapterRegistry) -> Result[W
                 adapters=adapters,
                 revision=locked_dependency.revision,
             ).unwrap()
-    return Ok(
-        Workspace(
-            config_path=selected.config_path,
-            lockfile_path=lockfile_path,
-            config=config,
-            lockfile=lockfile,
-        )
+    workspace = Workspace(
+        config_path=selected.config_path,
+        lockfile_path=lockfile_path,
+        config=config,
+        lockfile=lockfile,
     )
+    validation.validate_workspace_destinations(workspace).unwrap()
+    return Ok(workspace)
 
 
 @unwrap_to_error

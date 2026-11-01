@@ -36,9 +36,10 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/architecture/errors.md` — Failure classification, representation, and propagation conventions.
 - `./specs/architecture/modules_layout.md` — System boundaries and ownership of operations, state, and integrations.
 - `./specs/architecture/naming.md` — Project and code naming conventions.
+- `./specs/architecture/python.md` — General Python coding and documentation conventions.
 - `./specs/architecture/tests.md` — Requirements for project tests.
 - `./specs/behavior/cache.md` — The shared repository cache contract.
-- `./specs/behavior/cli.md` — The command-line syntax and command behavior contract.
+- `./specs/behavior/cli.md` — The public command-line interface and command behavior contract.
 - `./specs/behavior/config.md` — The project declaration format and configuration contract.
 - `./specs/behavior/files-and-directories.md` — The entry destination ownership and file-tree management contract.
 - `./specs/behavior/locking.md` — The dependency state and operation lifecycle contract.

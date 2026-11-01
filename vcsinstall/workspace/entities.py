@@ -20,6 +20,11 @@ class ManifestFile(BaseEntity):
     @pydantic.field_validator("path")
     @classmethod
     def _validate_file_path(cls, path: ProjectPathId) -> ProjectPathId:
+        """Require a canonical manifest child strictly below its entry root.
+
+        Example: '@/guide.md' passes, while '@/' and 'guide.md' fail. The root
+        file position '@/' is not a directory-manifest child.
+        """
         if not is_project_path_id(path) or path == "@/":
             raise ValueError("A manifest file must have a canonical path strictly below its entry root")
 
@@ -57,6 +62,11 @@ class DirectoryContent(ContentBase):
     @pydantic.field_validator("files")
     @classmethod
     def _validate_files(cls, files: tuple[ManifestFile, ...]) -> tuple[ManifestFile, ...]:
+        """Reject duplicate or ancestor file positions and return files in path order.
+
+        Example: '@/a' together with '@/a/b' fails, as do two '@/a' records.
+        Independent '@/b' and '@/a' records pass and are returned as a, b.
+        """
         paths = {project_path_parts(file.path) for file in files}
         if len(paths) != len(files):
             raise ValueError("Manifest paths must be unique")
@@ -82,6 +92,12 @@ Content = FileContent | DirectoryContent | AbsentContent
 
 
 def _verify_content_hash(content: Content) -> Content:
+    """Verify a directory aggregate against its recorded file hashes, without I/O.
+
+    Example: an empty directory with hashes.hash_files({}) passes; an empty
+    directory with a different digest fails. File and absent content are
+    returned unchanged because they have no aggregate manifest hash to check.
+    """
     if isinstance(content, DirectoryContent) and content.hash != hashes.hash_files(content.file_hashes()):
         raise ValueError("Stored directory hash does not match its file manifest")
     return content
@@ -91,6 +107,11 @@ ContentSchema = Annotated[Content, pydantic.Field(discriminator="kind"), pydanti
 
 
 def _canonical_path(value: ProjectPathId) -> ProjectPathId:
+    """Require an already canonical identifier rather than normalizing path text.
+
+    Example: '@/docs/guide' passes; 'docs/guide' and '@/docs/../guide' fail,
+    even though the latter could be normalized into another identifier.
+    """
     if not is_project_path_id(value):
         raise ValueError(f"Expected a canonical @/ identifier: {value!r}")
     return value

@@ -2,7 +2,7 @@
 
 `vcsinstall` is being developed to install files into a target repository from source repositories, record their origins in a lockfile, and push local changes back to their source.
 
-**Development status:** `init` creates project configuration, and `dependency add` declares and locks Git and filesystem dependencies. Explicit replacement refreshes existing entries with local-change protection. Help, version output, and built-in usage documentation are available. Entry creation, other dependency commands, and push back are planned.
+**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, and `add` installs file and directory entries at their locked revisions. Redefinition preserves local-change protection. Help, version output, and built-in usage documentation are available. Other dependency commands, general installation, and push back are planned.
 
 ## Example
 
@@ -21,14 +21,14 @@ Available today:
 - **CLI scaffold** — help, package version output, and built-in usage documentation.
 - **Project configuration** — create a starter with `init`, discover or explicitly select configuration, and validate configuration and existing lock state.
 - **Dependency locking** — add Git or filesystem sources, select branches, tags, or immutable revisions, and explicitly redefine dependencies while protecting local edits.
+- **Entry installation** — install files or complete directories from a dependency's locked revision, rename destinations, and explicitly redefine entries with local-change protection.
 - **Source detection** — recognize Git repositories before ordinary directories, probe unqualified remote URLs, and honor explicit backend choices.
 - **Output protocols** — human output, framed output for coding agents, and JSON Lines for programs.
 - **Python entry point** — the same commands through `vcsinstall` and `python -m vcsinstall`.
 
 Planned:
 
-- **File installation** — install files from source repositories into a target repository.
-- **Lockfile** — record source revisions and installed files to reproduce an installation.
+- **Project installation** — reproduce every declared entry and reconcile missing dependency locks.
 - **Push back** — transfer local changes to installed files back to their source repository.
 
 ## Rationale
@@ -101,6 +101,17 @@ vcsinstall dependency add ci 'git+https://example.com/team/shared.git#branch=mai
 vcsinstall dependency add local-guides file:///home/user/shared-guides
 vcsinstall dependency add --redefine ci 'git+https://example.com/team/shared.git#tag=v2.0'
 ```
+
+Install entries from a locked dependency:
+
+```bash
+vcsinstall add ci@/specs @/specs/shared
+vcsinstall add ci@/LICENSE @/licenses/shared.txt
+vcsinstall add --redefine ci@/guides @/docs/shared
+vcsinstall add --allow-outdated ci@/examples @/examples/shared
+```
+
+`NAME@/PATH` selects a file or directory within a declared dependency; `NAME@/` selects its repository root. The destination is the exact final path, using `@/` project identifiers or contained filesystem paths relative to the invocation directory. Add requires a matching dependency lock and preserves its revision. It checks the current source selector before installation and requires `--allow-outdated` when that selector has moved. This permission still requires a successful freshness check and availability of the locked content. An existing entry destination requires `--redefine`, including an identical mapping; redefinition preserves local-content protection and can change the owning dependency.
 
 Without `--config`, loading discovers the nearest `vcsinstall.toml` in the current directory or its parents. An explicit path overrides discovery. The selected configuration's parent is the project root, and its fixed sibling `vcsinstall.lock` is the [lockfile](specs/behavior/lockfile.md). A missing lockfile is allowed; an invalid existing lockfile fails validation. Loading changes neither file and does not access sources or installed contents.
 

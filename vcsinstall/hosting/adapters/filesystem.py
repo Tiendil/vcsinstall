@@ -5,7 +5,7 @@ from pathlib import Path
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.paths import resolve_project_root
 
-from vcsinstall.domain import ContentKind, Dependency, RepositoryLocator
+from vcsinstall.domain import ContentKind, Dependency, RepositoryLocator, SourceRevision
 from vcsinstall.filesystem import FSClient
 from vcsinstall.sources import errors
 
@@ -15,7 +15,7 @@ class FilesystemHostingAdapter:
         return Ok(False)
 
     @contextmanager
-    def acquire(self, dependency: Dependency) -> Iterator[Result[Path]]:
+    def acquire(self, dependency: Dependency, *, revision: SourceRevision | None = None) -> Iterator[Result[Path]]:
         yield self._acquire(dependency)
 
     @unwrap_to_error

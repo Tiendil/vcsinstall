@@ -31,6 +31,29 @@ class TestLoadWorkspace:
             label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
         )
 
+    @pytest.mark.parametrize("location", ["config", "lockfile"])
+    def test_does_not_resolve_destination_paths_during_loading(self, tmp_path: Path, location: str) -> None:
+        definition = 'version = 1\n[dependencies.ci]\nvcs = "noop"\nrepository = "source"\n'
+        mapping = '\n[[entries]]\ndependency = "ci"\nsource_path = "@/guide"\ndestination = "@/link/installed"\n'
+        configuration = definition + (mapping if location == "config" else "")
+        recorded = definition + 'revision = "recorded-revision"\n'
+        if location == "lockfile":
+            recorded += mapping + 'kind = "absent"\n'
+        config = tmp_path / "vcsinstall.toml"
+        lockfile = tmp_path / "vcsinstall.lock"
+        config.write_text(configuration)
+        lockfile.write_text(recorded)
+        link = tmp_path / "link"
+        link.symlink_to(tmp_path, target_is_directory=True)
+
+        result = load_workspace(cwd=PathInput(tmp_path))
+
+        assert result.is_ok()
+        assert config.read_text() == configuration
+        assert lockfile.read_text() == recorded
+        assert link.is_symlink()
+        assert not active_workspace.is_set()
+
     def test_discovers_nearest_project_without_activation(self, tmp_path: Path) -> None:
         (tmp_path / "vcsinstall.toml").write_text("version = 1\n")
         project = tmp_path / "project"

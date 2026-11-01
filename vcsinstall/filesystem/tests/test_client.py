@@ -34,6 +34,20 @@ class TestFSClient:
     def writer(self, client: FSClient) -> FSClient:
         return FSClient(root=client.root, readonly=False)
 
+    def test_resolve_path__allows_missing_targets_without_creation(self, client: FSClient) -> None:
+        target: Path = client.root / "missing/target"
+
+        assert client.resolve_path(ProjectPathId("@/missing/target")).unwrap() == target
+        assert not target.parent.exists()
+
+    def test_resolve_path__rejects_a_symlink_parent(self, client: FSClient, tmp_path: Path) -> None:
+        (client.root / "link").symlink_to(tmp_path, target_is_directory=True)
+
+        result = client.resolve_path(ProjectPathId("@/link/target"))
+
+        assert result.is_err(InvalidProjectPath)
+        assert (client.root / "link").is_symlink()
+
     @pytest.fixture
     def write_source(self, source: FSClient) -> FileWriter:
         source.inspect_tree(ProjectPathId("@/payload")).unwrap()

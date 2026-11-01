@@ -1,4 +1,7 @@
+from llm_tool_cli.paths import ProjectPathId
+
 from vcsinstall.core import errors as core_errors
+from vcsinstall.domain import DependencyName, SourcePath, SourceRevision, VersionSelector
 
 
 class InternalError(core_errors.InternalError):
@@ -26,3 +29,38 @@ class InstallationWriteFailed(EnvironmentError):
         "The project lock has not advanced."
     )
     ways_to_fix: list[str] = ["Resolve the reported failure, inspect the installed entries, and retry."]
+
+
+class OutdatedDependency(EnvironmentError):
+    code: str = "outdated_dependency"
+    message: str = (
+        "Dependency {error.dependency!r} ({error.selector_description}) is locked at {error.locked_revision}, "
+        "but currently selects {error.current_revision}."
+    )
+    ways_to_fix: list[str] = [
+        "Run dependency update {error.dependency} or use add --allow-outdated to install the locked revision."
+    ]
+    dependency: DependencyName
+    selector: VersionSelector | None
+    locked_revision: SourceRevision
+    current_revision: SourceRevision
+
+    @property
+    def selector_description(self) -> str:
+        return f"{self.selector.kind} {self.selector.value!r}" if self.selector else "default selector"
+
+
+class SourcePathAbsent(EnvironmentError):
+    code: str = "source_path_absent"
+    message: str = "Dependency {error.dependency!r} has no source path {error.source_path} at {error.revision}."
+    ways_to_fix: list[str] = ["Select a path that exists at the dependency's locked revision."]
+    dependency: DependencyName
+    source_path: SourcePath
+    revision: SourceRevision
+
+
+class SourceIntegrityMismatch(EnvironmentError):
+    code: str = "source_integrity_mismatch"
+    message: str = "Source content for {error.destination} differs from its recorded installation baseline."
+    ways_to_fix: list[str] = ["Restore trustworthy source data or lock state before retrying."]
+    destination: ProjectPathId

@@ -18,6 +18,14 @@ class EnvironmentError(core_errors.EnvironmentError):
     """Root for expected workspace failures."""
 
 
+class DependencyLockRequired(EnvironmentError):
+    code: str = "dependency_lock_required"
+    message: str = "{error.path}: dependency {error.dependency!r} has no matching revision lock."
+    ways_to_fix: list[str] = ["Run install or dependency update {error.dependency} before adding an entry."]
+    path: Path
+    dependency: DependencyName
+
+
 class MissingBaseline(EnvironmentError):
     code: str = "missing_baseline"
     message: str = (

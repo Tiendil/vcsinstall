@@ -1,5 +1,6 @@
 import pydantic
 import pytest
+from llm_tool_cli.paths import ProjectPathId
 
 from vcsinstall.domain import DependencyName
 from vcsinstall.workspace import Config, Lockfile
@@ -12,6 +13,7 @@ class TestConfig:
         assert not config.dependencies
         assert not config.entries
         assert not config.entries_for_dependency(DependencyName("ci"))
+        assert config.entry_for_destination(ProjectPathId("@/missing")) is None
         assert Config.model_validate_json(config.model_dump_json()) == config
 
     @pytest.mark.parametrize("name,indices", [("ci", (0, 2)), ("formatting", (1,)), ("unused", ()), ("missing", ())])
@@ -30,6 +32,33 @@ class TestConfig:
         )
 
         assert config.entries_for_dependency(DependencyName(name)) == tuple(config.entries[index] for index in indices)
+
+    @pytest.mark.parametrize(
+        "destination,index",
+        [
+            ("@/first", 0),
+            ("@/second", 1),
+            ("@/first/child", None),
+            ("@/missing", None),
+        ],
+    )
+    def test_entry_for_destination__selects_only_an_exact_destination(
+        self, destination: str, index: int | None
+    ) -> None:
+        config = Config.model_validate(
+            {
+                "version": 1,
+                "dependencies": {"ci": {"vcs": "noop", "repository": "fixture"}},
+                "entries": [
+                    {"dependency": "ci", "source_path": "@/", "destination": "@/first"},
+                    {"dependency": "ci", "source_path": "@/", "destination": "@/second"},
+                ],
+            }
+        )
+
+        result = config.entry_for_destination(ProjectPathId(destination))
+
+        assert result is (config.entries[index] if index is not None else None)
 
     @pytest.mark.parametrize("version", [None, True, False, 1.0, "1", 0, 2, -1])
     @pytest.mark.parametrize("model", [Config, Lockfile])

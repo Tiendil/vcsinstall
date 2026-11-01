@@ -1,5 +1,6 @@
 import pydantic
 import pytest
+from llm_tool_cli.paths import ProjectPathId
 
 from vcsinstall.domain import ContentHash, DependencyName, SourceRevision
 from vcsinstall.filesystem import hashes
@@ -72,6 +73,34 @@ class TestLockfile:
         lockfile = Lockfile.model_validate({"version": 1})
 
         assert not lockfile.entries_for_dependency(DependencyName("ci"))
+        assert lockfile.baseline_for_destination(ProjectPathId("@/missing")) is None
+
+    @pytest.mark.parametrize(
+        "destination,index",
+        [
+            ("@/first", 0),
+            ("@/second", 1),
+            ("@/first/child", None),
+            ("@/missing", None),
+        ],
+    )
+    def test_baseline_for_destination__selects_only_an_exact_destination(
+        self, destination: str, index: int | None
+    ) -> None:
+        lockfile = Lockfile.model_validate(
+            {
+                "version": 1,
+                "dependencies": {"ci": {"vcs": "noop", "repository": "fixture", "revision": "recorded revision"}},
+                "entries": [
+                    {"dependency": "ci", "source_path": "@/", "destination": "@/first", "kind": "absent"},
+                    {"dependency": "ci", "source_path": "@/", "destination": "@/second", "kind": "absent"},
+                ],
+            }
+        )
+
+        result = lockfile.baseline_for_destination(ProjectPathId(destination))
+
+        assert result is (lockfile.entries[index] if index is not None else None)
 
     def test_records_all_baseline_kinds_and_roundtrips(self) -> None:
         binding = {"dependency": "ci", "source_path": "@/", "destination": "@/docs"}

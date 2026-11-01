@@ -1,10 +1,23 @@
 ### Migration
 
+- Use `vcsinstall add --redefine` instead of `vcsinstall add --replace`; Python callers must pass `redefine` instead of `replace` to `entry_add`.
 - Keep generated and unrelated files outside entry destinations. Each entry now owns its complete destination tree, so extra local files count as local changes and can block updates or ordinary removal.
 - Replace noncanonical `entries[].destination` values in `vcsinstall.toml` with canonical `@/` identifiers, such as `docs/guide` with `@/docs/guide`. Filesystem repository locators retain their native path syntax.
 
 ### Changes
 
+- Use `--redefine` consistently for entry and dependency declarations, including entry runtime permissions and diagnostic guidance.
+- Require informative variable and parameter names where state qualifiers alone would be ambiguous.
+- Require blank lines between distinct logical steps within functions and methods.
+- Adopt compatible Python implementation conventions from Feeds Fun while retaining existing entity and error contracts.
+- Require concrete examples in validation docstrings through the general Python conventions specification, and document accepted and rejected cases across existing checks.
+- Validate only operation-selected filesystem destinations, keeping loading independent of live paths in unrelated declarations and historical baselines.
+- Place destination lookups on Config and Lockfile, keeping Workspace focused on relationships between models.
+- Split entry-add checks into pure workspace destination/baseline guards, runtime replacement policy, and filesystem path validation during operation preparation.
+- Separate repository locator preparation from pure dependency-lock matching, returning recorded locks without filesystem access or model changes.
+- Align CLI command tests and shared helpers with their owning modules so Depmesh discovers their test relationships correctly.
+- Implement `add SOURCE DESTINATION` for locked Git and filesystem dependencies, including freshness checks, `--allow-outdated`, protected entry redefinition with `--redefine`, exact destinations, and installation records.
+- Match dependency locks using source-owned selector rules, retain inferred Git branches, and acquire required historical revisions without advancing shared locks.
 - Encapsulate strict local Git object resolution and repository-format completeness checks behind focused client methods.
 - Resolve hexadecimal Git revision pins through object identifiers so same-named branches and tags cannot redirect them.
 - Acquire missing abbreviated Git commits from populated caches while retaining direct full-ID fetching and reuse of available pinned objects.

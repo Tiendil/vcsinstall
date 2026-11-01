@@ -16,12 +16,20 @@ GitObjectId = NewType("GitObjectId", str)
 
 
 def is_git_object_id(value: str) -> bool:
-    """Check canonical full lowercase SHA-1 or SHA-256 object-ID spelling."""
+    """Check canonical full lowercase SHA-1 or SHA-256 object-ID spelling.
+
+    Example: 'a' repeated 40 or 64 times returns True; 'ABCD1234' and 'a'
+    repeated 39 times return False. Object existence is not checked.
+    """
     return re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", value) is not None
 
 
 def is_git_object_id_input(value: str) -> bool:
-    """Check full or abbreviated hexadecimal input before repository lookup."""
+    """Check full or abbreviated hexadecimal input before repository lookup.
+
+    Example: 'ABCD1234' passes this syntax check; 'abc' and 'HEAD~1' fail.
+    Passing does not establish that a commit exists or the prefix is unique.
+    """
     return re.fullmatch(r"[0-9a-fA-F]{4,64}", value) is not None
 
 
@@ -188,7 +196,12 @@ class GitClient:
 
     @unwrap_to_error
     def is_full_object_id(self, value: str) -> Result[bool]:
-        """Check full hexadecimal spelling against this repository's storage format."""
+        """Check full hexadecimal spelling against this repository's storage format.
+
+        Example: 'a' repeated 40 times passes for SHA-1 storage but fails for
+        SHA-256 storage, which needs 64 hexadecimal characters. This queries
+        the repository format without proving the named object exists.
+        """
         object_format = self.run(["rev-parse", "--show-object-format"]).unwrap().strip()
         length = {b"sha1": 40, b"sha256": 64}.get(object_format)
         if length is None:

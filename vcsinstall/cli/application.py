@@ -5,7 +5,7 @@ from llm_tool_cli.cli.commands.version import register_version_command
 from llm_tool_cli.cli.options import ConfigOption, ProtocolOption
 from llm_tool_cli.core import settings
 
-from vcsinstall.cli.commands import dependency
+from vcsinstall.cli.commands import dependency, entries
 from vcsinstall.cli.entities import CacheDirOption
 from vcsinstall.skills import SkillDocument
 from vcsinstall.workspace import Config
@@ -32,6 +32,7 @@ register_init_command(
     help="Create starter project configuration.",
 )
 app.add_typer(dependency.app, name="dependency")
+app.command("add")(entries.add_entry)
 
 
 def main() -> None:

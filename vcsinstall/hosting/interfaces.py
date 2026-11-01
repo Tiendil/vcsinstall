@@ -4,7 +4,7 @@ from typing import Protocol
 
 from llm_tool_cli.core.result import Result
 
-from vcsinstall.domain import Dependency, RepositoryLocator
+from vcsinstall.domain import Dependency, RepositoryLocator, SourceRevision
 
 
 class HostingAdapter(Protocol):
@@ -12,6 +12,8 @@ class HostingAdapter(Protocol):
         """Return False for rejected input and preserve remote-access failures as errors."""
         ...
 
-    def acquire(self, dependency: Dependency) -> AbstractContextManager[Result[Path]]:
+    def acquire(
+        self, dependency: Dependency, *, revision: SourceRevision | None = None
+    ) -> AbstractContextManager[Result[Path]]:
         """Expose a normalized repository path and protect access until the context exits."""
         ...

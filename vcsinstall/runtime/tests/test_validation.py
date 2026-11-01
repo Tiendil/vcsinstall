@@ -2,9 +2,15 @@ import pytest
 from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.paths import ProjectPathId
 
-from vcsinstall.domain import ContentHash, DependencyName
+from vcsinstall.domain import ContentHash, DependencyName, SourceRevision
+from vcsinstall.domain.tests import make
 from vcsinstall.runtime import errors
-from vcsinstall.runtime.validation import validate_no_local_content_conflicts, validate_redefinition
+from vcsinstall.runtime.validation import (
+    validate_entry_redefinition,
+    validate_freshness,
+    validate_no_local_content_conflicts,
+    validate_redefinition,
+)
 
 
 class TestValidateRedefinition:
@@ -16,6 +22,27 @@ class TestValidateRedefinition:
         assert result.is_ok() == valid
         if not valid:
             assert isinstance(result.unwrap_err()[0], InvalidArguments)
+
+
+class TestValidateEntryRedefinition:
+    @pytest.mark.parametrize(
+        "exists,redefine,valid",
+        [
+            (False, False, True),
+            (False, True, True),
+            (True, False, False),
+            (True, True, True),
+        ],
+    )
+    def test_explicit_redefinition_permission(self, exists: bool, redefine: bool, valid: bool) -> None:
+        result = validate_entry_redefinition(ProjectPathId("@/installed"), exists=exists, redefine=redefine)
+
+        assert result.is_ok() == valid
+        if not valid:
+            problem = result.unwrap_err()[0]
+            assert isinstance(problem, InvalidArguments)
+            assert "@/installed" in problem.reason
+            assert "--redefine" in problem.ways_to_fix[0]
 
 
 class TestValidateNoLocalContentConflicts:
@@ -45,3 +72,26 @@ class TestValidateNoLocalContentConflicts:
         assert result.is_ok() == valid
         if not valid:
             assert isinstance(result.unwrap_err()[0], errors.LocalConflict)
+
+
+class TestValidateFreshness:
+    @pytest.mark.parametrize("current", ["locked", "advanced", "rewound"])
+    @pytest.mark.parametrize("allow_outdated", [False, True])
+    def test_compares_complete_revisions_without_advancing_them(self, current: str, allow_outdated: bool) -> None:
+        selector = make.selector("branch", "trunk")
+        result = validate_freshness(
+            DependencyName("ci"),
+            selector=selector,
+            locked_revision=SourceRevision("locked"),
+            current_revision=SourceRevision(current),
+            allow_outdated=allow_outdated,
+        )
+
+        assert result.is_ok() == (current == "locked" or allow_outdated)
+        if result.is_err():
+            problem = result.unwrap_err()[0]
+            assert isinstance(problem, errors.OutdatedDependency)
+            assert problem.dependency == "ci"
+            assert problem.selector == selector
+            assert problem.locked_revision == "locked"
+            assert problem.current_revision == current

@@ -7,6 +7,11 @@ from llm_tool_cli.paths import ProjectPathId, normalize_project_path_id
 
 
 def _normalize_source_path(value: str) -> ProjectPathId:
+    """Normalize an anchored source identifier while rejecting traversal above its root.
+
+    Example: '@/docs/../LICENSE' becomes '@/LICENSE'; '@/../LICENSE' and
+    unanchored 'LICENSE' fail. This transformation does not access a filesystem.
+    """
     result = normalize_project_path_id(value)
     if result.is_err():
         raise ValueError(result.unwrap_err()[0].format_message())

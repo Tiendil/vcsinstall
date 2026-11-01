@@ -3,7 +3,7 @@ from typing import BinaryIO, Protocol
 
 from llm_tool_cli.core.result import Result
 
-from vcsinstall.domain import Dependency, RepositoryLocator, SourcePath, SourceRevision, VcsId
+from vcsinstall.domain import Dependency, RepositoryLocator, SourcePath, SourceRevision, VcsId, VersionSelector
 from vcsinstall.filesystem import ContentTree
 from vcsinstall.sources.entities import ResolvedSource
 
@@ -12,6 +12,14 @@ class SourceAdapter(Protocol):
     """Backend validation, version resolution, and local repository inspection."""
 
     vcs: VcsId
+
+    def selectors_match(self, declared: VersionSelector | None, recorded: VersionSelector | None) -> bool:
+        """Compare persisted selectors, including retained backend defaults, without I/O.
+
+        Example: Git may match an omitted declaration to a recorded branch
+        'main', but must not treat a recorded tag 'main' as that default branch.
+        """
+        ...
 
     def normalize_repository(self, repository: RepositoryLocator, *, cwd: Path) -> Result[RepositoryLocator | None]:
         """Normalize a locator, returning None for malformed or unsupported input."""
@@ -22,15 +30,28 @@ class SourceAdapter(Protocol):
         ...
 
     def validate_dependency(self, dependency: Dependency) -> Result[None]:
-        """Validate persisted declaration fields without external access."""
+        """Validate persisted declaration fields without external access.
+
+        Example: a persisted Git revision pin 'abcd1234' fails because stored
+        pins require a complete lowercase commit identifier, unlike CLI input.
+        """
         ...
 
     def validate_input(self, dependency: Dependency) -> Result[None]:
-        """Validate supported input forms without I/O; reject input with InvalidArguments."""
+        """Validate supported input forms without I/O; reject input with InvalidArguments.
+
+        Example: Git accepts revision input 'abcd1234' for later resolution,
+        but rejects 'HEAD~1' as a revision pin. Existence is checked later.
+        """
         ...
 
     def validate_revision_lock(self, dependency: Dependency, revision: SourceRevision) -> Result[None]:
-        """Validate a dependency revision lock without external access."""
+        """Validate a dependency revision lock without external access.
+
+        Example: a Git pin to '1' repeated 40 times cannot lock '2' repeated 40
+        times. A tracking branch may record a syntactically valid revision
+        without checking its current upstream target here.
+        """
         ...
 
     def resolve(self, dependency: Dependency, path: Path) -> Result[ResolvedSource]:

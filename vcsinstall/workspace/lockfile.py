@@ -11,7 +11,7 @@ from llm_tool_cli.config.fields import ConfigVersion
 from llm_tool_cli.config.project import project_config
 from llm_tool_cli.core.entities import BaseEntity
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
-from llm_tool_cli.paths import resolve_inside_project
+from llm_tool_cli.paths import ProjectPathId, resolve_inside_project
 
 from vcsinstall.domain import Dependency, DependencyName, SourceRevision
 from vcsinstall.workspace.entities import (
@@ -42,6 +42,11 @@ class FileBaseline(Baseline, FileContent):
 class DirectoryBaseline(Baseline, DirectoryContent):
     @pydantic.model_validator(mode="after")
     def _validate_hash(self) -> Self:
+        """Require the stored directory hash to agree with its complete recorded manifest.
+
+        Example: an empty manifest must use hashes.hash_files({}); a digest
+        computed from a nonempty manifest is rejected for that empty baseline.
+        """
         _verify_content_hash(self)
         return self
 
@@ -64,8 +69,17 @@ class Lockfile(BaseEntity):
         """Return this dependency's installation baselines in their stored order."""
         return tuple(entry for entry in self.entries if entry.dependency == name)
 
+    def baseline_for_destination(self, destination: ProjectPathId) -> InstallationBaseline | None:
+        """Return the recorded baseline at a canonical destination, if one exists."""
+        return next((entry for entry in self.entries if entry.destination == destination), None)
+
     @pydantic.model_validator(mode="after")
     def _validate_bindings(self) -> Self:
+        """Require every baseline to name a dependency recorded in this lockfile.
+
+        Example: a baseline with dependency='ci' fails if dependencies has no
+        'ci' lock, even if configuration declares that name.
+        """
         for index, entry in enumerate(self.entries):
             if entry.dependency not in self.dependencies:
                 raise ValueError(f"entries[{index}].dependency refers to missing dependency lock {entry.dependency!r}")

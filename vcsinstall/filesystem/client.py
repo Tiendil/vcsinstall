@@ -10,6 +10,7 @@ from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.paths import (
     ProjectPathId,
     ProjectRootPath,
+    ResolvedProjectPath,
     resolve_inside_project,
     resolve_root_anchored_path,
 )
@@ -36,7 +37,20 @@ class FSClient:
     def readonly(self) -> bool:
         return self._readonly
 
+    def resolve_path(self, path: ProjectPathId) -> Result[ResolvedProjectPath]:
+        """Resolve a contained path without requiring it to exist or reading its contents.
+
+        Example: root '/project' and '@/docs/guide' resolve to '/project/docs/guide'
+        even when docs is missing. A symlink at '/project/docs' is rejected.
+        """
+        return resolve_root_anchored_path(path, self.root)
+
     def _require_writable(self, path: Path) -> Result[None]:
+        """Require this client to have explicit write permission before an effect.
+
+        Example: writing root / 'guide' through the default read-only client
+        fails before creating a file; a client with readonly=False passes.
+        """
         if self.readonly:
             return Err([errors.ReadOnly(root=self.root, path=path)])
         return Ok(None)
@@ -45,7 +59,7 @@ class FSClient:
     def write_file(self, path: ProjectPathId, data: bytes) -> Result[None]:
         """Write bytes directly to a file whose parent already exists."""
         self._require_writable(self.root / path.removeprefix("@/")).unwrap()
-        target = resolve_root_anchored_path(path, self.root).unwrap()
+        target = self.resolve_path(path).unwrap()
         try:
             target.write_bytes(data)
         except OSError as exc:
@@ -56,7 +70,7 @@ class FSClient:
     def remove(self, path: ProjectPathId) -> Result[None]:
         """Remove one file or complete directory tree, leaving its parents intact."""
         self._require_writable(self.root / path.removeprefix("@/")).unwrap()
-        target = resolve_root_anchored_path(path, self.root).unwrap()
+        target = self.resolve_path(path).unwrap()
         try:
             if target.is_dir():
                 shutil.rmtree(target)
@@ -68,7 +82,7 @@ class FSClient:
 
     @unwrap_to_error
     def inspect_kind(self, path: ProjectPathId = ProjectPathId("@/")) -> Result[ContentKind]:
-        target = resolve_root_anchored_path(path, self.root).unwrap()
+        target = self.resolve_path(path).unwrap()
         try:
             mode = target.lstat().st_mode
         except (FileNotFoundError, NotADirectoryError):
@@ -84,7 +98,7 @@ class FSClient:
     @unwrap_to_error
     def inspect_tree(self, path: ProjectPathId = ProjectPathId("@/")) -> Result[ContentTree]:
         """Inspect selected files without retaining their contents."""
-        return self._inspect_tree(resolve_root_anchored_path(path, self.root).unwrap())
+        return self._inspect_tree(self.resolve_path(path).unwrap())
 
     @unwrap_to_error
     def _inspect_tree(self, path: Path) -> Result[ContentTree]:  # noqa: CCR001
@@ -135,7 +149,7 @@ class FSClient:
         The caller must inspect the source first and account for any intervening
         changes made by this invocation. Copying does not inspect its kind again.
         """
-        source = resolve_root_anchored_path(path, self.root).unwrap()
+        source = self.resolve_path(path).unwrap()
         try:
             with source.open("rb") as stream:
                 shutil.copyfileobj(stream, destination)
@@ -149,7 +163,7 @@ class FSClient:
     ) -> Result[None]:
         """Write one selected file, creating its required parent directories."""
         self._require_writable(self.root / path.removeprefix("@/")).unwrap()
-        target = resolve_root_anchored_path(path, self.root).unwrap()
+        target = self.resolve_path(path).unwrap()
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             with target.open("wb") as destination:

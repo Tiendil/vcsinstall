@@ -7,7 +7,7 @@ from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.paths import resolve_inside_project, resolve_project_root
 
 from vcsinstall.cache import CacheRootPath, RepoCache
-from vcsinstall.domain import Dependency, RepositoryLocator, SelectorKind, urls
+from vcsinstall.domain import Dependency, RepositoryLocator, SelectorKind, SourceRevision, urls
 from vcsinstall.sources import errors
 from vcsinstall.vcs_clients import GitClient, clone_mirror
 
@@ -34,15 +34,17 @@ class GitHostingAdapter:
         return GitClient.probe_remote(repository)
 
     @contextmanager
-    def acquire(self, dependency: Dependency) -> Iterator[Result[Path]]:
+    def acquire(self, dependency: Dependency, *, revision: SourceRevision | None = None) -> Iterator[Result[Path]]:
         with RepoCache(root=self.root, dependency=dependency).lock() as cached:
             if cached.is_err():
                 yield Err(cached.unwrap_err())
             else:
-                yield self._acquire(dependency, cached.unwrap())
+                yield self._acquire(dependency, cached.unwrap(), revision=revision)
 
     @unwrap_to_error
-    def _acquire(self, dependency: Dependency, directory: Path) -> Result[Path]:  # noqa: CCR001
+    def _acquire(  # noqa: CCR001 — Refresh the selector and acquire any separately required locked revision.
+        self, dependency: Dependency, directory: Path, *, revision: SourceRevision | None = None
+    ) -> Result[Path]:
         path = resolve_inside_project(directory / "repository.git", resolve_project_root(directory).unwrap()).unwrap()
         client = GitClient(path=path, repository=dependency.repository)
         if not path.exists():
@@ -68,4 +70,6 @@ class GitHostingAdapter:
                 client.run(["fetch", "origin", selector.value.lower()]).unwrap()
             else:
                 client.fetch_references().unwrap()
+        if revision is not None and client.resolve_object_id(revision).unwrap() is None:
+            client.run(["fetch", "origin", revision]).unwrap()
         return Ok(path)

@@ -39,7 +39,11 @@ def _is_scp_address(repository: RepositoryLocator) -> bool:
 
 
 def _validate_reference(value: SelectorValue, *, branch: bool) -> Result[None]:
-    """Check native ref spelling without requiring Git or repository access."""
+    """Check native ref spelling without requiring Git or repository access.
+
+    Example: 'feature/docs' passes, while 'bad..branch' fails. 'HEAD' is
+    rejected as a branch name; reference existence is not checked here.
+    """
     components = value.split("/")
     if (
         value.endswith(".")
@@ -54,6 +58,11 @@ def _validate_reference(value: SelectorValue, *, branch: bool) -> Result[None]:
 
 
 def _validate_revision(value: str, *, field: str) -> Result[None]:
+    """Require the spelling of a complete lowercase SHA-1 or SHA-256 object ID.
+
+    Example: 'a' repeated 40 or 64 times passes; 'abcd1234', 'HEAD', and
+    uppercase IDs fail. This does not check whether a commit exists.
+    """
     if not is_git_object_id(value):
         return Err([errors.InvalidRevision(vcs=VcsId.git, field=field, value=value)])
     return Ok(None)
@@ -127,6 +136,16 @@ def _file_info(
 
 class GitSourceAdapter:
     vcs = VcsId.git
+
+    def selectors_match(self, declared: VersionSelector | None, recorded: VersionSelector | None) -> bool:
+        """Match literal selectors, retaining a recorded branch for an omitted selector.
+
+        Example: declared=None matches recorded branch 'main', but not tag
+        'main' or None. Explicit branch 'main' only matches that same branch.
+        """
+        if declared is None:
+            return recorded is not None and recorded.kind == SelectorKind.branch
+        return declared == recorded
 
     @unwrap_to_error
     def normalize_repository(  # noqa: CCR001 — Distinguish rejected URL formats, native addresses, and local paths.
@@ -221,6 +240,12 @@ class GitSourceAdapter:
         return client.copy_file(GitObjectId(source.revision), source_path.removeprefix("@/"), output)
 
     def validate_input(self, dependency: Dependency) -> Result[None]:
+        """Check incoming selector syntax while allowing abbreviations and unresolved refs.
+
+        Example: revision 'ABCD1234' and unresolved 'release' pass this stage;
+        revision 'HEAD~1' and branch 'bad..branch' fail as InvalidArguments.
+        Repository lookup later determines existence and ambiguity.
+        """
         selector = dependency.selector
         if selector is None or selector.kind == SelectorKind.unresolved:
             return Ok(None)
@@ -240,6 +265,12 @@ class GitSourceAdapter:
         )
 
     def validate_dependency(self, dependency: Dependency) -> Result[None]:
+        """Check stored selectors using literal refs and complete lowercase revision IDs.
+
+        Example: branch 'feature/docs' passes, while branch 'bad..branch',
+        revision 'abcd1234', and unresolved 'release' fail. Omitting a
+        configuration selector is allowed; no reference is resolved here.
+        """
         selector = dependency.selector
         if selector is None:
             return Ok(None)
@@ -253,6 +284,12 @@ class GitSourceAdapter:
 
     @unwrap_to_error
     def validate_revision_lock(self, dependency: Dependency, revision: SourceRevision) -> Result[None]:
+        """Require a stored selector and complete revision, with equal IDs for a pin.
+
+        Example: branch 'main' with revision '1' repeated 40 times passes.
+        Omitting the lock selector fails, as does pinning that ID while
+        recording '2' repeated 40 times. Commit availability is not checked.
+        """
         self.validate_dependency(dependency).unwrap()
         _validate_revision(revision, field="revision").unwrap()
         selector = dependency.selector

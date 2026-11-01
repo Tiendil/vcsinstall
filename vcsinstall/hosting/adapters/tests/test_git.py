@@ -6,7 +6,7 @@ from llm_tool_cli.core.result import Err, Ok
 from pytest_mock import MockerFixture
 
 from vcsinstall.cache import CacheRootPath
-from vcsinstall.domain import RepositoryLocator, VcsId
+from vcsinstall.domain import RepositoryLocator, SourceRevision, VcsId
 from vcsinstall.domain.tests import make
 from vcsinstall.hosting import GitHostingAdapter
 from vcsinstall.vcs_clients import GitClient, errors
@@ -14,6 +14,29 @@ from vcsinstall.vcs_clients.tests.helpers import create_repository
 
 
 class TestGitHostingAdapter:
+    def test_acquire__fetches_required_unreferenced_revision_while_refreshing_selector(self, tmp_path: Path) -> None:
+        client = create_repository(tmp_path / "source")
+        client.create_branch("detached-history", checkout=True).unwrap()
+        (client.path / "guide.txt").write_bytes(b"locked content")
+        locked = client.commit("Historical lock", all_tracked=True).unwrap()
+        client.run(["checkout", "trunk", "--"]).unwrap()
+        client.run(["branch", "-D", "detached-history"]).unwrap()
+        dependency = make.dependency(repository=client.path.as_uri(), selector=make.selector("branch", "trunk"))
+        hosting = GitHostingAdapter(root=CacheRootPath(tmp_path / "cache"))
+
+        with hosting.acquire(dependency, revision=SourceRevision(locked)) as acquired:
+            cached = GitClient(path=acquired.unwrap(), repository=dependency.repository)
+            assert cached.resolve_commit(locked).unwrap() == locked
+            assert cached.resolve_commit("refs/heads/trunk").unwrap() != locked
+
+    def test_acquire__required_revision_failure_preserves_original_error(self, tmp_path: Path) -> None:
+        client = create_repository(tmp_path / "source")
+        dependency = make.dependency(repository=str(client.path), selector=make.selector("branch", "trunk"))
+        hosting = GitHostingAdapter(root=CacheRootPath(tmp_path / "cache"))
+
+        with hosting.acquire(dependency, revision=SourceRevision("0" * 40)) as acquired:
+            assert acquired.is_err(errors.CommandFailed)
+
     @pytest.mark.parametrize("missing", [False, True])
     def test_acquire__holds_cache_lock_until_scope_exit(self, tmp_path: Path, missing: bool) -> None:
         source = tmp_path / "source"

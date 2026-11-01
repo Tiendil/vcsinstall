@@ -2,9 +2,10 @@ from collections.abc import Callable
 from functools import partial
 from typing import BinaryIO
 
+from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.output import output
-from llm_tool_cli.paths import ProjectPathId, normalize_path, project_path_parts, resolve_root_anchored_path
+from llm_tool_cli.paths import ProjectPathId, project_path_parts
 
 from vcsinstall.domain import (
     ContentKind,
@@ -19,9 +20,14 @@ from vcsinstall.filesystem import (
 )
 from vcsinstall.hosting import HostingAdapter
 from vcsinstall.runtime import errors
-from vcsinstall.runtime.cells import dependency_add_cells
+from vcsinstall.runtime.cells import dependency_add_cells, entry_add_cell
 from vcsinstall.runtime.entities import EntryPlan
-from vcsinstall.runtime.validation import validate_no_local_content_conflicts, validate_redefinition
+from vcsinstall.runtime.validation import (
+    validate_entry_redefinition,
+    validate_freshness,
+    validate_no_local_content_conflicts,
+    validate_redefinition,
+)
 from vcsinstall.sources import (
     ResolvedSource,
     SourceAdapter,
@@ -38,28 +44,9 @@ from vcsinstall.workspace import (
     ManifestFile,
     Workspace,
     active_workspace,
-    serialize_workspace_changes,
-    validate_destinations,
-    write_workspace_files,
 )
-
-
-@unwrap_to_error
-def _dependency_destinations(workspace: Workspace, name: DependencyName) -> Result[dict[ProjectPathId, Entry]]:
-    """Validate all destinations and select this dependency's canonical entries."""
-    entries = {}
-    reserved = tuple(
-        normalize_path(str(path), workspace.project_root).unwrap()
-        for path in (workspace.config_path, workspace.lockfile_path)
-    )
-    for collection in (workspace.config.entries, workspace.lockfile.entries if workspace.lockfile else ()):
-        paths = tuple(entry.destination for entry in collection)
-        validate_destinations(paths, reserved=reserved).unwrap()
-        for path in paths:
-            resolve_root_anchored_path(path, workspace.project_root).unwrap()
-    for entry in workspace.config.entries_for_dependency(name):
-        entries[entry.destination] = entry
-    return Ok(entries)
+from vcsinstall.workspace import errors as workspace_errors
+from vcsinstall.workspace import serialize_workspace_changes, write_workspace_files
 
 
 def _baseline(
@@ -91,6 +78,12 @@ def _join_path(root: ProjectPathId, relative: ProjectPathId) -> ProjectPathId:
 
 @unwrap_to_error
 def _validate_destination_parents(destination: ProjectPathId, *, filesystem: FSClient) -> Result[None]:
+    """Inspect required parent positions and reject regular-file obstructions.
+
+    Example: a regular file at '@/docs' blocks destination '@/docs/shared/guide'.
+    A directory or a missing parent passes; the destination's own content is
+    checked separately when planning the entry.
+    """
     parts = project_path_parts(destination)
     for end in range(1, len(parts)):
         parent = ProjectPathId("@/" + "/".join(parts[:end]))
@@ -104,11 +97,11 @@ def _plan_entry(
     entry: Entry,
     *,
     source: ContentTree,
-    previous: InstallationBaseline,
+    previous: InstallationBaseline | None,
     filesystem: FSClient,
 ) -> Result[EntryPlan]:
     destination = entry.destination
-    previous_hashes = previous.file_hashes()
+    previous_hashes = previous.file_hashes() if previous else {}
     source_hashes = source.file_hashes
 
     observed = filesystem.inspect_tree(destination).unwrap()
@@ -255,11 +248,126 @@ def dependency_add(  # noqa: CFQ002 — Explicit source intent and independently
 ) -> Result[None]:
     workspace = active_workspace.get()
     validate_redefinition(name, exists=name in workspace.config.dependencies, redefine=redefine).unwrap()
-    entries = _dependency_destinations(workspace, name).unwrap()
+    entries = {entry.destination: entry for entry in workspace.config.entries_for_dependency(name)}
     workspace.validate_no_orphaned_baselines(name).unwrap()
     workspace.validate_no_missing_baselines(name).unwrap()
+    filesystem = FSClient(root=workspace.project_root)
+    for entry in entries.values():
+        filesystem.resolve_path(entry.destination).unwrap()
     source.validate_input(dependency).unwrap()
 
     with hosting.acquire(dependency) as acquired:
         resolved = source.resolve(dependency, acquired.unwrap()).unwrap()
         return _apply_dependency(workspace, name, source, resolved, entries=entries)
+
+
+@unwrap_to_error
+def _install_added_entry(
+    workspace: Workspace,
+    entry: Entry,
+    resolved: ResolvedSource,
+    *,
+    source: SourceAdapter,
+    previous: InstallationBaseline | None,
+) -> Result[None]:
+    tree = source.inspect(resolved, (entry.source_path,)).unwrap()[entry.source_path]
+    if tree.kind == ContentKind.absent:
+        return Err(
+            [
+                errors.SourcePathAbsent(
+                    dependency=entry.dependency,
+                    source_path=entry.source_path,
+                    revision=resolved.revision,
+                )
+            ]
+        )
+    if previous is not None and (
+        previous.dependency == entry.dependency
+        and previous.source_path == entry.source_path
+        and previous.file_hashes() != tree.file_hashes
+    ):
+        return Err([errors.SourceIntegrityMismatch(destination=entry.destination)])
+    filesystem = FSClient(root=workspace.project_root, readonly=False)
+    plan = _plan_entry(entry, source=tree, previous=previous, filesystem=filesystem).unwrap()
+    declarations = {item.destination: item for item in workspace.config.entries}
+    declarations[entry.destination] = entry
+    config = workspace.config.replace(entries=tuple(declarations.values()))
+    assert workspace.lockfile is not None
+    baselines = {item.destination: item for item in workspace.lockfile.entries}
+    baselines[entry.destination] = plan.baseline
+    lockfile = workspace.lockfile.replace(entries=tuple(baselines.values()))
+    serialized = serialize_workspace_changes(workspace, config, lockfile)
+    _apply_entry_changes([plan], filesystem=filesystem, copy_file=partial(source.copy_file, resolved)).unwrap()
+    write_workspace_files(workspace, serialized).unwrap()
+    unchanged = config == workspace.config and lockfile == workspace.lockfile and not plan.changed
+    output.get().emit([entry_add_cell(entry, resolved, unchanged=unchanged)]).unwrap()
+    return Ok(None)
+
+
+@unwrap_to_error
+def _prepare_dependency_lock(
+    workspace: Workspace, name: DependencyName, *, source: SourceAdapter
+) -> Result[DependencyLock]:
+    """Prepare repository identities for matching and acquisition without changing loaded state."""
+    declared = workspace.config.dependencies.get(name)
+    recorded = workspace.lockfile.dependencies.get(name) if workspace.lockfile else None
+    if declared is None or recorded is None or declared.vcs != recorded.vcs:
+        return workspace.require_matching_dependency_lock(name, source=source)
+    repository = source.normalize_repository(declared.repository, cwd=workspace.project_root).unwrap()
+    locked_repository = source.normalize_repository(recorded.repository, cwd=workspace.project_root).unwrap()
+    if repository is None or locked_repository is None:
+        return Err([workspace_errors.DependencyLockRequired(path=workspace.lockfile_path, dependency=name)])
+    assert workspace.lockfile is not None
+    prepared = workspace.replace(
+        config=workspace.config.replace(
+            dependencies=workspace.config.dependencies
+            | {
+                name: declared.replace(repository=repository),
+            }
+        ),
+        lockfile=workspace.lockfile.replace(
+            dependencies=workspace.lockfile.dependencies
+            | {
+                name: recorded.replace(repository=locked_repository),
+            }
+        ),
+    )
+    return prepared.require_matching_dependency_lock(name, source=source)
+
+
+@unwrap_to_error
+def entry_add(  # noqa: CFQ002 — One entry and independent adapters with explicit operation permissions.
+    entry: Entry,
+    *,
+    source: SourceAdapter,
+    hosting: HostingAdapter,
+    redefine: bool = False,
+    allow_outdated: bool = False,
+) -> Result[None]:
+    workspace = active_workspace.get()
+    if entry.dependency not in workspace.config.dependencies:
+        return Err([InvalidArguments(reason=f"Unknown dependency {entry.dependency!r}.")])
+    declared = workspace.config.entry_for_destination(entry.destination)
+    validate_entry_redefinition(entry.destination, exists=declared is not None, redefine=redefine).unwrap()
+    workspace.validate_destination_ownership(entry.destination).unwrap()
+    FSClient(root=workspace.project_root).resolve_path(entry.destination).unwrap()
+    previous: InstallationBaseline | None = None
+    if declared is not None:
+        previous = workspace.require_entry_baseline(declared).unwrap()
+    elif workspace.lockfile is not None:
+        previous = workspace.lockfile.baseline_for_destination(entry.destination)
+    locked = _prepare_dependency_lock(workspace, entry.dependency, source=source).unwrap()
+    dependency = Dependency.model_validate(locked.model_dump(exclude={"revision"}))
+    source.validate_input(dependency).unwrap()
+    with hosting.acquire(dependency, revision=locked.revision) as acquired:
+        path = acquired.unwrap()
+        current = source.resolve(dependency, path).unwrap()
+        validate_freshness(
+            entry.dependency,
+            selector=dependency.selector,
+            locked_revision=locked.revision,
+            current_revision=current.revision,
+            allow_outdated=allow_outdated,
+        ).unwrap()
+        resolved = ResolvedSource(dependency=dependency, path=path, revision=locked.revision)
+        return _install_added_entry(workspace, entry, resolved, source=source, previous=previous)

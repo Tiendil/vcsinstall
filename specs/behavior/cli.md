@@ -464,20 +464,20 @@ Each entry-path example requires all supplied entries to belong to the named dep
 Add MUST require exactly one `SOURCE` reference and one `DESTINATION` path.
 Missing or extra positional arguments MUST fail before fetching sources or changing project files.
 It MUST create the corresponding entry declaration and install its content by default.
-Only `--replace` and `--allow-outdated` MUST be accepted as command-specific options; repository and version-selection options MUST belong to `dependency add`.
+Only `--redefine` and `--allow-outdated` MUST be accepted as command-specific options; repository and version-selection options MUST belong to `dependency add`.
 
-Without `--replace`, add MUST fail if the supplied canonical destination is already declared, even when the requested mapping is identical.
-The error MUST identify the conflicting destination and explain that intentional redefinition requires `--replace`.
+Without `--redefine`, add MUST fail if the supplied canonical destination is already declared, even when the requested mapping is identical.
+The error MUST identify the conflicting destination and explain that intentional redefinition requires `--redefine`.
 This check MUST complete before fetching sources or changing project files.
 
-Add MUST accept `--replace` to permit redefinition of the entry at the supplied destination, including assigning it to a different declared dependency.
+Add MUST accept `--redefine` to permit redefinition of the entry at the supplied destination, including assigning it to a different declared dependency.
 For an already declared destination, it MUST replace the existing declaration rather than create a second entry.
-For an undeclared destination, it MUST create a new entry normally, including when `--replace` is supplied.
-`--replace` MUST authorize only entry redefinition; it MUST NOT bypass destination validation or Installation protection in `specs/behavior/locking.md`.
+For an undeclared destination, it MUST create a new entry normally, including when `--redefine` is supplied.
+`--redefine` MUST authorize only entry redefinition; it MUST NOT bypass destination validation or Installation protection in `specs/behavior/locking.md`.
 
 Add MUST invoke the `add` operation contract in `specs/behavior/locking.md`.
 `--allow-outdated` MUST grant that contract's permission to install from an outdated matching lock.
-`--replace` MUST NOT imply `--allow-outdated`.
+`--redefine` MUST NOT imply `--allow-outdated`.
 A required freshness failure or an unpermitted revision mismatch MUST produce an operational failure.
 The mismatch diagnostic MUST identify the dependency, its requested selector, and both revisions and suggest `dependency update NAME` or `--allow-outdated`.
 
@@ -487,9 +487,9 @@ Examples, using previously declared dependencies:
 vcsinstall add ci@/specs @/specs/shared
 vcsinstall add formatting@/LICENSE @/licenses/shared.txt
 vcsinstall add formatting@/guides @/docs/shared
-vcsinstall add --replace formatting@/specs @/specs/shared
+vcsinstall add --redefine formatting@/specs @/specs/shared
 vcsinstall add --allow-outdated ci@/guides @/docs/shared
-vcsinstall add --replace --allow-outdated formatting@/specs @/specs/shared
+vcsinstall add --redefine --allow-outdated formatting@/specs @/specs/shared
 ```
 
 ## `vcsinstall install` command
