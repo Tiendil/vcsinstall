@@ -63,6 +63,14 @@ class Workspace(BaseEntity):
         """
         return validation.require_entry_baseline(self, entry)
 
+    def require_matching_entry_baseline(self, entry: Entry) -> Result[InstallationBaseline]:
+        """Return a baseline for the same destination, dependency, and source path.
+
+        Example: '@/docs' declared from ci '@/guide' rejects an old baseline
+        from ci '@/other'. Matching the dependency lock is a separate check.
+        """
+        return validation.require_matching_entry_baseline(self, entry)
+
     def validate_destination_ownership(self, destination: ProjectPathId) -> Result[None]:
         """Check destination ownership without authorizing replacement or accessing files.
 

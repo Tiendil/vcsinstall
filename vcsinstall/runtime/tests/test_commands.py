@@ -7,7 +7,7 @@ import pytest
 from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core import settings
 from llm_tool_cli.core.result import Err, Ok, Result
-from llm_tool_cli.paths import PathInput, ProjectConfigPath
+from llm_tool_cli.paths import PathInput, ProjectConfigPath, ProjectPathId
 from llm_tool_cli.paths import errors as path_errors
 from pytest_mock import MockerFixture
 
@@ -16,7 +16,7 @@ from vcsinstall.cache import errors as cache_errors
 from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SourcePath, SourceRevision, VcsId
 from vcsinstall.domain.tests import make
 from vcsinstall.hosting import GitHostingAdapter
-from vcsinstall.runtime import dependency_add, entry_add
+from vcsinstall.runtime import dependency_add, entry_add, entry_remove
 from vcsinstall.runtime.commands import _prepare_dependency_lock
 from vcsinstall.runtime.tests.conftest import CollectingEmitter
 from vcsinstall.sources import ResolvedSource
@@ -103,6 +103,32 @@ class TestPrepareDependencyLock:
 
         assert result.is_err(workspace_errors.DependencyLockRequired)
         normalize.assert_not_called()
+
+
+@pytest.mark.usefixtures("isolated_settings")
+class TestEntryRemove:
+    @pytest.mark.parametrize("destinations", [(), (ProjectPathId("@/undeclared"),)])
+    def test_invalid_selection_returns_errors_without_effects_or_output(
+        self,
+        tmp_path: Path,
+        emitter: CollectingEmitter,
+        destinations: tuple[ProjectPathId, ...],
+        isolated_settings: None,
+    ) -> None:
+        settings.initialize(
+            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
+        )
+        config = tmp_path / "vcsinstall.toml"
+        config.write_text("version = 1\n")
+        workspace = load_workspace(cwd=PathInput(tmp_path)).unwrap()
+
+        with workspace.scope():
+            result = entry_remove(destinations, keep_files=True)
+
+        assert result.is_err(InvalidArguments)
+        assert not emitter.cells
+        assert config.read_text() == "version = 1\n"
+        assert not (tmp_path / "vcsinstall.lock").exists()
 
 
 @pytest.mark.usefixtures("isolated_settings")

@@ -103,3 +103,20 @@ def validate_freshness(  # noqa: CFQ002 — Compare supplied selector and revisi
             ]
         )
     return Ok(None)
+
+
+def validate_removal_content(
+    baseline: Mapping[ProjectPathId, ContentHash],
+    *,
+    files: Mapping[ProjectPathId, ContentHash],
+    destination: ProjectPathId,
+) -> Result[None]:
+    """Require all remaining files to agree with the verified removal baseline.
+
+    Example: baseline {a: old, b: old} accepts actual {a: old} despite missing
+    b, but rejects {a: edited} and {a: old, extra: new}. Empty directories do
+    not contribute files; baseline trust is established by the caller.
+    """
+    if not content_matches(baseline, files=files):
+        return Err([errors.RemovalConflict(destination=destination)])
+    return Ok(None)

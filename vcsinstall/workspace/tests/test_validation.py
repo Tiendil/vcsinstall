@@ -322,3 +322,33 @@ class TestRequireEntryBaseline:
         previous = workspace.lockfile.entries[0]
 
         assert workspace.require_entry_baseline(declaration).unwrap() is previous
+
+
+class TestRequireMatchingEntryBaseline:
+    @pytest.mark.parametrize("field", ["dependency", "source_path"])
+    def test_rejects_a_different_source_mapping(self, workspace: Workspace, field: str) -> None:
+        entry = workspace.config.entries[0]
+        changes = {field: "formatting" if field == "dependency" else "@/different-source"}
+        changed = Entry.model_validate(entry.model_dump() | changes)
+
+        result = workspace.require_matching_entry_baseline(changed)
+
+        problem = result.unwrap_err()[0]
+        assert isinstance(problem, errors.BaselineMismatch)
+        assert problem.destination == entry.destination
+        assert problem.dependency == changed.dependency
+        assert problem.path == workspace.lockfile_path
+
+    def test_returns_matching_baseline_without_io(self, workspace: Workspace, mocker: MockerFixture) -> None:
+        resolve = mocker.patch.object(Path, "resolve", side_effect=AssertionError("unexpected filesystem access"))
+        assert workspace.lockfile is not None
+
+        baseline = workspace.require_matching_entry_baseline(workspace.config.entries[0]).unwrap()
+
+        assert baseline is workspace.lockfile.entries[0]
+        resolve.assert_not_called()
+
+    def test_preserves_missing_baseline_errors(self, workspace: Workspace) -> None:
+        result = workspace.replace(lockfile=None).require_matching_entry_baseline(workspace.config.entries[0])
+
+        assert result.is_err(errors.MissingBaseline)

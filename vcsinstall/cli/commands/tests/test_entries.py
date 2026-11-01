@@ -7,14 +7,16 @@ import pytest
 import tomli_w
 from llm_tool_cli.config.project import project_config
 from llm_tool_cli.core import settings
-from llm_tool_cli.core.result import Err
+from llm_tool_cli.core.result import Err, Result
+from llm_tool_cli.paths import ProjectPathId
 from llm_tool_cli.paths import errors as path_errors
+from llm_tool_cli.protocol.tests.helpers import cell_payloads
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
 from vcsinstall.cache import active_cache_root
 from vcsinstall.cli.application import app
-from vcsinstall.cli.commands.tests.helpers import invoke_add, invoke_entry_add
+from vcsinstall.cli.commands.tests.helpers import declare_entry, invoke_add, invoke_entry_add, invoke_entry_remove
 from vcsinstall.filesystem import errors as filesystem_errors
 from vcsinstall.filesystem import hashes
 from vcsinstall.runtime import errors as runtime_errors
@@ -22,6 +24,502 @@ from vcsinstall.vcs_clients import GitClient
 from vcsinstall.vcs_clients.tests.helpers import create_repository
 from vcsinstall.workspace import active_workspace
 from vcsinstall.workspace import errors as workspace_errors
+
+
+@pytest.mark.usefixtures("isolated_settings")
+class TestRemoveEntries:
+    @pytest.fixture(autouse=True)
+    def initialize(self, isolated_settings: None) -> None:
+        settings.initialize(
+            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
+        )
+
+    @pytest.fixture
+    def config(self, tmp_path: Path) -> Path:
+        project = tmp_path / "project"
+        project.mkdir()
+        config = project / "custom.toml"
+        definition = (
+            'version = 1\n[dependencies.ci]\nvcs = "git"\nrepository = "../unavailable-source"\n'
+            'selector = { kind = "branch", value = "main" }\n'
+        )
+        config.write_text(definition)
+        config.with_name("vcsinstall.lock").write_text(definition + 'revision = "' + "1" * 40 + '"\n')
+        declare_entry(config, source="@/guide", destination="@/installed.txt", files=b"original")
+        declare_entry(
+            config,
+            source="@/guides",
+            destination="@/docs/shared",
+            files={"guide": b"guide", "nested/second": b"second"},
+        )
+        declare_entry(config, source="@/other", destination="@/unselected", files=b"unselected")
+        (project / "installed.txt").write_bytes(b"original")
+        (project / "docs/shared/nested").mkdir(parents=True)
+        (project / "docs/shared/guide").write_bytes(b"guide")
+        (project / "docs/shared/nested/second").write_bytes(b"second")
+        (project / "unselected").write_bytes(b"unselected")
+        return config
+
+    def test_removes_complete_selection_once_and_preserves_shared_locks(self, config: Path) -> None:
+        lockfile = config.with_name("vcsinstall.lock")
+        declarations = tomllib.loads(config.read_text())
+        recorded = tomllib.loads(lockfile.read_text())
+        (config.parent / "docs/shared/empty").mkdir()
+        (config.parent / "unselected").write_bytes(b"unselected local edits")
+
+        code, records, output = invoke_entry_remove(
+            config, "@/installed.txt", "@/docs/shared", " @/docs/unused/../shared "
+        )
+
+        assert code == 0, output
+        assert [record["destination"] for record in records] == ["@/docs/shared", "@/installed.txt"]
+        for record in records:
+            assert record["type"] == "removal"
+            assert record["operation"] == "remove"
+            assert record["dependency"] == "ci"
+            assert record["outcome"] == "removed"
+            assert record["keep_files"] is False
+            assert record["content"] is None
+            assert "status" not in record and "revision" not in record
+        assert not (config.parent / "installed.txt").exists()
+        assert not (config.parent / "docs/shared").exists()
+        assert (config.parent / "docs").is_dir()
+        assert (config.parent / "unselected").read_bytes() == b"unselected local edits"
+        updated = tomllib.loads(config.read_text())
+        locked = tomllib.loads(lockfile.read_text())
+        assert updated["dependencies"] == declarations["dependencies"]
+        assert locked["dependencies"] == recorded["dependencies"]
+        assert updated["entries"] == [declarations["entries"][2]]
+        assert locked["entries"] == [recorded["entries"][2]]
+        assert not project_config.is_set()
+        assert not active_workspace.is_set()
+        assert not active_cache_root.is_set()
+
+    def test_selection_spans_dependencies_and_preserves_locks_after_last_entry(self, config: Path) -> None:
+        lockfile = config.with_name("vcsinstall.lock")
+        declared = tomllib.loads(config.read_text())
+        locked = tomllib.loads(lockfile.read_text())
+        definition = {"vcs": "filesystem", "repository": "../unavailable-files"}
+        declared["dependencies"]["local"] = definition
+        locked["dependencies"]["local"] = {**definition, "revision": "sha256:" + "2" * 64}
+        declared["entries"][1]["dependency"] = "local"
+        locked["entries"][1]["dependency"] = "local"
+        config.write_text(tomli_w.dumps(declared))
+        lockfile.write_text(tomli_w.dumps(locked))
+
+        code, records, output = invoke_entry_remove(config, "@/unselected", "@/installed.txt", "@/docs/shared")
+
+        assert code == 0, output
+        assert cell_payloads(records) == [
+            {
+                "content": None,
+                "type": "removal",
+                "operation": "remove",
+                "dependency": name,
+                "destination": destination,
+                "outcome": "removed",
+                "keep_files": False,
+            }
+            for name, destination in (("local", "@/docs/shared"), ("ci", "@/installed.txt"), ("ci", "@/unselected"))
+        ]
+        assert tomllib.loads(config.read_text()) == {**declared, "entries": []}
+        assert tomllib.loads(lockfile.read_text()) == {**locked, "entries": []}
+
+    @pytest.mark.parametrize("kind", ["directory", "absent"])
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_empty_and_absent_baselines_allow_structural_directory_equivalence(
+        self, config: Path, kind: str, existing: bool
+    ) -> None:
+        declare_entry(config, source="@/empty", destination="@/empty", files={})
+        lockfile = config.with_name("vcsinstall.lock")
+        if kind == "absent":
+            recorded = tomllib.loads(lockfile.read_text())
+            recorded["entries"][-1].pop("files")
+            recorded["entries"][-1].pop("hash")
+            recorded["entries"][-1]["kind"] = "absent"
+            lockfile.write_text(tomli_w.dumps(recorded))
+        if existing:
+            (config.parent / "empty/nested").mkdir(parents=True)
+
+        code, records, output = invoke_entry_remove(config, "@/empty")
+
+        assert code == 0, output
+        assert records[0]["outcome"] == "removed"
+        assert not (config.parent / "empty").exists()
+
+    @pytest.mark.parametrize("form", ["relative", "absolute", "identifier"])
+    def test_normalizes_entry_paths_from_invocation_directory(
+        self, config: Path, mocker: MockerFixture, form: str
+    ) -> None:
+        invocation = config.parent / "docs"
+        mocker.patch("pathlib.Path.cwd", return_value=invocation)
+        entry_path = {
+            "relative": " ./unused/../shared ",
+            "absolute": str(invocation / "shared"),
+            "identifier": " @/docs/unused/../shared ",
+        }[form]
+
+        code, records, output = invoke_entry_remove(config, entry_path)
+
+        assert code == 0, output
+        assert len(records) == 1
+        assert records[0]["destination"] == "@/docs/shared"
+        assert (config.parent / "installed.txt").read_bytes() == b"original"
+
+    @pytest.mark.parametrize("arguments", [[], ["--force"], ["--keep-files"], ["--keep-files", "--force"]])
+    def test_requires_an_explicit_selection_before_project_loading(self, tmp_path: Path, arguments: list[str]) -> None:
+        result = CliRunner().invoke(app, ["--config", str(tmp_path / "missing"), "remove", *arguments])
+
+        assert result.exit_code == 2, result.output
+        assert not tuple(tmp_path.iterdir())
+        assert not active_workspace.is_set()
+
+    @pytest.mark.parametrize("entry_path", ["@/missing", "@/docs/shared/guide", "@/docs", "@/docs/*", "@/"])
+    def test_unknown_or_nonroot_selection_preserves_every_selected_entry(self, config: Path, entry_path: str) -> None:
+        before = config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()
+
+        code, records, output = invoke_entry_remove(config, "@/installed.txt", entry_path)
+
+        assert code == 1, output
+        assert records[0]["type"] == "error"
+        assert entry_path in output
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+        assert (config.parent / "installed.txt").read_bytes() == b"original"
+
+    @pytest.mark.parametrize("change", ["edited", "addition", "hidden", "obstruction", "root_file"])
+    @pytest.mark.parametrize("force", [False, True])
+    def test_complete_tree_protection_and_forced_removal(  # noqa: CCR001 — Exercise distinct content-change cases.
+        self, config: Path, change: str, force: bool
+    ) -> None:
+        directory = config.parent / "docs/shared"
+        if change == "edited":
+            (directory / "guide").write_bytes(b"edited")
+        elif change in ("addition", "hidden"):
+            (directory / ("generated" if change == "addition" else ".hidden")).write_bytes(b"new")
+        elif change == "obstruction":
+            (directory / "nested/second").unlink()
+            (directory / "nested").rmdir()
+            (directory / "nested").write_bytes(b"obstructing regular file")
+        else:
+            (directory / "nested/second").unlink()
+            (directory / "nested").rmdir()
+            (directory / "guide").unlink()
+            directory.rmdir()
+            directory.write_bytes(b"replaced directory")
+        before = config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()
+
+        code, records, output = invoke_entry_remove(
+            config, *(["--force"] if force else []), "@/installed.txt", "@/docs/shared"
+        )
+
+        assert code == (0 if force else 3), output
+        if force:
+            assert not directory.exists()
+            assert not (config.parent / "installed.txt").exists()
+        else:
+            assert records[0]["code"] == runtime_errors.RemovalConflict.model_fields["code"].default
+            assert records[0]["destination"] == "@/docs/shared"
+            assert "--keep-files" in output and "--force" in output
+            assert directory.exists()
+            assert (config.parent / "installed.txt").read_bytes() == b"original"
+            assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+
+    @pytest.mark.parametrize("missing", ["file", "directory", "child", "empty_at_file"])
+    def test_missing_content_does_not_block_removal(self, config: Path, missing: str) -> None:
+        root = config.parent
+        if missing == "file":
+            (root / "installed.txt").unlink()
+        elif missing == "directory":
+            (root / "docs/shared").rename(root / "retained-outside-selection")
+        elif missing == "child":
+            (root / "docs/shared/guide").unlink()
+        else:
+            (root / "installed.txt").unlink()
+            (root / "installed.txt").mkdir()
+
+        code, records, output = invoke_entry_remove(config, "@/installed.txt", "@/docs/shared")
+
+        assert code == 0, output
+        assert len(records) == 2
+        assert not (root / "installed.txt").exists()
+        assert not (root / "docs/shared").exists()
+        assert (root / "unselected").read_bytes() == b"unselected"
+
+    @pytest.mark.parametrize("force", [False, True])
+    def test_keep_files_preserves_all_content_without_inspecting_it(
+        self, config: Path, mocker: MockerFixture, force: bool
+    ) -> None:
+        from vcsinstall.filesystem import FSClient
+
+        target = config.parent / "docs/shared"
+        (target / "guide").write_bytes(b"local changes")
+        (target / "extra").write_bytes(b"local addition")
+        (target / "link").symlink_to(config.parent / "unselected")
+        os.utime(target / "guide", ns=(1, 1))
+        config.with_name("vcsinstall.lock").unlink()
+        inspect = mocker.patch.object(FSClient, "inspect_tree", side_effect=AssertionError("unexpected inspection"))
+
+        code, records, output = invoke_entry_remove(
+            config, "--keep-files", *(["--force"] if force else []), "@/docs/shared"
+        )
+
+        assert code == 0, output
+        assert records[0]["keep_files"] is True
+        assert (target / "guide").read_bytes() == b"local changes"
+        assert (target / "guide").stat().st_mtime_ns == 1
+        assert (target / "extra").read_bytes() == b"local addition"
+        assert (target / "nested/second").read_bytes() == b"second"
+        assert (target / "link").is_symlink()
+        assert not config.with_name("vcsinstall.lock").exists()
+        inspect.assert_not_called()
+
+    @pytest.mark.parametrize("state", ["missing_file", "empty_lock", "missing_baseline", "source", "dependency"])
+    @pytest.mark.parametrize("mode", ["normal", "force", "keep", "absent"])
+    def test_unavailable_or_mismatching_baselines_require_an_applicable_bypass(  # noqa: CCR001 — State combinations.
+        self, config: Path, state: str, mode: str
+    ) -> None:
+        lockfile = config.with_name("vcsinstall.lock")
+        recorded = tomllib.loads(lockfile.read_text())
+        if state == "missing_file":
+            lockfile.unlink()
+        elif state == "empty_lock":
+            lockfile.write_text("# retained empty state\nversion = 1\n")
+        elif state == "missing_baseline":
+            recorded["entries"] = recorded["entries"][1:]
+            lockfile.write_text(tomli_w.dumps(recorded))
+        else:
+            declared = tomllib.loads(config.read_text())
+            if state == "source":
+                declared["entries"][0]["source_path"] = "@/new-source"
+            else:
+                declared["dependencies"]["other"] = declared["dependencies"]["ci"]
+                declared["entries"][0]["dependency"] = "other"
+                recorded["dependencies"]["other"] = recorded["dependencies"]["ci"]
+                lockfile.write_text(tomli_w.dumps(recorded))
+            config.write_text(tomli_w.dumps(declared))
+        if mode == "absent":
+            (config.parent / "installed.txt").unlink()
+        before = config.read_bytes(), lockfile.read_bytes() if lockfile.exists() else None
+        options = {"normal": [], "force": ["--force"], "keep": ["--keep-files"], "absent": []}[mode]
+
+        code, records, output = invoke_entry_remove(config, *options, "@/installed.txt")
+
+        assert code == (3 if mode == "normal" else 0), output
+        assert lockfile.exists() == (state != "missing_file")
+        if mode == "normal":
+            assert records[0]["type"] == "error"
+            assert str(lockfile) in output
+            assert (config.read_bytes(), lockfile.read_bytes() if lockfile.exists() else None) == before
+            assert (config.parent / "installed.txt").read_bytes() == b"original"
+        elif mode == "keep":
+            assert records[0]["keep_files"] is True
+            assert (config.parent / "installed.txt").read_bytes() == b"original"
+        else:
+            assert not (config.parent / "installed.txt").exists()
+        if state == "empty_lock":
+            assert lockfile.read_bytes() == before[1]
+
+    @pytest.mark.parametrize("change", ["repository", "selector", "backend"])
+    def test_dependency_lock_must_match_for_verification(self, config: Path, change: str) -> None:
+        declared = tomllib.loads(config.read_text())
+        if change == "repository":
+            declared["dependencies"]["ci"]["repository"] = "other-source"
+        elif change == "selector":
+            declared["dependencies"]["ci"]["selector"]["value"] = "other"
+        else:
+            declared["dependencies"]["ci"] = {"vcs": "filesystem", "repository": "other-source"}
+        config.write_text(tomli_w.dumps(declared))
+        before = config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()
+
+        code, records, output = invoke_entry_remove(config, "@/installed.txt")
+
+        assert code == 3, output
+        assert records[0]["code"] == workspace_errors.DependencyLockRequired.model_fields["code"].default
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+        assert (config.parent / "installed.txt").read_bytes() == b"original"
+
+    @pytest.mark.parametrize("mode", [[], ["--force"], ["--keep-files"]])
+    def test_invalid_lockfile_is_never_bypassed(self, config: Path, mode: list[str]) -> None:
+        lockfile = config.with_name("vcsinstall.lock")
+        lockfile.write_text("invalid TOML [")
+        before = config.read_bytes(), lockfile.read_bytes()
+
+        code, records, output = invoke_entry_remove(config, *mode, "@/installed.txt")
+
+        assert code == 2, output
+        assert records[0]["type"] == "error"
+        assert str(lockfile) in output
+        assert (config.read_bytes(), lockfile.read_bytes()) == before
+        assert (config.parent / "installed.txt").read_bytes() == b"original"
+
+    @pytest.mark.parametrize("mode", [[], ["--force"], ["--keep-files"]])
+    def test_symlinked_selection_is_rejected_before_any_changes(self, config: Path, mode: list[str]) -> None:
+        target = config.parent / "installed.txt"
+        target.unlink()
+        target.symlink_to(config.parent / "unselected")
+        before = config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()
+
+        code, records, output = invoke_entry_remove(config, *mode, "@/docs/shared", "@/installed.txt")
+
+        assert code == 3, output
+        assert records[0]["code"] == path_errors.InvalidProjectPath.model_fields["code"].default
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+        assert (config.parent / "docs/shared/guide").read_bytes() == b"guide"
+        assert (config.parent / "unselected").read_bytes() == b"unselected"
+
+    @pytest.mark.parametrize("force", [False, True])
+    def test_symlink_inside_deleted_tree_cannot_be_bypassed(self, config: Path, force: bool) -> None:
+        (config.parent / "docs/shared/link").symlink_to(config.parent / "unselected")
+        before = config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()
+
+        code, records, output = invoke_entry_remove(
+            config, *(["--force"] if force else []), "@/installed.txt", "@/docs/shared"
+        )
+
+        assert code == 3, output
+        assert records[0]["code"] == path_errors.InvalidProjectPath.model_fields["code"].default
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+        assert (config.parent / "installed.txt").read_bytes() == b"original"
+
+    @pytest.mark.parametrize("mode", [[], ["--force"], ["--keep-files"]])
+    def test_escaping_path_preserves_selection_and_outside_content(self, config: Path, mode: list[str]) -> None:
+        outside = config.parent.parent / "outside"
+        outside.write_bytes(b"outside")
+        before = config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()
+
+        code, records, output = invoke_entry_remove(config, *mode, "@/installed.txt", str(outside))
+
+        assert code == 3, output
+        assert records[0]["code"] == path_errors.InvalidProjectPath.model_fields["code"].default
+        assert outside.read_bytes() == b"outside"
+        assert (config.parent / "installed.txt").read_bytes() == b"original"
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+
+    def test_forced_removal_cannot_delete_an_obstructing_ancestor(self, config: Path) -> None:
+        (config.parent / "docs").rename(config.parent / "outside-selection")
+        (config.parent / "docs").write_bytes(b"obstructing parent")
+        before = config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()
+
+        code, records, output = invoke_entry_remove(config, "--force", "@/installed.txt", "@/docs/shared")
+
+        assert code == 3, output
+        assert records[0]["type"] == "error"
+        assert (config.parent / "docs").read_bytes() == b"obstructing parent"
+        assert (config.parent / "installed.txt").read_bytes() == b"original"
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+
+    def test_unselected_symlink_does_not_require_inspection(self, config: Path) -> None:
+        target = config.parent / "unselected"
+        target.unlink()
+        target.symlink_to(config.parent / "docs", target_is_directory=True)
+
+        code, _, output = invoke_entry_remove(config, "@/installed.txt")
+
+        assert code == 0, output
+        assert target.is_symlink()
+        assert (config.parent / "docs/shared/guide").read_bytes() == b"guide"
+
+    def test_cache_and_source_access_are_unused(self, config: Path, mocker: MockerFixture) -> None:
+        for name in (
+            "vcsinstall.cli.commands.entries.resolve_cache_root",
+            "vcsinstall.cli.commands.entries.get_hosting",
+            "vcsinstall.vcs_clients.GitClient.run",
+            "vcsinstall.cache.paths.user_cache_path",
+        ):
+            mocker.patch(name, side_effect=AssertionError("unexpected source or cache access"))
+        result = CliRunner().invoke(
+            app, ["--config", str(config), "--cache-dir", str(config / "invalid-cache"), "remove", "@/installed.txt"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert not (config.parent / "installed.txt").exists()
+
+    def test_deletion_failure_reports_partial_effects_and_preserves_metadata(
+        self, config: Path, mocker: MockerFixture
+    ) -> None:
+        from vcsinstall.filesystem import FSClient
+
+        original = FSClient.remove
+        problem = filesystem_errors.AccessFailed(path=config.parent / "installed.txt", reason="deletion denied")
+
+        def remove(client: FSClient, destination: ProjectPathId) -> Result[None]:
+            if destination == "@/installed.txt":
+                return Err([problem])
+            return original(client, destination)
+
+        mocker.patch.object(FSClient, "remove", autospec=True, side_effect=remove)
+        before = config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()
+
+        code, records, output = invoke_entry_remove(config, "@/installed.txt", "@/docs/shared")
+
+        assert code == 3, output
+        assert [record["code"] for record in records] == [
+            runtime_errors.RemovalWriteFailed.model_fields["code"].default,
+            filesystem_errors.AccessFailed.model_fields["code"].default,
+        ]
+        assert records[0]["destination"] == "@/installed.txt"
+        assert "inconsistent" in output
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+        assert not (config.parent / "docs/shared").exists()
+        assert (config.parent / "installed.txt").read_bytes() == b"original"
+        assert not active_workspace.is_set()
+
+    @pytest.mark.parametrize("failed_file", ["custom.toml", "vcsinstall.lock"])
+    def test_metadata_write_failures_identify_completed_effects(
+        self, config: Path, mocker: MockerFixture, failed_file: str
+    ) -> None:
+        original = Path.write_bytes
+        failure = config.parent / failed_file
+        lockfile = config.with_name("vcsinstall.lock")
+        before = config.read_bytes(), lockfile.read_bytes()
+
+        def write(path: Path, data: bytes) -> int:
+            if path == failure:
+                raise PermissionError("project write denied")
+            return original(path, data)
+
+        mocker.patch.object(Path, "write_bytes", autospec=True, side_effect=write)
+
+        code, records, output = invoke_entry_remove(config, "@/installed.txt")
+
+        assert code == 3, output
+        assert len(records) == 1
+        assert records[0]["code"] == filesystem_errors.AccessFailed.model_fields["code"].default
+        assert records[0]["path"] == str(failure)
+        assert "completed project writes" in output
+        assert "Installed file changes may already have completed" in output
+        assert not (config.parent / "installed.txt").exists()
+        assert lockfile.read_bytes() == before[1]
+        assert (config.read_bytes() == before[0]) == (failed_file == "custom.toml")
+        assert not active_workspace.is_set()
+
+    @pytest.mark.parametrize("protocol", ["human", "llm", "automation"])
+    def test_success_and_expected_failure_use_shared_protocol(self, config: Path, protocol: str) -> None:
+        arguments = ["-p", protocol, "--config", str(config), "remove", "@/installed.txt"]
+        success = CliRunner().invoke(app, arguments)
+        unknown = CliRunner().invoke(app, arguments)
+
+        assert success.exit_code == 0, success.output
+        assert unknown.exit_code == 1, unknown.output
+        assert not success.stderr and not unknown.stderr
+        assert "@/installed.txt" in success.stdout
+        if protocol == "llm":
+            assert "--VCSINSTALL-CELL " in success.stdout
+            assert "--VCSINSTALL-CELL " in unknown.stdout
+        elif protocol == "automation":
+            assert json.loads(success.stdout)["operation"] == "remove"
+            assert json.loads(unknown.stdout)["type"] == "error"
+
+    def test_argument_separator_accepts_leading_hyphen(self, config: Path, mocker: MockerFixture) -> None:
+        declare_entry(config, source="@/dash", destination="@/-guide", files=b"dash")
+        (config.parent / "-guide").write_bytes(b"dash")
+        mocker.patch("pathlib.Path.cwd", return_value=config.parent)
+
+        code, records, output = invoke_entry_remove(config, "--", "-guide")
+
+        assert code == 0, output
+        assert records[0]["destination"] == "@/-guide"
+        assert not (config.parent / "-guide").exists()
 
 
 @pytest.mark.usefixtures("isolated_settings")

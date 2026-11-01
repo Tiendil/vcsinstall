@@ -1,5 +1,6 @@
 """Project configuration declarations."""
 
+from collections.abc import Collection
 from typing import Literal, Self
 
 import pydantic
@@ -33,6 +34,29 @@ class Config(BaseEntity):
     def entry_for_destination(self, destination: ProjectPathId) -> Entry | None:
         """Return the declaration at a canonical destination, if one exists."""
         return next((entry for entry in self.entries if entry.destination == destination), None)
+
+    def with_dependency(self, name: DependencyName, dependency: Dependency) -> Self:
+        """Return a copy adding or replacing one dependency without changing entry mappings."""
+        return self.replace(dependencies=self.dependencies | {name: dependency})
+
+    def with_entry(self, entry: Entry) -> Self:
+        """Return a copy replacing an exact destination in place, or appending a new entry.
+
+        The caller establishes operation permissions and destination ownership;
+        this method only updates declaration data using the entry's identity.
+        """
+        declarations = {item.destination: item for item in self.entries}
+        declarations[entry.destination] = entry
+        return self.replace(entries=tuple(declarations.values()))
+
+    def without_entries(self, destinations: Collection[ProjectPathId]) -> Self:
+        """Return a copy removing exact destinations and preserving dependencies and entry order.
+
+        Unknown destinations are ignored; selecting '@/docs' does not remove
+        a declaration at '@/docs/guide'. Selection validity belongs to runtime.
+        """
+        selected = set(destinations)
+        return self.replace(entries=tuple(entry for entry in self.entries if entry.destination not in selected))
 
     @pydantic.model_validator(mode="after")
     def _validate_bindings(self) -> Self:

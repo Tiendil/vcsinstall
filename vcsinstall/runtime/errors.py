@@ -31,6 +31,26 @@ class InstallationWriteFailed(EnvironmentError):
     ways_to_fix: list[str] = ["Resolve the reported failure, inspect the installed entries, and retry."]
 
 
+class RemovalConflict(EnvironmentError):
+    code: str = "removal_conflict"
+    message: str = "Existing local content at {error.destination} differs from its recorded installation baseline."
+    ways_to_fix: list[str] = [
+        "Preserve your changes elsewhere or use remove --keep-files to retain the content.",
+        "Use remove --force to authorize deletion of local changes within the selected entry roots.",
+    ]
+    destination: ProjectPathId
+
+
+class RemovalWriteFailed(EnvironmentError):
+    code: str = "removal_write_failed"
+    message: str = (
+        "Removing {error.destination} failed; installed content may be inconsistent with project records. "
+        "Project records have not been changed."
+    )
+    ways_to_fix: list[str] = ["Resolve the reported failure, inspect the selected entries, and retry removal."]
+    destination: ProjectPathId
+
+
 class OutdatedDependency(EnvironmentError):
     code: str = "outdated_dependency"
     message: str = (

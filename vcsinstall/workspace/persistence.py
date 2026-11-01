@@ -15,7 +15,9 @@ class WorkspaceFileUpdates(BaseEntity):
     lockfile: bytes | None
 
 
-def serialize_workspace_changes(workspace: Workspace, config: Config, lockfile: Lockfile) -> WorkspaceFileUpdates:
+def serialize_workspace_changes(
+    workspace: Workspace, config: Config, lockfile: Lockfile | None
+) -> WorkspaceFileUpdates:
     """Serialize changed models without filesystem access or path validation."""
     config_bytes = (
         tomli_w.dumps(config.model_dump(mode="json", exclude_none=True)).encode("utf-8")
@@ -24,7 +26,7 @@ def serialize_workspace_changes(workspace: Workspace, config: Config, lockfile: 
     )
     lockfile_bytes = (
         tomli_w.dumps(lockfile.model_dump(mode="json", exclude_none=True)).encode("utf-8")
-        if lockfile != workspace.lockfile
+        if lockfile is not None and lockfile != workspace.lockfile
         else None
     )
     return WorkspaceFileUpdates(config=config_bytes, lockfile=lockfile_bytes)

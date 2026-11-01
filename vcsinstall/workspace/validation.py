@@ -165,3 +165,24 @@ def require_entry_baseline(workspace: Workspace, entry: Entry) -> Result[Install
             ]
         )
     return Ok(previous)
+
+
+@unwrap_to_error
+def require_matching_entry_baseline(workspace: Workspace, entry: Entry) -> Result[InstallationBaseline]:
+    """Return a destination's baseline only when its dependency and source path agree.
+
+    Example: a ci '@/guide' entry cannot use a ci '@/old-guide' baseline at
+    the same destination. Dependency-lock matching is checked separately.
+    """
+    baseline = require_entry_baseline(workspace, entry).unwrap()
+    if baseline.dependency != entry.dependency or baseline.source_path != entry.source_path:
+        return Err(
+            [
+                errors.BaselineMismatch(
+                    path=workspace.lockfile_path,
+                    dependency=entry.dependency,
+                    destination=entry.destination,
+                )
+            ]
+        )
+    return Ok(baseline)

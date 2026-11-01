@@ -17,6 +17,7 @@ class Outcome(StrEnum):
     updated = "updated"
     unchanged = "unchanged"
     installed = "installed"
+    removed = "removed"
 
 
 class RefKind(StrEnum):
@@ -29,6 +30,24 @@ class RefKind(StrEnum):
 class Operation(StrEnum):
     dependency_add = "dependency add"
     add = "add"
+    remove = "remove"
+
+
+class RemovalCell(UniformCell):
+    dependency: DependencyName
+    destination: ProjectPathId
+    keep_files: bool
+
+    def _render(self, cell_type: type[OutputCell]) -> OutputCell:
+        return cell_type.build_meta(
+            "removal",
+            type="removal",
+            operation=Operation.remove,
+            dependency=self.dependency,
+            destination=self.destination,
+            outcome=Outcome.removed,
+            keep_files=self.keep_files,
+        )
 
 
 class DependencyCell(UniformCell):

@@ -33,6 +33,14 @@ def invoke_entry_add(config: Path, cache: Path, *arguments: str) -> CommandResul
     return result.exit_code, records, result.stdout
 
 
+def invoke_entry_remove(config: Path, *arguments: str) -> CommandResult:
+    result = CliRunner().invoke(app, ["-p", "automation", "--config", str(config), "remove", *arguments])
+    if result.exception is not None and not isinstance(result.exception, SystemExit):
+        raise result.exception
+    records = [json.loads(line) for line in result.stdout.splitlines()]
+    return result.exit_code, records, result.stdout
+
+
 def declare_entry(config: Path, *, source: str, destination: str, files: dict[str, bytes] | bytes) -> None:
     mapping = {"dependency": "ci", "source_path": source, "destination": destination}
     configuration = load_config(config, Config).unwrap()

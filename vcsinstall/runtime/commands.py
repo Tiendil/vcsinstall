@@ -20,17 +20,19 @@ from vcsinstall.filesystem import (
 )
 from vcsinstall.hosting import HostingAdapter
 from vcsinstall.runtime import errors
-from vcsinstall.runtime.cells import dependency_add_cells, entry_add_cell
+from vcsinstall.runtime.cells import RemovalCell, dependency_add_cells, entry_add_cell
 from vcsinstall.runtime.entities import EntryPlan
 from vcsinstall.runtime.validation import (
     validate_entry_redefinition,
     validate_freshness,
     validate_no_local_content_conflicts,
     validate_redefinition,
+    validate_removal_content,
 )
 from vcsinstall.sources import (
     ResolvedSource,
     SourceAdapter,
+    get_adapter,
 )
 from vcsinstall.workspace import (
     AbsentBaseline,
@@ -193,12 +195,8 @@ def _updated_dependency_records(
 ) -> tuple[Config, Lockfile]:  # noqa: TAE002 — Both updated models remain local to this operation.
     new_lock = DependencyLock(**resolved.dependency.model_dump(), revision=resolved.revision)
     lockfile = workspace.lockfile or Lockfile(version=1)
-    replacements = {plan.baseline.destination: plan.baseline for plan in plans}
-    lockfile = lockfile.replace(
-        dependencies=lockfile.dependencies | {name: new_lock},
-        entries=tuple(replacements.get(entry.destination, entry) for entry in lockfile.entries),
-    )
-    config = workspace.config.replace(dependencies=workspace.config.dependencies | {name: resolved.dependency})
+    lockfile = lockfile.with_dependency(name, new_lock).with_baselines(plan.baseline for plan in plans)
+    config = workspace.config.with_dependency(name, resolved.dependency)
     return config, lockfile
 
 
@@ -289,13 +287,9 @@ def _install_added_entry(
         return Err([errors.SourceIntegrityMismatch(destination=entry.destination)])
     filesystem = FSClient(root=workspace.project_root, readonly=False)
     plan = _plan_entry(entry, source=tree, previous=previous, filesystem=filesystem).unwrap()
-    declarations = {item.destination: item for item in workspace.config.entries}
-    declarations[entry.destination] = entry
-    config = workspace.config.replace(entries=tuple(declarations.values()))
+    config = workspace.config.with_entry(entry)
     assert workspace.lockfile is not None
-    baselines = {item.destination: item for item in workspace.lockfile.entries}
-    baselines[entry.destination] = plan.baseline
-    lockfile = workspace.lockfile.replace(entries=tuple(baselines.values()))
+    lockfile = workspace.lockfile.with_baselines((plan.baseline,))
     serialized = serialize_workspace_changes(workspace, config, lockfile)
     _apply_entry_changes([plan], filesystem=filesystem, copy_file=partial(source.copy_file, resolved)).unwrap()
     write_workspace_files(workspace, serialized).unwrap()
@@ -319,18 +313,8 @@ def _prepare_dependency_lock(
         return Err([workspace_errors.DependencyLockRequired(path=workspace.lockfile_path, dependency=name)])
     assert workspace.lockfile is not None
     prepared = workspace.replace(
-        config=workspace.config.replace(
-            dependencies=workspace.config.dependencies
-            | {
-                name: declared.replace(repository=repository),
-            }
-        ),
-        lockfile=workspace.lockfile.replace(
-            dependencies=workspace.lockfile.dependencies
-            | {
-                name: recorded.replace(repository=locked_repository),
-            }
-        ),
+        config=workspace.config.with_dependency(name, declared.replace(repository=repository)),
+        lockfile=workspace.lockfile.with_dependency(name, recorded.replace(repository=locked_repository)),
     )
     return prepared.require_matching_dependency_lock(name, source=source)
 
@@ -371,3 +355,60 @@ def entry_add(  # noqa: CFQ002 — One entry and independent adapters with expli
         ).unwrap()
         resolved = ResolvedSource(dependency=dependency, path=path, revision=locked.revision)
         return _install_added_entry(workspace, entry, resolved, source=source, previous=previous)
+
+
+@unwrap_to_error
+def _prepare_entry_removal(
+    workspace: Workspace, entry: Entry, *, filesystem: FSClient, force: bool
+) -> Result[ContentTree]:
+    workspace.validate_destination_ownership(entry.destination).unwrap()
+    _validate_destination_parents(entry.destination, filesystem=filesystem).unwrap()
+    observed = filesystem.inspect_tree(entry.destination).unwrap()
+    if observed.kind != ContentKind.absent and not force:
+        source = get_adapter(workspace.config.dependencies[entry.dependency].vcs)
+        _prepare_dependency_lock(workspace, entry.dependency, source=source).unwrap()
+        baseline = workspace.require_matching_entry_baseline(entry).unwrap()
+        validate_removal_content(
+            baseline.file_hashes(), files=observed.file_hashes, destination=entry.destination
+        ).unwrap()
+    return Ok(observed)
+
+
+@unwrap_to_error
+def entry_remove(  # noqa: CCR001 — Keep whole-selection preparation before filesystem effects and persistence.
+    destinations: tuple[ProjectPathId, ...], *, keep_files: bool = False, force: bool = False
+) -> Result[None]:
+    workspace = active_workspace.get()
+    if not destinations:
+        return Err([InvalidArguments(reason="Select at least one declared entry root to remove.")])
+    entries: list[Entry] = []
+    for destination in sorted(set(destinations)):
+        entry = workspace.config.entry_for_destination(destination)
+        if entry is None:
+            return Err([InvalidArguments(reason=f"Unknown entry destination {destination!r}.")])
+        entries.append(entry)
+
+    filesystem = FSClient(root=workspace.project_root, readonly=False)
+    removals: list[ProjectPathId] = []
+    for entry in entries:
+        filesystem.resolve_path(entry.destination).unwrap()
+        if not keep_files:
+            observed = _prepare_entry_removal(workspace, entry, filesystem=filesystem, force=force).unwrap()
+            if observed.kind != ContentKind.absent:
+                removals.append(entry.destination)
+
+    config = workspace.config.without_entries(destinations)
+    lockfile = workspace.lockfile.without_entries(destinations) if workspace.lockfile is not None else None
+    serialized = serialize_workspace_changes(workspace, config, lockfile)
+    for destination in removals:
+        result = filesystem.remove(destination)
+        if result.is_err():
+            return Err([errors.RemovalWriteFailed(destination=destination), *result.unwrap_err()])
+    write_workspace_files(workspace, serialized).unwrap()
+    output.get().emit(
+        [
+            RemovalCell(dependency=entry.dependency, destination=entry.destination, keep_files=keep_files)
+            for entry in entries
+        ]
+    ).unwrap()
+    return Ok(None)

@@ -137,3 +137,20 @@ AllowOutdatedOption = Annotated[
     bool,
     typer.Option("--allow-outdated", help="Permit installation from an outdated matching dependency lock."),
 ]
+
+EntryPathsArgument = Annotated[
+    list[str],
+    typer.Argument(
+        metavar="ENTRY_PATH...", help="Declared entry roots, using project identifiers or contained paths."
+    ),
+]
+
+KeepFilesOption = Annotated[
+    bool,
+    typer.Option("--keep-files", help="Remove entry metadata and retain the installed content as unmanaged files."),
+]
+
+ForceRemovalOption = Annotated[
+    bool,
+    typer.Option("--force", help="Allow deletion of modified content or content without a matching baseline."),
+]

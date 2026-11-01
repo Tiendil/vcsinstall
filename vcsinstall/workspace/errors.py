@@ -21,7 +21,9 @@ class EnvironmentError(core_errors.EnvironmentError):
 class DependencyLockRequired(EnvironmentError):
     code: str = "dependency_lock_required"
     message: str = "{error.path}: dependency {error.dependency!r} has no matching revision lock."
-    ways_to_fix: list[str] = ["Run install or dependency update {error.dependency} before adding an entry."]
+    ways_to_fix: list[str] = [
+        "Run install or dependency update {error.dependency} to establish a matching revision lock."
+    ]
     path: Path
     dependency: DependencyName
 
@@ -50,6 +52,21 @@ class OrphanedBaseline(EnvironmentError):
     ways_to_fix: list[str] = [
         "Restore the entry declaration for this dependency and destination if its removal was accidental.",
         "If the mapping change was intentional, reconcile the obsolete lockfile record with the configuration.",
+    ]
+    path: Path
+    dependency: DependencyName
+    destination: ProjectPathId
+
+
+class BaselineMismatch(EnvironmentError):
+    code: str = "baseline_mismatch"
+    message: str = (
+        "{error.path}: the installation baseline at {error.destination} does not match "
+        "the declared source mapping for dependency {error.dependency!r}."
+    )
+    ways_to_fix: list[str] = [
+        "Restore the matching declaration or recorded baseline before verifying local content.",
+        "Use remove --keep-files to retain the content or remove --force to authorize deletion without verification.",
     ]
     path: Path
     dependency: DependencyName

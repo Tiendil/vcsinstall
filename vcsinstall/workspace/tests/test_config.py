@@ -3,10 +3,74 @@ import pytest
 from llm_tool_cli.paths import ProjectPathId
 
 from vcsinstall.domain import DependencyName
-from vcsinstall.workspace import Config, Lockfile
+from vcsinstall.domain.tests import make
+from vcsinstall.workspace import Config, Entry, Lockfile
 
 
 class TestConfig:
+    @pytest.fixture
+    def config(self) -> Config:
+        return Config.model_validate(
+            {
+                "version": 1,
+                "dependencies": {name: {"vcs": "noop", "repository": "fixture"} for name in ("ci", "formatting")},
+                "entries": [
+                    {"dependency": "ci", "source_path": "@/guide", "destination": "@/docs/guide"},
+                    {"dependency": "formatting", "source_path": "@/LICENSE", "destination": "@/licenses/shared"},
+                ],
+            }
+        )
+
+    @pytest.mark.parametrize("name", ["ci", "new"])
+    def test_with_dependency__adds_or_replaces_without_changing_entries(self, config: Config, name: str) -> None:
+        before = config.model_dump()
+        dependency = make.dependency(vcs="noop", repository="replacement")
+
+        updated = config.with_dependency(DependencyName(name), dependency)
+
+        assert updated.dependencies[DependencyName(name)] == dependency
+        assert updated.dependencies[DependencyName("formatting")] == config.dependencies[DependencyName("formatting")]
+        assert tuple(updated.dependencies) == (("ci", "formatting") if name == "ci" else ("ci", "formatting", "new"))
+        assert updated.entries == config.entries
+        assert config.model_dump() == before
+
+    @pytest.mark.parametrize("destination", ["@/docs/guide", "@/new"])
+    def test_with_entry__replaces_in_place_or_appends_by_destination(self, config: Config, destination: str) -> None:
+        before = config.model_dump()
+        entry = Entry.model_validate(
+            {"dependency": "formatting", "source_path": "@/different", "destination": destination}
+        )
+
+        updated = config.with_entry(entry).with_entry(entry)
+
+        expected = (entry, config.entries[1]) if destination == "@/docs/guide" else (*config.entries, entry)
+        assert updated.entries == expected
+        assert updated.dependencies == config.dependencies
+        assert config.model_dump() == before
+
+    @pytest.mark.parametrize(
+        "destinations,retained",
+        [
+            ([], (0, 1)),
+            (["@/docs/guide"], (1,)),
+            (["@/docs"], (0, 1)),
+            (["@/missing"], (0, 1)),
+            (["@/docs/guide", "@/docs/guide"], (1,)),
+            (["@/licenses/shared", "@/docs/guide"], ()),
+        ],
+    )
+    def test_without_entries__removes_only_exact_destinations_and_keeps_dependencies(
+        self, config: Config, destinations: list[str], retained: tuple[int, ...]
+    ) -> None:
+        before = config.model_dump()
+
+        updated = config.without_entries(tuple(ProjectPathId(path) for path in destinations))
+
+        assert updated.entries == tuple(config.entries[index] for index in retained)
+        assert updated.dependencies == config.dependencies
+        assert updated is not config
+        assert config.model_dump() == before
+
     def test_minimal_config_defaults_and_serialization(self) -> None:
         config = Config.model_validate({"version": 1})
 

@@ -1,7 +1,7 @@
 # `vcsinstall` Usage
 
 `vcsinstall` is being developed to install files into a repository from other repositories, with lockfile and push-back support.
-The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration and locking, and entry installation.
+The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration and locking, entry installation, and entry removal.
 `dependency add` supports Git and ordinary filesystem sources, including protected replacement of existing dependency entries.
 Other dependency operations, general installation, and push-back commands are not implemented yet.
 
@@ -14,12 +14,13 @@ vcsinstall skill usage
 vcsinstall init
 vcsinstall dependency add ci 'git+https://example.com/team/shared.git#branch=main'
 vcsinstall add ci@/specs @/specs/shared
+vcsinstall remove @/specs/shared
 ```
 
 `python -m vcsinstall` exposes the same CLI as the `vcsinstall` executable.
 The `skill` command defaults to the `usage` document.
 Help, version, and skill commands work without project configuration.
-Init creates configuration; dependency add and add require existing valid configuration.
+Init creates configuration; dependency add, add, and remove require existing valid configuration.
 Dependency add resolves the selected revision, writes its declaration and lock, and creates no entry mappings.
 
 ## Adding dependencies
@@ -59,6 +60,22 @@ An already declared destination requires `--redefine`, even for an identical map
 
 Add refreshes and checks the dependency's effective selector against its locked revision. A moved branch, tag, or live filesystem fingerprint fails unless `--allow-outdated` is supplied; `--redefine` grants no freshness permission. Even with `--allow-outdated`, refresh and resolution must succeed and the locked source path must remain available. Filesystem sources retain no historical snapshots, so a changed live source cannot reproduce an old fingerprint.
 Put global `--cache-dir DIRECTORY` before `add` to override the shared Git cache. Both add commands resolve its root for every backend; filesystem sources do not create cache data. Automation success emits one metadata-only `installation` record with operation `add`, status `clean`, and outcome `installed` or `unchanged`.
+
+## Removing entries
+
+```bash
+vcsinstall remove @/specs/shared @/licenses/shared.txt
+vcsinstall remove --keep-files @/docs/shared
+vcsinstall remove --force @/examples/shared
+```
+
+Remove requires one or more exact declared entry roots, using `@/` identifiers, contained absolute paths, or paths relative to the invocation directory. Repeated paths select an entry once. Child paths and globs do not select their owning entry. Missing installed content does not prevent removal of its declaration and baseline.
+
+Ordinary removal deletes each selected destination root and its complete contents after verifying every remaining file against a matching installation baseline. Modified files, local additions, or unavailable matching baselines cause failure before any selected files or metadata change. `--force` authorizes deletion of modified or unverified content within the selected roots; containment and existing metadata must still validate.
+
+`--keep-files` removes only the selected declarations and baselines, leaving their content untouched as unmanaged project files. It requires no content verification or matching baseline and takes precedence over `--force`. Neither mode creates a missing lockfile. Dependency declarations and shared revision locks remain after their last entry is removed; unselected entries retain their content and records.
+
+Remove uses no source repository, network, Git client, or repository cache, and ignores `--cache-dir`. Automation success emits one metadata-only `removal` record per selected entry, ordered by canonical destination, with operation `remove`, dependency name, destination, outcome `removed`, and Boolean `keep_files`.
 
 ## Protocols
 

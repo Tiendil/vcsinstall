@@ -6,6 +6,10 @@
 
 ### Changes
 
+- Encapsulate configuration and lockfile record updates in methods returning modified copies, keeping collection reconstruction out of runtime operations.
+
+- Implement `remove` with whole-selection validation, local-change protection, forced deletion, and `--keep-files`, preserving dependency declarations and revision locks without source or cache access.
+
 - Use `--redefine` consistently for entry and dependency declarations, including entry runtime permissions and diagnostic guidance.
 - Require informative variable and parameter names where state qualifiers alone would be ambiguous.
 - Require blank lines between distinct logical steps within functions and methods.

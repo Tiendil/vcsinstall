@@ -10,6 +10,7 @@ from vcsinstall.runtime.validation import (
     validate_freshness,
     validate_no_local_content_conflicts,
     validate_redefinition,
+    validate_removal_content,
 )
 
 
@@ -95,3 +96,30 @@ class TestValidateFreshness:
             assert problem.selector == selector
             assert problem.locked_revision == "locked"
             assert problem.current_revision == current
+
+
+class TestValidateRemovalContent:
+    @pytest.mark.parametrize(
+        "actual,valid",
+        [
+            ({}, True),
+            ({"@/a": "old", "@/b": "old"}, True),
+            ({"@/a": "old"}, True),
+            ({"@/a": "edited"}, False),
+            ({"@/extra": "old"}, False),
+            ({"@/": "old"}, False),
+        ],
+    )
+    def test_requires_every_existing_file_to_match_baseline(self, actual: dict[str, str], valid: bool) -> None:
+        destination = ProjectPathId("@/installed")
+        result = validate_removal_content(
+            {ProjectPathId(path): ContentHash("old") for path in ("@/a", "@/b")},
+            files={ProjectPathId(path): ContentHash(value) for path, value in actual.items()},
+            destination=destination,
+        )
+
+        assert result.is_ok() == valid
+        if result.is_err():
+            problem = result.unwrap_err()[0]
+            assert isinstance(problem, errors.RemovalConflict)
+            assert problem.destination == destination

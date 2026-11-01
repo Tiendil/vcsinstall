@@ -1,6 +1,7 @@
 """Persisted dependency locks, installation baselines, and lockfile loading."""
 
 import stat
+from collections.abc import Collection, Iterable
 from pathlib import Path
 from typing import Annotated, Literal, NewType, Self
 
@@ -72,6 +73,29 @@ class Lockfile(BaseEntity):
     def baseline_for_destination(self, destination: ProjectPathId) -> InstallationBaseline | None:
         """Return the recorded baseline at a canonical destination, if one exists."""
         return next((entry for entry in self.entries if entry.destination == destination), None)
+
+    def with_dependency(self, name: DependencyName, dependency: DependencyLock) -> Self:
+        """Return a copy adding or replacing one shared lock without changing entry baselines."""
+        return self.replace(dependencies=self.dependencies | {name: dependency})
+
+    def with_baselines(self, baselines: Iterable[InstallationBaseline]) -> Self:
+        """Return a copy replacing baselines in place and appending new destinations in input order.
+
+        Repeated destinations use the last supplied baseline. Runtime decides
+        which baselines may change; unrelated records and shared locks remain.
+        """
+        recorded = {baseline.destination: baseline for baseline in self.entries}
+        recorded.update((baseline.destination, baseline) for baseline in baselines)
+        return self.replace(entries=tuple(recorded.values()))
+
+    def without_entries(self, destinations: Collection[ProjectPathId]) -> Self:
+        """Return a copy removing exact baseline destinations while preserving all shared locks.
+
+        Unknown destinations are ignored; selecting '@/docs' does not remove
+        a baseline at '@/docs/guide'. The original order of retained records remains.
+        """
+        selected = set(destinations)
+        return self.replace(entries=tuple(entry for entry in self.entries if entry.destination not in selected))
 
     @pydantic.model_validator(mode="after")
     def _validate_bindings(self) -> Self:
