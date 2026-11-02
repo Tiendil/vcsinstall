@@ -2,7 +2,7 @@
 
 `vcsinstall` is being developed to install files into a target repository from source repositories, record their origins in a lockfile, and push local changes back to their source.
 
-**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `dependency list` reports dependencies and local entry statistics, `dependency outdated` checks source revisions, `dependency remove` removes unused dependencies, `add` installs file and directory entries at their locked revisions, and `remove` removes entries with local-change protection or retains their files as unmanaged content. Help, version output, and built-in usage documentation are available. Other dependency commands, general installation, and push back are planned.
+**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `dependency list` reports dependencies and local entry statistics, `dependency outdated` checks source revisions, `dependency update` refreshes dependencies and their entries, `dependency remove` removes unused dependencies, `add` installs file and directory entries at their locked revisions, and `remove` removes entries with local-change protection or retains their files as unmanaged content. Help, version output, and built-in usage documentation are available. General installation and push back are planned.
 
 ## Example
 
@@ -23,6 +23,7 @@ Available today:
 - **Dependency locking** — add Git or filesystem sources, select branches, tags, or immutable revisions, and explicitly redefine dependencies while protecting local edits.
 - **Dependency inspection** — list declared sources, effective selectors, locked revisions, and counts of modified, missing, and unlocked entries without source or cache access.
 - **Source freshness** — check all or named dependencies for differing locked and current revisions without changing project files or installed content.
+- **Dependency updates** — advance all or named dependencies within their configured selectors and refresh every entry together while protecting local changes.
 - **Dependency removal** — remove unused dependency declarations, revision locks, and obsolete baselines while preserving installed files.
 - **Entry installation** — install files or complete directories from a dependency's locked revision, rename destinations, and explicitly redefine entries with local-change protection.
 - **Entry removal** — remove selected entries and verified content, explicitly discard local changes with `--force`, or retain files with `--keep-files`.
@@ -160,6 +161,15 @@ vcsinstall dependency outdated ci formatting
 ```
 
 The command checks all dependencies or the named selection, including dependencies without entries. It requires matching revision locks before accessing sources, refreshes branch and tag observations, and compares complete revisions. Immutable pins keep selecting their pinned revision; filesystem sources track their complete live fingerprint. Only outdated dependencies produce records, with `revision` and `current_revision`; finding changes still exits successfully. The check preserves configuration, lockfile bytes, and installed files, and does not verify local changes or promise that an update will succeed. It resolves the global cache location and may populate or refresh Git cache data.
+
+Update dependencies within their configured version selectors:
+
+```bash
+vcsinstall dependency update
+vcsinstall dependency update ci formatting
+```
+
+Update refreshes every entry of the selected dependencies and also locks dependencies without entries. It preserves configuration, restores missing files, and reflects upstream additions and deletions. Existing local files must collectively match their prior baseline or the selected source; conflicts anywhere in the selection stop preparation before files or locks change. Entries already matching the source stay untouched. Git dependencies with omitted selectors retain their recorded default branch, and revision pins remain pinned. Results report prior and selected revisions, with `updated` or `unchanged` outcomes.
 
 ## Specifications
 

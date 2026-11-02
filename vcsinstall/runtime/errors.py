@@ -77,6 +77,13 @@ class DependencyCheckFailed(EnvironmentError):
     dependency: DependencyName
 
 
+class DependencyUpdateFailed(EnvironmentError):
+    code: str = "dependency_update_failed"
+    message: str = "Cannot update dependency {error.dependency!r}."
+    ways_to_fix: list[str] = ["Resolve the accompanying diagnostics and retry dependency update."]
+    dependency: DependencyName
+
+
 class SourcePathAbsent(EnvironmentError):
     code: str = "source_path_absent"
     message: str = "Dependency {error.dependency!r} has no source path {error.source_path} at {error.revision}."

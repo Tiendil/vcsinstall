@@ -16,6 +16,7 @@ from llm_tool_cli.core import errors as core_errors
 from llm_tool_cli.core import settings
 from llm_tool_cli.core.entities import ExitCode
 from llm_tool_cli.core.result import Err, Ok, Result
+from llm_tool_cli.paths import ProjectPathId
 from llm_tool_cli.protocol.tests.helpers import cell_payloads
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
@@ -30,11 +31,15 @@ from vcsinstall.cli.commands.tests.helpers import (
     invoke_dependency_list,
     invoke_dependency_outdated,
     invoke_dependency_remove,
+    invoke_dependency_update,
+    invoke_entry_add,
 )
 from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SourceRevision, VcsId
+from vcsinstall.filesystem import FSClient
 from vcsinstall.filesystem import errors as filesystem_errors
 from vcsinstall.filesystem import hashes
 from vcsinstall.hosting import HostingAdapter
+from vcsinstall.runtime import errors as runtime_errors
 from vcsinstall.sources import DEFAULT_ADAPTERS, SourceAdapter
 from vcsinstall.sources import errors as source_errors
 from vcsinstall.sources import parse_repository
@@ -266,6 +271,32 @@ class TestAddDependency:
             assert isinstance(result.exception, RuntimeError)
         else:
             assert result.exit_code == 0, result.output
+
+    def test_configuration_change_is_reported_when_the_prepared_lock_and_entries_are_unchanged(
+        self, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "guide.txt").write_bytes(b"original")
+        config = tmp_path / "vcsinstall.toml"
+        config.write_text("version = 1\n")
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", source.as_uri())[0] == 0
+        assert invoke_entry_add(config, cache, "ci@/guide.txt", "@/installed")[0] == 0
+        declarations = tomllib.loads(config.read_text())
+        declarations["dependencies"]["ci"]["repository"] = "source"
+        config.write_text(tomli_w.dumps(declarations))
+        lock = config.with_name("vcsinstall.lock")
+        lock.write_bytes(b"# Preserve unchanged lock state.\n" + lock.read_bytes())
+        before = lock.read_bytes()
+
+        code, records, output = invoke_add(config, cache, "--redefine", "ci", source.as_uri())
+
+        assert code == 0, output
+        assert [record["outcome"] for record in records] == ["replaced", "unchanged"]
+        assert tomllib.loads(config.read_text())["dependencies"]["ci"]["repository"] == str(source)
+        assert lock.read_bytes() == before
+        assert (tmp_path / "installed").read_bytes() == b"original"
 
     @pytest.mark.parametrize("selector,value", [("branch", "Main+%2F"), ("tag", "Release+%2F"), ("rev", "abc123")])
     def test_selector_options_and_fragments_produce_equivalent_requests(
@@ -2219,6 +2250,526 @@ class TestOutdatedDependencies:
 
 
 @pytest.mark.usefixtures("isolated_settings")
+class TestUpdateDependencies:
+    @pytest.fixture(autouse=True)
+    def initialize(self, isolated_settings: None) -> None:
+        settings.initialize(
+            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
+        )
+
+    @pytest.fixture
+    def config(self, tmp_path: Path) -> Path:
+        project = tmp_path / "project"
+        project.mkdir()
+        config = project / "custom.toml"
+        config.write_text("# Preserve configuration bytes.\nversion = 1\n")
+        return config
+
+    @pytest.fixture
+    def client(self, tmp_path: Path) -> GitClient:
+        return create_repository(tmp_path / "source")
+
+    @pytest.mark.parametrize("names", [[], ["z-last", "a-first", "z-last"]])
+    def test_updates_all_or_unique_names_and_orders_both_record_types(  # noqa: CCR001 — Selection variants.
+        self, config: Path, tmp_path: Path, client: GitClient, names: list[str], mocker: MockerFixture
+    ) -> None:
+        cache = tmp_path / "cache"
+        original = client.resolve_commit("HEAD").unwrap()
+        for name, destination in (("z-last", "@/a"), ("a-first", "@/z"), ("unselected", "@/middle")):
+            assert invoke_add(config, cache, name, str(client.path))[0] == 0
+            assert invoke_entry_add(config, cache, name + "@/guide.txt", destination)[0] == 0
+        (client.path / "guide.txt").write_bytes(b"upstream\n")
+        client.commit("Update guides", all_tracked=True).unwrap()
+        revision = client.resolve_commit("HEAD").unwrap()
+        before = config.read_bytes()
+        resolve = mocker.spy(dependency.get_adapter(VcsId.git), "resolve")
+
+        code, records, output = invoke_dependency_update(config, cache, *names)
+
+        assert code == 0, output
+        selected = ["a-first", "z-last"] if names else ["a-first", "unselected", "z-last"]
+        assert [row["dependency"] for row in records if row["type"] == "dependency"] == selected
+        assert [row["destination"] for row in records if row["type"] == "installation"] == (
+            ["@/a", "@/z"] if names else ["@/a", "@/middle", "@/z"]
+        )
+        assert [row["type"] for row in records] == ["dependency"] * len(selected) + ["installation"] * len(selected)
+        assert all(row["operation"] == "dependency update" and row["outcome"] == "updated" for row in records)
+        assert all(row["revision"] == revision and row["previous_revision"] == original for row in records)
+        assert all(row["content"] is None for row in records)
+        assert resolve.call_count == len(selected)
+        locked = tomllib.loads(config.with_name("vcsinstall.lock").read_text())
+        for name, destination in (("z-last", "a"), ("a-first", "z"), ("unselected", "middle")):
+            assert locked["dependencies"][name]["revision"] == (revision if name in selected else original)
+            assert (config.parent / destination).read_bytes() == (b"upstream\n" if name in selected else b"original\n")
+        assert config.read_bytes() == before
+        assert not project_config.is_set()
+        assert not active_workspace.is_set()
+        assert not active_cache_root.is_set()
+
+    @pytest.mark.parametrize("object_format", ["sha1", "sha256"])
+    @pytest.mark.parametrize("selector", ["branch", "tag", "annotated", "revision"])
+    def test_tracks_literal_selectors_and_keeps_immutable_pins(  # noqa: CCR001 — Selector variants.
+        self, config: Path, tmp_path: Path, object_format: str, selector: str
+    ) -> None:
+        client = create_repository(tmp_path / "source", object_format=object_format)
+        original = client.resolve_commit("HEAD").unwrap()
+        if selector in ("tag", "annotated"):
+            client.create_tag("release", message="Release" if selector == "annotated" else None).unwrap()
+        reference = (
+            "#rev=" + original
+            if selector == "revision"
+            else "#branch=trunk" if selector == "branch" else "#tag=release"
+        )
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", "git+" + client.path.as_uri() + reference)[0] == 0
+        assert invoke_entry_add(config, cache, "ci@/guide.txt", "@/installed")[0] == 0
+        before = (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes())
+        (client.path / "guide.txt").write_bytes(b"upstream\n")
+        client.commit("Advance source", all_tracked=True).unwrap()
+        current_revision = client.resolve_commit("HEAD").unwrap()
+        if selector in ("tag", "annotated"):
+            client.run(["tag", "--force", "release"]).unwrap()
+
+        code, records, output = invoke_dependency_update(config, cache)
+
+        assert code == 0, output
+        assert len(records) == 2
+        assert all(row["revision"] == (original if selector == "revision" else current_revision) for row in records)
+        assert all(row["outcome"] == ("unchanged" if selector == "revision" else "updated") for row in records)
+        assert (config.parent / "installed").read_bytes() == (
+            b"original\n" if selector == "revision" else b"upstream\n"
+        )
+        assert config.read_bytes() == before[0]
+        if selector == "revision":
+            assert config.with_name("vcsinstall.lock").read_bytes() == before[1]
+
+    def test_empty_project_has_no_records_or_effects(self, config: Path, tmp_path: Path) -> None:
+        before = config.read_bytes()
+        cache = tmp_path / "cache"
+
+        assert invoke_dependency_update(config, cache)[:2] == (0, [])
+
+        assert config.read_bytes() == before
+        assert not config.with_name("vcsinstall.lock").exists()
+        assert not cache.exists()
+
+    @pytest.mark.parametrize("prior_lock", [False, True])
+    def test_locks_dependencies_without_entries_without_changing_configuration(
+        self, config: Path, tmp_path: Path, client: GitClient, prior_lock: bool
+    ) -> None:
+        cache = tmp_path / "cache"
+        if prior_lock:
+            assert invoke_add(config, cache, "--branch", "trunk", "ci", str(client.path))[0] == 0
+        config.write_text('version = 1\n[dependencies.ci]\nvcs = "git"\nrepository = "../source"\n')
+        before = config.read_bytes()
+
+        code, records, output = invoke_dependency_update(config, cache)
+
+        assert code == 0, output
+        assert len(records) == 1
+        assert records[0]["type"] == "dependency"
+        assert records[0]["outcome"] == ("unchanged" if prior_lock else "updated")
+        assert records[0]["ref_kind"] == "branch"
+        assert records[0]["ref"] == "trunk"
+        assert records[0]["previous_revision"] == (records[0]["revision"] if prior_lock else None)
+        assert config.read_bytes() == before
+
+    @pytest.mark.parametrize("fresh_cache", [False, True])
+    def test_omitted_git_selector_retains_its_recorded_branch(
+        self, config: Path, tmp_path: Path, client: GitClient, fresh_cache: bool
+    ) -> None:
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", str(client.path))[0] == 0
+        declarations = tomllib.loads(config.read_text())
+        del declarations["dependencies"]["ci"]["selector"]
+        config.write_text(tomli_w.dumps(declarations))
+        client.create_branch("new-default", checkout=True).unwrap()
+        client.run(["commit", "--allow-empty", "-m", "New default"]).unwrap()
+        client.run(["checkout", "trunk"]).unwrap()
+        client.run(["commit", "--allow-empty", "-m", "Tracked revision"]).unwrap()
+        revision = client.resolve_commit("HEAD").unwrap()
+        client.run(["checkout", "new-default"]).unwrap()
+        before = config.read_bytes()
+
+        code, records, output = invoke_dependency_update(config, tmp_path / "fresh-cache" if fresh_cache else cache)
+
+        assert code == 0, output
+        assert records[0]["ref"] == "trunk"
+        assert records[0]["revision"] == revision
+        assert config.read_bytes() == before
+
+    @pytest.mark.parametrize("local", ["baseline", "missing", "selected", "conflict"])
+    def test_filesystem_updates_protect_local_content_and_restore_missing_files(  # noqa: CCR001 — Content variants.
+        self, config: Path, tmp_path: Path, local: str, mocker: MockerFixture
+    ) -> None:
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "guide.txt").write_bytes(b"original")
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", source.as_uri())[0] == 0
+        assert invoke_entry_add(config, cache, "ci@/guide.txt", "@/installed")[0] == 0
+        installed = config.parent / "installed"
+        if local == "missing":
+            installed.unlink()
+        elif local in ("selected", "conflict"):
+            installed.write_bytes(b"upstream" if local == "selected" else b"local edit")
+        (source / "guide.txt").write_bytes(b"upstream")
+        before = (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes())
+        remove = mocker.spy(FSClient, "remove")
+        write = mocker.spy(FSClient, "write_stream")
+
+        code, records, output = invoke_dependency_update(config, cache)
+
+        assert code == (3 if local == "conflict" else 0), output
+        assert config.read_bytes() == before[0]
+        assert not cache.exists()
+        if local == "conflict":
+            assert any(
+                row.get("code") == runtime_errors.LocalConflict(destination="@/installed").code for row in records
+            )
+            assert installed.read_bytes() == b"local edit"
+            assert config.with_name("vcsinstall.lock").read_bytes() == before[1]
+        else:
+            assert installed.read_bytes() == b"upstream"
+            assert all(row["outcome"] == "updated" for row in records)
+        if local in ("selected", "conflict"):
+            remove.assert_not_called()
+            write.assert_not_called()
+
+    def test_directory_update_replaces_whole_changed_entry_and_records_complete_manifest(
+        self, config: Path, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "a").write_bytes(b"old")
+        (source / "b").write_bytes(b"unchanged")
+        (source / "deleted").write_bytes(b"remove")
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", source.as_uri())[0] == 0
+        assert invoke_entry_add(config, cache, "ci@/", "@/installed")[0] == 0
+        (config.parent / "outside").write_bytes(b"preserve")
+        (config.parent / "installed" / "b").unlink()
+        (source / "a").write_bytes(b"new")
+        (source / "deleted").unlink()
+        (source / ".new").write_bytes(b"addition")
+        write = mocker.spy(FSClient, "write_stream")
+
+        code, records, output = invoke_dependency_update(config, cache)
+
+        assert code == 0, output
+        assert (config.parent / "installed" / "a").read_bytes() == b"new"
+        assert (config.parent / "installed" / "b").read_bytes() == b"unchanged"
+        assert not (config.parent / "installed" / "deleted").exists()
+        assert (config.parent / "installed" / ".new").read_bytes() == b"addition"
+        assert (config.parent / "outside").read_bytes() == b"preserve"
+        assert sorted(call.args[1] for call in write.call_args_list) == [
+            "@/installed/.new",
+            "@/installed/a",
+            "@/installed/b",
+        ]
+        locked = tomllib.loads(config.with_name("vcsinstall.lock").read_text())
+        assert [file["path"] for file in locked["entries"][0]["files"]] == ["@/.new", "@/a", "@/b"]
+        assert all(row["revision"] == locked["dependencies"]["ci"]["revision"] for row in records)
+
+    @pytest.mark.parametrize("local", ["mixed", "addition", "modified_and_missing"])
+    def test_directory_conflicts_are_not_merged_file_by_file(self, config: Path, tmp_path: Path, local: str) -> None:
+        source = tmp_path / "source"
+        source.mkdir()
+        for name in ("a", "b"):
+            (source / name).write_bytes(b"old")
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", source.as_uri())[0] == 0
+        assert invoke_entry_add(config, cache, "ci@/", "@/installed")[0] == 0
+        installed = config.parent / "installed"
+        if local == "mixed":
+            (installed / "a").write_bytes(b"new")
+        elif local == "addition":
+            (installed / ".local").write_bytes(b"preserve")
+        else:
+            (installed / "a").write_bytes(b"local edit")
+            (installed / "b").unlink()
+        for name in ("a", "b"):
+            (source / name).write_bytes(b"new")
+        before = (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes())
+        files_before = {path.name: path.read_bytes() for path in installed.iterdir()}
+
+        code, records, output = invoke_dependency_update(config, cache)
+
+        assert code == 3, output
+        assert any(row.get("code") == runtime_errors.LocalConflict(destination="@/installed").code for row in records)
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+        assert {path.name: path.read_bytes() for path in installed.iterdir()} == files_before
+
+    @pytest.mark.parametrize("initial", ["file", "directory"])
+    def test_type_changes_source_deletion_and_recreation_keep_the_mapping(
+        self, config: Path, tmp_path: Path, initial: str
+    ) -> None:
+        source = tmp_path / "source"
+        source.mkdir()
+        selected = source / "selected"
+        if initial == "file":
+            selected.write_bytes(b"original")
+        else:
+            selected.mkdir()
+            (selected / "child").write_bytes(b"original")
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", source.as_uri())[0] == 0
+        assert invoke_entry_add(config, cache, "ci@/selected", "@/installed")[0] == 0
+        before = config.read_bytes()
+        installed = config.parent / "installed"
+        if initial == "file":
+            selected.unlink()
+            selected.mkdir()
+            (selected / "child").write_bytes(b"replacement")
+        else:
+            (selected / "child").unlink()
+            selected.rmdir()
+            selected.write_bytes(b"replacement")
+        code, _, output = invoke_dependency_update(config, cache)
+        assert code == 0, output
+        assert (installed / "child" if initial == "file" else installed).read_bytes() == b"replacement"
+
+        if selected.is_dir():
+            (selected / "child").unlink()
+            selected.rmdir()
+        else:
+            selected.unlink()
+        code, _, output = invoke_dependency_update(config, cache)
+        assert code == 0, output
+        assert not installed.exists()
+        locked = tomllib.loads(config.with_name("vcsinstall.lock").read_text())
+        assert locked["entries"][0]["kind"] == "absent"
+        unchanged_lock = config.with_name("vcsinstall.lock").read_bytes()
+        assert all(row["outcome"] == "unchanged" for row in invoke_dependency_update(config, cache)[1])
+        assert config.with_name("vcsinstall.lock").read_bytes() == unchanged_lock
+
+        selected.write_bytes(b"restored")
+        code, _, output = invoke_dependency_update(config, cache)
+        assert code == 0, output
+        assert installed.read_bytes() == b"restored"
+        assert config.read_bytes() == before
+
+    @pytest.mark.parametrize("failure", ["conflict", "missing_baseline", "unavailable", "unsupported"])
+    def test_late_preparation_failure_preserves_every_selected_dependency(
+        self, config: Path, tmp_path: Path, failure: str
+    ) -> None:
+        cache = tmp_path / "cache"
+        clients = {name: create_repository(tmp_path / name) for name in ("a", "z")}
+        for name, client in clients.items():
+            assert invoke_add(config, cache, name, str(client.path))[0] == 0
+            assert invoke_entry_add(config, cache, name + "@/guide.txt", "@/" + name)[0] == 0
+            (client.path / "guide.txt").write_bytes(b"updated")
+            client.commit("Advance", all_tracked=True).unwrap()
+        if failure == "conflict":
+            (config.parent / "z").write_bytes(b"local edit")
+        elif failure == "missing_baseline":
+            locked = tomllib.loads(config.with_name("vcsinstall.lock").read_text())
+            locked["entries"] = locked["entries"][:1]
+            config.with_name("vcsinstall.lock").write_text(tomli_w.dumps(locked))
+        elif failure == "unavailable":
+            clients["z"].path.rename(tmp_path / "unavailable")
+        else:
+            guide = clients["z"].path / "guide.txt"
+            guide.unlink()
+            guide.symlink_to("missing")
+            clients["z"].commit("Unsupported symlink", all_tracked=True).unwrap()
+        before = (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes())
+        files = [(config.parent / name).read_bytes() for name in clients]
+
+        code, records, output = invoke_dependency_update(config, cache)
+
+        assert code == 3, output
+        assert all(row["type"] == "error" for row in records)
+        assert records[0]["dependency"] == "z"
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+        assert [(config.parent / name).read_bytes() for name in clients] == files
+        assert not active_workspace.is_set()
+        assert not active_cache_root.is_set()
+
+    @pytest.mark.parametrize("operation", ["update", "redefine"])
+    def test_unchanged_revision_rejects_inconsistent_baseline_content(
+        self, config: Path, tmp_path: Path, client: GitClient, operation: str
+    ) -> None:
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", str(client.path))[0] == 0
+        assert invoke_entry_add(config, cache, "ci@/guide.txt", "@/installed")[0] == 0
+        lock = config.with_name("vcsinstall.lock")
+        locked = tomllib.loads(lock.read_text())
+        locked["entries"][0]["hash"] = hashes.hash_file(b"corrupt baseline")
+        lock.write_text(tomli_w.dumps(locked))
+        before = lock.read_bytes()
+
+        code, records, output = (
+            invoke_dependency_update(config, cache)
+            if operation == "update"
+            else invoke_add(config, cache, "--redefine", "ci", str(client.path))
+        )
+
+        assert code == 3, output
+        assert any(
+            row.get("code") == runtime_errors.SourceIntegrityMismatch(destination=ProjectPathId("@/installed")).code
+            for row in records
+        )
+        assert (config.parent / "installed").read_bytes() == b"original\n"
+        assert lock.read_bytes() == before
+
+    @pytest.mark.parametrize("operation", ["update", "redefine"])
+    def test_empty_directory_existence_does_not_change_baselines_or_write_files(
+        self, config: Path, tmp_path: Path, mocker: MockerFixture, operation: str
+    ) -> None:
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "empty").mkdir()
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", source.as_uri())[0] == 0
+        assert invoke_entry_add(config, cache, "ci@/empty", "@/installed")[0] == 0
+        before = (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes())
+        (source / "empty").rmdir()
+        (config.parent / "installed").mkdir()
+        write = mocker.spy(FSClient, "write_stream")
+        remove = mocker.spy(FSClient, "remove")
+
+        code, records, output = (
+            invoke_dependency_update(config, cache)
+            if operation == "update"
+            else invoke_add(config, cache, "--redefine", "ci", source.as_uri())
+        )
+
+        assert code == 0, output
+        assert all(row["outcome"] == "unchanged" for row in records)
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+        write.assert_not_called()
+        remove.assert_not_called()
+
+    def test_revision_only_updates_leave_matching_entries_untouched_and_preserve_unchanged_bytes(
+        self, config: Path, tmp_path: Path, client: GitClient, mocker: MockerFixture
+    ) -> None:
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", str(client.path))[0] == 0
+        assert invoke_entry_add(config, cache, "ci@/guide.txt", "@/installed")[0] == 0
+        client.run(["commit", "--allow-empty", "-m", "Same content"]).unwrap()
+        installed = config.parent / "installed"
+        before = installed.stat().st_mtime_ns
+        remove = mocker.spy(FSClient, "remove")
+        write = mocker.spy(FSClient, "write_stream")
+
+        code, records, output = invoke_dependency_update(config, cache)
+
+        assert code == 0, output
+        assert all(row["outcome"] == "updated" for row in records)
+        assert installed.stat().st_mtime_ns == before
+        remove.assert_not_called()
+        write.assert_not_called()
+        lock = config.with_name("vcsinstall.lock")
+        lock.write_bytes(b"# Keep this comment.\n" + lock.read_bytes())
+        before_lock = lock.read_bytes()
+        code, records, output = invoke_dependency_update(config, cache)
+        assert code == 0, output
+        assert all(row["outcome"] == "unchanged" for row in records)
+        assert lock.read_bytes() == before_lock
+
+    def test_cached_immutable_pin_needs_no_refresh_or_accessible_original_repository(
+        self, config: Path, tmp_path: Path, client: GitClient, mocker: MockerFixture
+    ) -> None:
+        cache = tmp_path / "cache"
+        revision = client.resolve_commit("HEAD").unwrap()
+        assert invoke_add(config, cache, "--rev", revision, "ci", str(client.path))[0] == 0
+        assert invoke_entry_add(config, cache, "ci@/guide.txt", "@/installed")[0] == 0
+        (config.parent / "installed").unlink()
+        client.path.rename(tmp_path / "unavailable-source")
+        fetch = mocker.spy(GitClient, "fetch_references")
+        refresh_head = mocker.spy(GitClient, "refresh_remote_head")
+
+        code, records, output = invoke_dependency_update(config, cache)
+
+        assert code == 0, output
+        assert all(row["revision"] == revision for row in records)
+        assert (config.parent / "installed").read_bytes() == b"original\n"
+        fetch.assert_not_called()
+        refresh_head.assert_not_called()
+
+    @pytest.mark.parametrize("change", ["repository", "source_path", "selector", "backend"])
+    def test_explicit_declaration_changes_use_old_baselines_to_protect_content(
+        self, config: Path, tmp_path: Path, client: GitClient, change: str
+    ) -> None:
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", str(client.path))[0] == 0
+        assert invoke_entry_add(config, cache, "ci@/guide.txt", "@/installed")[0] == 0
+        declarations = tomllib.loads(config.read_text())
+        if change == "repository":
+            replacement = tmp_path / "replacement"
+            create_repository(replacement)
+            (replacement / "guide.txt").write_bytes(b"new source")
+            replacement_client = GitClient(path=replacement, repository=RepositoryLocator(str(replacement)))
+            replacement_client.commit("Replacement content", all_tracked=True).unwrap()
+            declarations["dependencies"]["ci"]["repository"] = str(replacement)
+            client.path.rename(tmp_path / "unavailable-source")
+        elif change == "source_path":
+            (client.path / "new.txt").write_bytes(b"new source")
+            client.add("new.txt").unwrap()
+            client.commit("New mapping").unwrap()
+            declarations["entries"][0]["source_path"] = "@/new.txt"
+        elif change == "selector":
+            client.create_branch("stable", checkout=True).unwrap()
+            (client.path / "guide.txt").write_bytes(b"new source")
+            client.commit("Stable content", all_tracked=True).unwrap()
+            declarations["dependencies"]["ci"]["selector"]["value"] = "stable"
+        else:
+            replacement = tmp_path / "replacement"
+            replacement.mkdir()
+            (replacement / "guide.txt").write_bytes(b"new source")
+            declarations["dependencies"]["ci"] = {"vcs": "filesystem", "repository": str(replacement)}
+        config.write_text(tomli_w.dumps(declarations))
+        before = config.read_bytes()
+
+        code, records, output = invoke_dependency_update(config, cache)
+
+        assert code == 0, output
+        assert (config.parent / "installed").read_bytes() == b"new source"
+        assert all(row["outcome"] == "updated" for row in records)
+        assert config.read_bytes() == before
+
+    @pytest.mark.parametrize("argument,expected_code", [("unknown", 1), ("@/installed", 2)])
+    def test_unknown_names_fail_before_source_access(
+        self, config: Path, tmp_path: Path, client: GitClient, argument: str, expected_code: int
+    ) -> None:
+        assert invoke_add(config, tmp_path / "original-cache", "ci", str(client.path))[0] == 0
+        cache = tmp_path / "unused-cache"
+        before = (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes())
+
+        code, records, output = invoke_dependency_update(config, cache, "ci", argument, argument)
+
+        assert code == expected_code, output
+        if expected_code == 1:
+            assert len(records) == 1
+            assert records[0]["code"] == InvalidArguments(reason="").code
+        assert not cache.exists()
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+
+    @pytest.mark.parametrize("arguments", [["--force"], ["--rev", "abc"], ["--allow-outdated"]])
+    def test_rejects_command_specific_options(self, tmp_path: Path, arguments: list[str]) -> None:
+        code, _, _ = invoke_dependency_update(tmp_path / "missing.toml", tmp_path / "cache", *arguments)
+        assert code == 2
+        assert not tuple(tmp_path.iterdir())
+
+    @pytest.mark.parametrize("protocol", ["human", "llm", "automation"])
+    def test_protocols_preserve_update_fields(
+        self, config: Path, tmp_path: Path, client: GitClient, protocol: str
+    ) -> None:
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", str(client.path))[0] == 0
+
+        result = CliRunner().invoke(
+            application.app,
+            ["-p", protocol, "--config", str(config), "--cache-dir", str(cache), "dependency", "update"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "dependency update" in result.stdout
+        assert "previous_revision" in result.stdout
+        assert "unchanged" in result.stdout
+
+
 class TestRemoveDependency:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:

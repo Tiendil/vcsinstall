@@ -6,7 +6,7 @@ from llm_tool_cli.protocol.logic_cells.uniform import UniformCell
 from llm_tool_cli.protocol.output_cells.base import MetaValue, OutputCell
 
 from vcsinstall.domain import Dependency, DependencyName, SourcePath, SourceRevision
-from vcsinstall.runtime.entities import EntryPlan, LocalStatus
+from vcsinstall.runtime.entities import DependencyPlan, LocalStatus
 from vcsinstall.sources import ResolvedSource
 from vcsinstall.workspace import Entry
 
@@ -32,6 +32,7 @@ class Operation(StrEnum):
     dependency_list = "dependency list"
     dependency_outdated = "dependency outdated"
     dependency_remove = "dependency remove"
+    dependency_update = "dependency update"
     add = "add"
     remove = "remove"
 
@@ -142,42 +143,62 @@ def entry_add_cell(entry: Entry, resolved: ResolvedSource, *, unchanged: bool) -
     )
 
 
-def dependency_add_cells(  # noqa: CFQ002 — Explicit revision and redefinition facts determine result cells.
-    name: DependencyName,
-    resolved: ResolvedSource,
-    plans: list[EntryPlan],
-    *,
-    previous_revision: SourceRevision | None,
-    redefinition: bool,
-    unchanged: bool,
-) -> list[LogicCell]:
-    """Build ordered dependency and installation results from operation facts."""
+def _dependency_installation_cells(plan: DependencyPlan, *, operation: Operation) -> list[InstallationCell]:
+    """Project the shared revision and entry changes for an add or update result."""
+    return [
+        InstallationCell(
+            operation=operation,
+            dependency=plan.name,
+            definition=plan.resolved.dependency,
+            revision=plan.resolved.revision,
+            outcome=(
+                Outcome.unchanged
+                if not entry_plan.changed and plan.previous_revision == plan.resolved.revision
+                else Outcome.updated
+            ),
+            previous_revision=plan.previous_revision,
+            redefinition=True,
+            destination=entry_plan.entry.destination,
+            source_path=entry_plan.entry.source_path,
+        )
+        for entry_plan in plan.entries
+    ]
+
+
+def dependency_add_cells(plan: DependencyPlan, *, redefinition: bool, unchanged: bool) -> list[LogicCell]:
+    """Build ordered dependency and installation results from the prepared plan and declaration outcome."""
     outcome = Outcome.unchanged if unchanged else Outcome.replaced if redefinition else Outcome.added
     cells: list[LogicCell] = [
         DependencyCell(
-            dependency=name,
-            definition=resolved.dependency,
-            revision=resolved.revision,
+            dependency=plan.name,
+            definition=plan.resolved.dependency,
+            revision=plan.resolved.revision,
             outcome=outcome,
-            previous_revision=previous_revision,
+            previous_revision=plan.previous_revision,
             redefinition=redefinition,
         )
     ]
-    cells.extend(
-        InstallationCell(
-            dependency=name,
-            definition=resolved.dependency,
-            revision=resolved.revision,
-            outcome=(
-                Outcome.unchanged
-                if not plan.changed and previous_revision is not None and previous_revision == resolved.revision
-                else Outcome.updated
-            ),
-            previous_revision=previous_revision,
+    cells.extend(_dependency_installation_cells(plan, operation=Operation.dependency_add))
+    return cells
+
+
+def dependency_update_cells(plans: list[DependencyPlan]) -> list[LogicCell]:
+    """Report dependencies by name, followed by entries across the selection by destination."""
+    cells: list[LogicCell] = [
+        DependencyCell(
+            operation=Operation.dependency_update,
+            dependency=plan.name,
+            definition=plan.resolved.dependency,
+            revision=plan.resolved.revision,
+            outcome=Outcome.unchanged if plan.unchanged else Outcome.updated,
+            previous_revision=plan.previous_revision,
             redefinition=True,
-            destination=plan.baseline.destination,
-            source_path=plan.entry.source_path,
         )
         for plan in plans
-    )
+    ]
+    installations = [
+        cell for plan in plans for cell in _dependency_installation_cells(plan, operation=Operation.dependency_update)
+    ]
+    installations.sort(key=lambda cell: cell.destination)
+    cells.extend(installations)
     return cells

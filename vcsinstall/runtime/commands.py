@@ -34,7 +34,7 @@ from vcsinstall.runtime.cells import (
     dependency_add_cells,
     entry_add_cell,
 )
-from vcsinstall.runtime.entities import EntryPlan, LocalStatus
+from vcsinstall.runtime.entities import DependencyPlan, EntryPlan, LocalStatus
 from vcsinstall.runtime.validation import (
     local_content_status,
     validate_entry_redefinition,
@@ -50,7 +50,6 @@ from vcsinstall.sources import (
 )
 from vcsinstall.workspace import (
     AbsentBaseline,
-    Config,
     DependencyLock,
     DirectoryBaseline,
     Entry,
@@ -201,52 +200,68 @@ def _apply_entry_changes(
     return Ok(None)
 
 
-def _updated_dependency_records(
-    workspace: Workspace,
-    name: DependencyName,
-    resolved: ResolvedSource,
-    plans: list[EntryPlan],
-) -> tuple[Config, Lockfile]:  # noqa: TAE002 — Both updated models remain local to this operation.
-    new_lock = DependencyLock(**resolved.dependency.model_dump(), revision=resolved.revision)
-    lockfile = workspace.lockfile or Lockfile(version=1)
-    lockfile = lockfile.with_dependency(name, new_lock).with_baselines(plan.baseline for plan in plans)
-    config = workspace.config.with_dependency(name, resolved.dependency)
-    return config, lockfile
-
-
 @unwrap_to_error
-def _apply_dependency(
+def _prepare_dependency_plan(  # noqa: CCR001 — Keep source inspection and baseline checks in one preparation scope.
     workspace: Workspace,
     name: DependencyName,
-    source: SourceAdapter,
     resolved: ResolvedSource,
     *,
-    entries: dict[ProjectPathId, Entry],
-) -> Result[None]:
+    source: SourceAdapter,
+) -> Result[DependencyPlan]:
+    """Prepare one shared lock and its entry changes without writing files or project records."""
     source.validate_revision_lock(resolved.dependency, resolved.revision).unwrap()
-    previous_lock = workspace.lockfile.dependencies.get(name) if workspace.lockfile else None
-    was_declared = name in workspace.config.dependencies
-    filesystem = FSClient(root=workspace.project_root, readonly=False)
+    entries = {entry.destination: entry for entry in workspace.config.entries_for_dependency(name)}
     paths = tuple(entry.source_path for entry in entries.values())
     content = source.inspect(resolved, paths).unwrap() if paths else {}
-    plans = _plan_entries(workspace, name, content=content, filesystem=filesystem, entries=entries).unwrap()
-    config, lockfile = _updated_dependency_records(workspace, name, resolved, plans)
-    unchanged = (
-        config == workspace.config and lockfile == workspace.lockfile and all(not plan.changed for plan in plans)
-    )
-    serialized_config_and_lockfile = serialize_workspace_changes(workspace, config, lockfile)
-    _apply_entry_changes(plans, filesystem=filesystem, copy_file=partial(source.copy_file, resolved)).unwrap()
-    write_workspace_files(workspace, serialized_config_and_lockfile).unwrap()
-    cells = dependency_add_cells(
+    plans = _plan_entries(
+        workspace,
         name,
-        resolved,
-        plans,
-        previous_revision=previous_lock.revision if previous_lock else None,
-        redefinition=was_declared,
-        unchanged=unchanged,
+        content=content,
+        filesystem=FSClient(root=workspace.project_root),
+        entries=entries,
+    ).unwrap()
+    # Empty structural directories and expected absence have the same zero-file
+    # content; their existence alone does not require changing a baseline.
+    plans = [
+        (
+            plan.replace(baseline=plan.previous)
+            if (
+                plan.previous is not None
+                and plan.previous.source_path == plan.entry.source_path
+                and not plan.previous.file_hashes()
+                and not plan.source.file_hashes
+            )
+            else plan
+        )
+        for plan in plans
+    ]
+    previous_lock = workspace.lockfile.dependencies.get(name) if workspace.lockfile else None
+    lock = DependencyLock(**resolved.dependency.model_dump(), revision=resolved.revision)
+    lock_unchanged = False
+    if previous_lock is not None and previous_lock.vcs == lock.vcs:
+        repository = source.normalize_repository(previous_lock.repository, cwd=workspace.project_root).unwrap()
+        lock_unchanged = repository is not None and previous_lock.replace(repository=repository) == lock
+        if lock_unchanged:
+            lock = previous_lock
+        if repository == resolved.dependency.repository and previous_lock.revision == resolved.revision:
+            for plan in plans:
+                previous = plan.previous
+                if (
+                    previous is not None
+                    and previous.source_path == plan.entry.source_path
+                    and previous.file_hashes() != plan.source.file_hashes
+                ):
+                    return Err([errors.SourceIntegrityMismatch(destination=plan.entry.destination)])
+    return Ok(
+        DependencyPlan(
+            name=name,
+            resolved=resolved,
+            lock=lock,
+            entries=plans,
+            previous_revision=previous_lock.revision if previous_lock else None,
+            unchanged=lock_unchanged and all(not plan.changed for plan in plans),
+        )
     )
-    output.get().emit(cells).unwrap()
-    return Ok(None)
 
 
 @unwrap_to_error
@@ -259,18 +274,37 @@ def dependency_add(  # noqa: CFQ002 — Explicit source intent and independently
     redefine: bool = False,
 ) -> Result[None]:
     workspace = active_workspace.get()
-    validate_redefinition(name, exists=name in workspace.config.dependencies, redefine=redefine).unwrap()
-    entries = {entry.destination: entry for entry in workspace.config.entries_for_dependency(name)}
+    was_declared = name in workspace.config.dependencies
+    validate_redefinition(name, exists=was_declared, redefine=redefine).unwrap()
     workspace.validate_no_orphaned_baselines(name).unwrap()
     workspace.validate_no_missing_baselines(name).unwrap()
     filesystem = FSClient(root=workspace.project_root)
-    for entry in entries.values():
+    for entry in workspace.config.entries_for_dependency(name):
         filesystem.resolve_path(entry.destination).unwrap()
     source.validate_input(dependency).unwrap()
 
     with hosting.acquire(dependency) as acquired:
         resolved = source.resolve(dependency, acquired.unwrap()).unwrap()
-        return _apply_dependency(workspace, name, source, resolved, entries=entries)
+        plan = _prepare_dependency_plan(workspace, name, resolved, source=source).unwrap()
+        config = workspace.config.with_dependency(name, resolved.dependency)
+        lockfile = (workspace.lockfile or Lockfile(version=1)).with_dependency(name, plan.lock)
+        lockfile = lockfile.with_baselines(entry.baseline for entry in plan.entries)
+        serialized = serialize_workspace_changes(workspace, config, lockfile)
+
+        _apply_entry_changes(
+            plan.entries,
+            filesystem=FSClient(root=workspace.project_root, readonly=False),
+            copy_file=partial(source.copy_file, resolved),
+        ).unwrap()
+        write_workspace_files(workspace, serialized).unwrap()
+        output.get().emit(
+            dependency_add_cells(
+                plan,
+                redefinition=was_declared,
+                unchanged=config == workspace.config and plan.unchanged,
+            )
+        ).unwrap()
+    return Ok(None)
 
 
 @unwrap_to_error

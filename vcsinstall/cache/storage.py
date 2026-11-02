@@ -39,7 +39,7 @@ class RepoCache:
         try:
             self.root.mkdir(parents=True, exist_ok=True)
             path = resolve_inside_project(self.root / "cache.lock", ProjectRootPath(self.root)).unwrap()
-            lock = FileLock(path, timeout=10, preserve_lock_file=True, fallback_to_soft=False)
+            lock = FileLock(path, timeout=10, preserve_lock_file=True, fallback_to_soft=False, is_singleton=True)
             lock.acquire()
         except Timeout as exc:
             return Err([errors.LockTimeout(path=self.root).with_cause(exc)])

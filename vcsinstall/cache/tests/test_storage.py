@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from filelock import FileLock
+import pytest
+from filelock import FileLock, Timeout
 
 from vcsinstall.cache import CacheRootPath, RepoCache, errors
 from vcsinstall.cache.tests.helpers import held_lock
@@ -9,6 +10,21 @@ from vcsinstall.domain.tests import make
 
 
 class TestRepoCache:
+    def test_lock__nested_repositories_keep_exclusive_access_until_outer_scope_exits(self, tmp_path: Path) -> None:
+        first = make.dependency(repository="https://host/first")
+        second = make.dependency(repository="https://host/second")
+        external = FileLock(tmp_path / "cache.lock", timeout=0, preserve_lock_file=True)
+        with RepoCache(root=CacheRootPath(tmp_path), dependency=first).lock() as outer:
+            outer_path = outer.unwrap()
+            with RepoCache(root=CacheRootPath(tmp_path), dependency=second).lock() as inner:
+                assert inner.unwrap() != outer_path
+                with pytest.raises(Timeout):
+                    external.acquire()
+            with pytest.raises(Timeout):
+                external.acquire()
+        with external:
+            pass
+
     def test_lock__identity_and_release(self, tmp_path: Path) -> None:
         dependency = Dependency(vcs=VcsId.git, repository=RepositoryLocator("https://host/team/repo"))
         cache = tmp_path / "cache"

@@ -8,12 +8,14 @@ from vcsinstall.runtime.commands import (
     entry_add,
     entry_remove,
 )
+from vcsinstall.runtime.updates import dependency_update
 
 __all__ = [
     "dependency_add",
     "dependency_list",
     "dependency_outdated",
     "dependency_remove",
+    "dependency_update",
     "entry_add",
     "entry_remove",
     "errors",

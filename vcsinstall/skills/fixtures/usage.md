@@ -1,9 +1,9 @@
 # `vcsinstall` Usage
 
 `vcsinstall` is being developed to install files into a repository from other repositories, with lockfile and push-back support.
-The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking, listing, freshness checks and removal, entry installation, and entry removal.
+The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking, listing, freshness checks, updates and removal, entry installation, and entry removal.
 `dependency add` supports Git and ordinary filesystem sources, including protected replacement of existing dependency entries.
-Other dependency operations, general installation, and push-back commands are not implemented yet.
+General installation and push-back commands are not implemented yet.
 
 ## Commands
 
@@ -16,6 +16,7 @@ vcsinstall dependency add ci 'git+https://example.com/team/shared.git#branch=mai
 vcsinstall add ci@/specs @/specs/shared
 vcsinstall dependency list
 vcsinstall dependency outdated
+vcsinstall dependency update
 vcsinstall remove @/specs/shared
 vcsinstall dependency remove ci
 ```
@@ -23,7 +24,7 @@ vcsinstall dependency remove ci
 `python -m vcsinstall` exposes the same CLI as the `vcsinstall` executable.
 The `skill` command defaults to the `usage` document.
 Help, version, and skill commands work without project configuration.
-Init creates configuration; dependency add, dependency list, dependency outdated, dependency remove, add, and remove require existing valid configuration.
+Init creates configuration; dependency add, dependency list, dependency outdated, dependency update, dependency remove, add, and remove require existing valid configuration.
 Dependency add resolves the selected revision, writes its declaration and lock, and creates no entry mappings.
 
 ## Adding dependencies
@@ -68,13 +69,31 @@ vcsinstall -p automation dependency outdated ci
 
 Without names, outdated checks every declared dependency, including those without entries. Names select exactly those dependencies; repeated names select each once. Unknown names fail as invalid arguments. There are no command-specific options.
 
-Every selected dependency must have a matching revision lock before any source fetching. Missing or mismatching locks require `install` or `dependency update NAME`; these commands are planned, so use `dependency add --redefine` where applicable in the current CLI. Unselected locks and installation baselines need not match. Installed files may be missing or modified without blocking this check.
+Every selected dependency must have a matching revision lock before any source fetching. Use `dependency update NAME` to establish or refresh its lock and entries; general `install` is planned. Unselected locks and installation baselines need not match. Installed files may be missing or modified without blocking this check.
 
 The command refreshes and resolves the effective branch, tag, or default selector, then compares its complete immutable revision with the lock. Moved tags, rewound branches, and new commits with identical content count as outdated. An omitted Git selector retains a matching lock's recorded branch even when the remote default changes. Revision pins keep selecting their pinned state and do not refresh merely to find newer commits. Required acquisition or resolution failures remain errors; stale cached references do not satisfy a failed refresh. Filesystem sources compare the complete live fingerprint, including changes outside installed entry paths; an unavailable pinned fingerprint fails.
 
 Success emits only metadata-only `dependency` records, ordered by name, with operation `dependency outdated`. Each includes source identity, effective selector, locked `revision`, and differing `current_revision`. It emits no entry counts or installation records and makes no promise that an update can succeed. Finding outdated dependencies exits successfully; an empty selection or no differences produces no result records.
 
 Configuration, lockfile bytes, and installed content remain unchanged. Put global `--cache-dir DIRECTORY` before `dependency` to select the cache root. The command resolves that root for every backend and may populate or refresh Git cache data; filesystem sources do not create cache data. Git source access requires the native Git client and its configured authentication.
+
+## Updating dependencies
+
+```bash
+vcsinstall dependency update
+vcsinstall dependency update ci formatting
+vcsinstall -p automation dependency update ci
+```
+
+Without names, update selects every dependency, including those without entries. Explicit names select exactly those dependencies, with duplicates selecting each once. Unknown names fail before source access. There are no command-specific options or entry-path selectors, and there is no root `update` command.
+
+Each selected dependency resolves its configured selector once and refreshes all its entries at that revision. Branches and tags retain their literal names; Git declarations without a selector retain a matching lock's recorded branch even when the remote default changes. Revision pins remain pinned. Filesystem live sources use their current complete fingerprint without requiring the old source state to remain available. Configuration and unselected installations remain unchanged.
+
+Every declared entry needs a trustworthy prior baseline. Existing local files must collectively match either that baseline or the selected source across the complete entry tree; independent edits are not merged. Missing selected files are restored, and upstream additions, deletions, and file/directory changes are applied. Changed entry roots are removed and recopied completely; entries already equal to the selected source receive no filesystem writes. Source deletions record expected absence while retaining the mapping for later recreation.
+
+All selected entries are prepared before any project mutation. A preparation failure leaves every selected file and lock unchanged. A failure while applying files can leave content inconsistent with the prior lock and is reported explicitly. Successful updates write locks and baselines together after file application; unchanged state preserves lockfile bytes.
+
+Success emits metadata-only `dependency` records ordered by name, followed by `installation` records ordered by destination. Records use operation `dependency update`, outcome `updated` or `unchanged`, and include `previous_revision` and selected `revision`; installation status is `unmodified`. An empty project succeeds without result records or creating a lockfile. Put global `--cache-dir DIRECTORY` before `dependency` to select the Git cache; filesystem sources do not create cache data.
 
 ## Removing dependencies
 
@@ -97,7 +116,7 @@ vcsinstall add --redefine ci@/guides @/docs/shared
 vcsinstall add --allow-outdated ci@/examples @/examples/shared
 ```
 
-Add declares and installs exactly one file or complete directory from an existing dependency's matching lock. It keeps that shared revision and all other entries unchanged. A missing or mismatching dependency lock requires `install` or `dependency update NAME` before adding entries; those commands are planned, so use `dependency add --redefine` for an existing dependency where applicable in the current CLI.
+Add declares and installs exactly one file or complete directory from an existing dependency's matching lock. It keeps that shared revision and all other entries unchanged. Use `dependency update NAME` to establish or refresh a missing or mismatching dependency lock before adding entries; general `install` is planned.
 
 Sources use `NAME@/PATH`, with `NAME@/` selecting the repository root. Source paths retain literal percent signs, plus signs, query characters, and fragment characters; quote them for your shell when needed. Repository URLs and version options belong to `dependency add`.
 The destination is the exact final file or directory path. It accepts `@/` project identifiers, contained absolute paths, or paths relative to the invocation directory. An existing directory does not append the source basename. Destinations cannot overlap another entry or either project file.

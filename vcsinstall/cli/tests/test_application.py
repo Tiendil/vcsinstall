@@ -145,6 +145,8 @@ class TestApplication:
             ["dependency", "add", "-h"],
             ["dependency", "outdated", "--help"],
             ["dependency", "outdated", "-h"],
+            ["dependency", "update", "--help"],
+            ["dependency", "update", "-h"],
             ["add", "--help"],
             ["add", "-h"],
             ["remove", "--help"],
