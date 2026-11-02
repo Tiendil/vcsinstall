@@ -8,6 +8,7 @@
 
 ### Changes
 
+- Implement `cache clean` with shared locking, ownership-aware repository cleanup, project-independent operation, and cache result records in every protocol.
 - Implement `list [ENTRY_PATH...]` with exact entry-root selection, matching revisions, local status, and per-entry dependency labels, without source or cache access.
 
 - Implement `install` and `install --locked` with shared revision reuse, complete preparation before writes, protected restoration, obsolete-lock reconciliation, and source-independent success for satisfied installations.

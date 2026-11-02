@@ -44,7 +44,7 @@ layer = "support"
 
 [[modules]]
 path = "vcsinstall.runtime"
-depends_on = ["vcsinstall.core", "vcsinstall.domain", "vcsinstall.workspace", "vcsinstall.filesystem", "vcsinstall.sources", "vcsinstall.hosting"]
+depends_on = ["vcsinstall.core", "vcsinstall.domain", "vcsinstall.workspace", "vcsinstall.filesystem", "vcsinstall.sources", "vcsinstall.hosting", "vcsinstall.cache"]
 layer = "runtime"
 
 [[modules]]

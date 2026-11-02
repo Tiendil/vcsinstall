@@ -22,3 +22,13 @@ class AccessFailed(EnvironmentError):
 class LockTimeout(AccessFailed):
     code: str = "cache_lock_timeout"
     reason: str = "Timed out after 10 seconds waiting for cache.lock."
+
+
+class CleanupFailed(AccessFailed):
+    code: str = "cache_cleanup_failed"
+    message: str = (
+        "Cannot finish cleaning cache {error.path} at {error.entry}: {error.reason}. "
+        "Cached data may already have been partially removed."
+    )
+    ways_to_fix: list[str] = ["Resolve the reported filesystem failure and retry cache clean."]
+    entry: Path

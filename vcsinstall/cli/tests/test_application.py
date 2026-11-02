@@ -147,6 +147,11 @@ class TestApplication:
             ["dependency", "outdated", "-h"],
             ["dependency", "update", "--help"],
             ["dependency", "update", "-h"],
+            ["cache"],
+            ["cache", "--help"],
+            ["cache", "-h"],
+            ["cache", "clean", "--help"],
+            ["cache", "clean", "-h"],
             ["add", "--help"],
             ["add", "-h"],
             ["remove", "--help"],
@@ -167,7 +172,7 @@ class TestApplication:
             ["--config", str(tmp_path / "missing" / "config.toml"), "--cache-dir", str(cache), *arguments],
         )
 
-        assert result.exit_code == (2 if arguments == ["dependency"] else 0), result.output
+        assert result.exit_code == (2 if arguments in (["dependency"], ["cache"]) else 0), result.output
         assert not project_config.is_set()
         assert not active_workspace.is_set()
         assert list(tmp_path.iterdir()) == [cache]

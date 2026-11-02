@@ -5,6 +5,21 @@ from contextlib import contextmanager
 from pathlib import Path
 from selectors import EVENT_READ, DefaultSelector
 
+from vcsinstall.cache import CacheRootPath, RepoCache
+from vcsinstall.domain.tests import make
+
+
+def cached_repository(root: Path, *, vcs: str = "git", repository: str = "https://host/shared") -> Path:
+    with RepoCache(
+        root=CacheRootPath(root), dependency=make.dependency(vcs=vcs, repository=repository)
+    ).lock() as result:
+        entry = result.unwrap()
+        payload = entry / "repository" / "versions"
+        payload.mkdir(parents=True)
+        (payload / "first").write_bytes(b"cached first revision")
+        (payload / "second").write_bytes(b"cached second revision")
+    return entry
+
 
 @contextmanager
 def held_lock(path: Path) -> Iterator[None]:

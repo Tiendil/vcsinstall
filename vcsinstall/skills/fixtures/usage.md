@@ -1,7 +1,7 @@
 # `vcsinstall` Usage
 
 `vcsinstall` is being developed to install files into a repository from other repositories, with lockfile and push-back support.
-The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking, listing, freshness checks, updates and removal, entry installation and inspection, complete project installation, and entry removal.
+The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking, listing, freshness checks, updates and removal, entry installation and inspection, complete project installation, entry removal, and shared cache cleanup.
 `dependency add` supports Git and ordinary filesystem sources, including protected replacement of existing dependency entries.
 Push-back commands are not implemented yet.
 
@@ -22,11 +22,12 @@ vcsinstall dependency outdated
 vcsinstall dependency update
 vcsinstall remove @/specs/shared
 vcsinstall dependency remove ci
+vcsinstall cache clean
 ```
 
 `python -m vcsinstall` exposes the same CLI as the `vcsinstall` executable.
 The `skill` command defaults to the `usage` document.
-Help, version, and skill commands work without project configuration.
+Help, version, skill, and cache cleanup commands work without project configuration.
 Init creates configuration; dependency add, dependency list, dependency outdated, dependency update, dependency remove, add, install, list, and remove require existing valid configuration.
 Dependency add resolves the selected revision, writes its declaration and lock, and creates no entry mappings.
 
@@ -184,6 +185,19 @@ Ordinary removal deletes each selected destination root and its complete content
 
 Remove uses no source repository, network, Git client, or repository cache, and ignores `--cache-dir`. Automation success emits one metadata-only `removal` record per selected entry, ordered by canonical destination, with operation `remove`, dependency name, destination, outcome `removed`, and Boolean `keep_files`.
 
+## Cleaning the cache
+
+```bash
+vcsinstall cache clean
+vcsinstall --cache-dir ./temporary-cache cache clean
+```
+
+Cleanup removes owned repository entries and their cached revisions from the selected shared cache across projects and backends. It preserves installed content, configuration, lockfiles, original sources, remote contributions, and unrelated files under the cache root. Symlink targets outside cached data remain untouched. It needs no project, network, or VCS client and ignores unusable `--config` values.
+
+Put global `--cache-dir DIRECTORY` before `cache` to select the complete cache root; home markers expand and relative paths resolve against the invocation directory. Otherwise, the platform's per-user vcsinstall cache is used. Cleanup takes the same exclusive cache lock as repository access, waits up to 10 seconds, and fails if the cache remains busy. It keeps an existing cache root and its lock file. An absent cache succeeds without creating either.
+
+No selectors, command-specific options, or confirmation are needed. Bare `cache` shows help without accessing the cache. Automation success emits one metadata-only `cache` record with operation `clean`, absolute `cache_dir`, and outcome `cleaned` or `unchanged`. Access or deletion failures fail explicitly; deletion failures identify possible partial cleanup. Later installations fetch missing cached data at their required revisions.
+
 ## Protocols
 
 Put global options before the command:
@@ -214,4 +228,4 @@ Init uses the current directory when no path is supplied, without searching pare
 The selected configuration's parent is the project root. Its lockfile is always the sibling `vcsinstall.lock`; it has no separate discovery or path option.
 Dependency add validates the entire configuration and any existing lockfile. A missing lockfile is allowed; malformed, unreadable, or symlinked project files fail.
 Loading preserves stale lock records and does not change either file, fetch repositories, or inspect installed contents.
-Help, version, and skill commands ignore unusable `--config` values.
+Help, version, skill, and cache cleanup commands ignore unusable `--config` values.

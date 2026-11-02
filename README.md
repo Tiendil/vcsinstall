@@ -2,7 +2,7 @@
 
 `vcsinstall` is being developed to install files into a target repository from source repositories, record their origins in a lockfile, and push local changes back to their source.
 
-**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `dependency list` reports dependencies and local entry statistics, `dependency outdated` checks source revisions, `dependency update` refreshes dependencies and their entries, `dependency remove` removes unused dependencies, `add` installs file and directory entries at their locked revisions, `install` reproduces the complete declared project, `list` reports entries and their local changes, and `remove` removes entries with local-change protection or retains their files as unmanaged content. Help, version output, and built-in usage documentation are available. Push back is planned.
+**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `dependency list` reports dependencies and local entry statistics, `dependency outdated` checks source revisions, `dependency update` refreshes dependencies and their entries, `dependency remove` removes unused dependencies, `add` installs file and directory entries at their locked revisions, `install` reproduces the complete declared project, `list` reports entries and their local changes, `remove` removes entries with local-change protection or retains their files as unmanaged content, and `cache clean` clears shared repository data. Help, version output, and built-in usage documentation are available. Push back is planned.
 
 ## Example
 
@@ -29,6 +29,7 @@ Available today:
 - **Project installation** — reproduce declared entries with `install`, establish missing dependency locks, and use `install --locked` to require matching records without changing lockfile bytes.
 - **Entry inspection** — list all or selected entry roots with their owning dependency, locked revision, and local status without source or cache access.
 - **Entry removal** — remove selected entries and verified content, explicitly discard local changes with `--force`, or retain files with `--keep-files`.
+- **Cache cleanup** — clear owned shared repository data while preserving project files, original sources, and unrelated cache contents.
 - **Source detection** — recognize Git repositories before ordinary directories, probe unqualified remote URLs, and honor explicit backend choices.
 - **Output protocols** — human output, framed output for coding agents, and JSON Lines for programs.
 - **Python entry point** — the same commands through `vcsinstall` and `python -m vcsinstall`.
@@ -51,6 +52,7 @@ With the package installed on your host:
 vcsinstall --help
 vcsinstall version
 vcsinstall skill usage
+vcsinstall cache clean
 ```
 
 `python -m vcsinstall` exposes the same CLI when the package is installed in that Python environment.
@@ -68,6 +70,8 @@ vcsinstall -p automation version
 ```
 
 See the [CLI specification](specs/behavior/cli.md) for command details. `vcsinstall skill usage` prints the packaged usage guide; its documentation requirements are in the [skill fixture specification](specs/behavior/skill_fixtures.md).
+
+`vcsinstall cache clean` works outside a project. To select another cache, put the global option first: `vcsinstall --cache-dir ./temporary-cache cache clean`. Cleanup takes the shared cache lock and preserves installed content, project records, original sources, and unrelated files. Missing or empty caches succeed without confirmation. See the [cache contract](specs/behavior/cache.md).
 
 ## Installation
 
@@ -89,7 +93,7 @@ For container development, follow [Development](#development).
 
 ## Configuration
 
-The available help, version, and skill commands work without project configuration. The shared `--config` option is accepted, but these commands do not load a project configuration file.
+The available help, version, skill, and cache cleanup commands work without project configuration. The shared `--config` option is accepted, but these commands do not load a project configuration file.
 
 Create a starter [configuration](specs/behavior/config.md) in the current directory:
 
