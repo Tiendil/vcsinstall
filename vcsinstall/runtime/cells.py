@@ -36,6 +36,7 @@ class Operation(StrEnum):
     add = "add"
     remove = "remove"
     install = "install"
+    list = "list"
 
 
 class RemovalCell(UniformCell):
@@ -115,6 +116,7 @@ class DependencyOutdatedCell(DependencyCell):
 class InstallationCell(DependencyCell):
     destination: ProjectPathId
     source_path: SourcePath
+    status: LocalStatus = LocalStatus.unmodified
 
     def _render(self, cell_type: type[OutputCell]) -> OutputCell:
         dependency = super()._render(cell_type)
@@ -122,7 +124,7 @@ class InstallationCell(DependencyCell):
             type="installation",
             destination=self.destination,
             source_path=self.source_path,
-            status=LocalStatus.unmodified,
+            status=self.status,
         )
         if self.redefinition:
             meta["previous_revision"] = self.previous_revision

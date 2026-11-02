@@ -154,6 +154,14 @@ EntryPathsArgument = Annotated[
     ),
 ]
 
+ListEntryPathsArgument = Annotated[
+    list[str] | None,
+    typer.Argument(
+        metavar="ENTRY_PATH...",
+        help="Declared entry roots, using project identifiers or contained paths; omit to list every entry.",
+    ),
+]
+
 KeepFilesOption = Annotated[
     bool,
     typer.Option("--keep-files", help="Remove entry metadata and retain the installed content as unmanaged files."),

@@ -13,13 +13,14 @@ from vcsinstall.cli.entities import (
     EntryPathsArgument,
     ForceRemovalOption,
     KeepFilesOption,
+    ListEntryPathsArgument,
     LockedOption,
     RedefineEntryOption,
     SourceArgument,
 )
 from vcsinstall.domain import VcsId
 from vcsinstall.hosting import get_hosting
-from vcsinstall.runtime import entry_add, entry_remove, install
+from vcsinstall.runtime import entry_add, entry_list, entry_remove, install
 from vcsinstall.sources import get_adapter
 from vcsinstall.workspace import Entry, load_workspace
 
@@ -71,6 +72,18 @@ def remove_entries(
             normalize_path(path.strip(), workspace.project_root, cwd=cwd).unwrap() for path in entry_paths
         )
         entry_remove(destinations, keep_files=keep_files, force=force).unwrap()
+
+
+def list_entries(context: typer.Context, entry_paths: ListEntryPathsArgument = None) -> None:
+    """List declared entries, their locked revisions, and local changes."""
+    with command_context(context) as command:
+        cwd = Path.cwd()
+        workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
+        context.with_resource(workspace.scope())
+        destinations = tuple(
+            normalize_path(path.strip(), workspace.project_root, cwd=cwd).unwrap() for path in entry_paths or ()
+        )
+        entry_list(destinations).unwrap()
 
 
 def install_entries(context: typer.Context, locked: LockedOption = False) -> None:

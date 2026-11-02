@@ -16,6 +16,7 @@ from vcsinstall.cache import CacheRootPath
 from vcsinstall.cache import errors as cache_errors
 from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SourcePath, SourceRevision, VcsId
 from vcsinstall.domain.tests import make
+from vcsinstall.filesystem import FSClient
 from vcsinstall.filesystem import errors as filesystem_errors
 from vcsinstall.hosting import GitHostingAdapter
 from vcsinstall.runtime import (
@@ -24,6 +25,7 @@ from vcsinstall.runtime import (
     dependency_outdated,
     dependency_remove,
     entry_add,
+    entry_list,
     entry_remove,
 )
 from vcsinstall.runtime import errors as runtime_errors
@@ -575,6 +577,67 @@ class TestDependencyOutdated:
         assert result.is_err(InvalidArguments)
         source_for.assert_not_called()
         hosting_for.assert_not_called()
+        assert not emitter.cells
+
+
+class TestEntryList:
+    @pytest.fixture(autouse=True)
+    def initialize(self, isolated_settings: None) -> None:
+        settings.initialize(
+            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
+        )
+
+    @pytest.fixture
+    def workspace(self, tmp_path: Path) -> Workspace:
+        name = DependencyName("ci")
+        return Workspace(
+            config_path=ProjectConfigPath(tmp_path / "vcsinstall.toml"),
+            lockfile_path=LockfilePath(tmp_path / "vcsinstall.lock"),
+            config=Config(
+                version=1,
+                dependencies={name: make.dependency(vcs="noop")},
+                entries=tuple(
+                    Entry.model_validate({"dependency": name, "source_path": "@/file", "destination": destination})
+                    for destination in ("@/a-local", "@/z-local")
+                ),
+            ),
+            lockfile=None,
+        )
+
+    def test_preserves_inspection_errors_and_private_causes_without_partial_results(
+        self, workspace: Workspace, emitter: CollectingEmitter, mocker: MockerFixture
+    ) -> None:
+        original = PermissionError("Permission denied")
+        problem = filesystem_errors.AccessFailed(path=workspace.project_root / "z-local", reason="Permission denied")
+        failures: EnvironmentErrors = [problem.with_cause(original), path_errors.InvalidProjectPath(path="@/z-local")]
+        inspect = FSClient.inspect_tree
+        mocker.patch.object(
+            FSClient,
+            "inspect_tree",
+            autospec=True,
+            side_effect=lambda client, path: Err(failures) if path == "@/z-local" else inspect(client, path),
+        )
+
+        with workspace.scope():
+            result = entry_list()
+
+        assert result.unwrap_err() is failures
+        assert result.unwrap_err()[0].cause is original
+        assert not emitter.cells
+
+    def test_preserves_repository_normalization_failures(
+        self, workspace: Workspace, emitter: CollectingEmitter, mocker: MockerFixture
+    ) -> None:
+        problem = path_errors.PathResolutionFailed(path="source", reason="Cannot resolve repository identity.")
+        failures: EnvironmentErrors = [problem]
+        source = ControlledSource()
+        mocker.patch.object(source, "normalize_repository", return_value=Err(failures))
+        mocker.patch("vcsinstall.runtime.commands.get_adapter", return_value=source)
+
+        with workspace.scope():
+            result = entry_list()
+
+        assert result.unwrap_err() is failures
         assert not emitter.cells
 
 

@@ -28,6 +28,7 @@ from vcsinstall.runtime.cells import (
     DependencyCell,
     DependencyListCell,
     DependencyOutdatedCell,
+    InstallationCell,
     Operation,
     Outcome,
     RemovalCell,
@@ -466,9 +467,8 @@ def _inspect_entry_status(
 
 
 @unwrap_to_error
-def _dependency_list_cell(
-    workspace: Workspace, name: DependencyName, *, filesystem: FSClient
-) -> Result[DependencyListCell]:
+def _prepare_local_dependency(workspace: Workspace, name: DependencyName) -> Result[DependencyRequest]:
+    """Prepare source identity and a matching lock for inspection without repository access."""
     definition = workspace.config.dependencies[name]
     source = get_adapter(definition.vcs)
     lock_result = _prepare_dependency_lock(workspace, name, source=source)
@@ -482,16 +482,24 @@ def _dependency_list_cell(
     if definition.selector is None and locked is not None:
         definition = definition.replace(selector=locked.selector)
 
+    return Ok(DependencyRequest(name=name, definition=definition, lock=locked))
+
+
+@unwrap_to_error
+def _dependency_list_cell(
+    workspace: Workspace, name: DependencyName, *, filesystem: FSClient
+) -> Result[DependencyListCell]:
+    request = _prepare_local_dependency(workspace, name).unwrap()
     entries = workspace.config.entries_for_dependency(name)
     counts = Counter(
-        _inspect_entry_status(workspace, entry, filesystem=filesystem, locked=locked is not None).unwrap()
+        _inspect_entry_status(workspace, entry, filesystem=filesystem, locked=request.lock is not None).unwrap()
         for entry in entries
     )
     return Ok(
         DependencyListCell(
             dependency=name,
-            definition=definition,
-            revision=locked.revision if locked is not None else None,
+            definition=request.definition,
+            revision=request.lock.revision if request.lock is not None else None,
             entries=len(entries),
             modified=counts[LocalStatus.modified],
             missing=counts[LocalStatus.missing],
@@ -509,6 +517,44 @@ def dependency_list() -> Result[None]:
         _dependency_list_cell(workspace, name, filesystem=filesystem).unwrap()
         for name in sorted(workspace.config.dependencies)
     ]
+    output.get().emit(cells).unwrap()
+    return Ok(None)
+
+
+@unwrap_to_error
+def entry_list(destinations: tuple[ProjectPathId, ...] = ()) -> Result[None]:
+    """Report selected declarations and their local status without source access or project writes."""
+    workspace = active_workspace.get()
+    declared = {entry.destination: entry for entry in workspace.config.entries}
+    selected = set(destinations) if destinations else set(declared)
+    unknown = sorted(selected - declared.keys())
+    if unknown:
+        return Err([InvalidArguments(reason=f"Unknown entry destination {destination!r}.") for destination in unknown])
+
+    entries = [declared[destination] for destination in sorted(selected)]
+    requests = {
+        name: _prepare_local_dependency(workspace, name).unwrap()
+        for name in sorted({entry.dependency for entry in entries})
+    }
+    filesystem = FSClient(root=workspace.project_root)
+    cells: list[LogicCell] = []
+    for entry in entries:
+        request = requests[entry.dependency]
+        status = _inspect_entry_status(
+            workspace, entry, filesystem=filesystem, locked=request.lock is not None
+        ).unwrap()
+        revision = request.lock.revision if request.lock is not None and status != LocalStatus.unlocked else None
+        cells.append(
+            InstallationCell(
+                operation=Operation.list,
+                dependency=entry.dependency,
+                definition=request.definition,
+                revision=revision,
+                destination=entry.destination,
+                source_path=entry.source_path,
+                status=status,
+            )
+        )
     output.get().emit(cells).unwrap()
     return Ok(None)
 

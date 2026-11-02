@@ -1,7 +1,7 @@
 # `vcsinstall` Usage
 
 `vcsinstall` is being developed to install files into a repository from other repositories, with lockfile and push-back support.
-The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking, listing, freshness checks, updates and removal, entry installation, complete project installation, and entry removal.
+The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking, listing, freshness checks, updates and removal, entry installation and inspection, complete project installation, and entry removal.
 `dependency add` supports Git and ordinary filesystem sources, including protected replacement of existing dependency entries.
 Push-back commands are not implemented yet.
 
@@ -16,6 +16,7 @@ vcsinstall dependency add ci 'git+https://example.com/team/shared.git#branch=mai
 vcsinstall add ci@/specs @/specs/shared
 vcsinstall install
 vcsinstall install --locked
+vcsinstall list
 vcsinstall dependency list
 vcsinstall dependency outdated
 vcsinstall dependency update
@@ -26,7 +27,7 @@ vcsinstall dependency remove ci
 `python -m vcsinstall` exposes the same CLI as the `vcsinstall` executable.
 The `skill` command defaults to the `usage` document.
 Help, version, and skill commands work without project configuration.
-Init creates configuration; dependency add, dependency list, dependency outdated, dependency update, dependency remove, add, install, and remove require existing valid configuration.
+Init creates configuration; dependency add, dependency list, dependency outdated, dependency update, dependency remove, add, install, list, and remove require existing valid configuration.
 Dependency add resolves the selected revision, writes its declaration and lock, and creates no entry mappings.
 
 ## Adding dependencies
@@ -60,6 +61,27 @@ List reports every declared dependency, including those without entries, ordered
 The `entries` count includes each declared file or directory mapping once. `modified`, `missing`, and `unlocked` count entries whose existing files differ from their baseline, whose expected files are missing, or whose matching baseline is unavailable. Remaining entries are unmodified. Local additions and regular-file obstructions count as modifications; modifications take precedence over missing files. Empty directories do not affect comparison. An entry is locked when both its dependency revision lock and installation baseline match its declaration; otherwise it is unlocked. Malformed or unreadable state fails.
 
 The command accepts no arguments or command-specific options. It reads local content without changing project files, needs no source repository, network, VCS client, or repository cache, and ignores `--cache-dir`. It does not check upstream freshness. Automation emits metadata-only `dependency` records with operation `dependency list` and the four counts; it emits no installation records. An empty project succeeds without result records or creating a lockfile.
+
+## Listing entries
+
+```bash
+vcsinstall list
+vcsinstall list @/specs/shared
+vcsinstall -p automation list @/specs/shared
+```
+
+Without paths, list reports every declared entry. Explicit paths select exact declared destination roots, including missing installations; they accept `@/` identifiers, absolute contained paths, or paths relative to the invocation directory. Surrounding whitespace is stripped, equivalent paths select an entry once, and results are ordered by canonical destination. Parent paths, child files, and globs do not select a directory entry. Unknown selections fail. Use `--` before positional filesystem paths beginning with `-`.
+
+Each installation record identifies its owning `dependency`, `destination`, backend, repository, `source_path`, effective selector, matching locked `revision`, and local `status`:
+
+- `unmodified` — All local files agree with the baseline, including expected absence or an absent empty-directory installation.
+- `modified` — Existing content differs, extra files exist within the entry, or a regular file obstructs a required directory. This takes precedence over missing files.
+- `missing` — Expected files are absent and existing files otherwise agree with the baseline.
+- `unlocked` — The dependency lock or entry baseline is missing or does not match the declaration. The revision is null.
+
+Human and LLM output label the dependency on each entry. Automation emits metadata-only `installation` records with operation `list`, without mutation outcomes or dependency summaries. Dependencies without selected entries produce no results. An empty project succeeds without records. Local changes, missing content, and unlocked entries still exit successfully; malformed state and unreadable or unsupported selected content fail.
+
+List preserves configuration, lockfile bytes, and installed content. It needs no source repository, network, VCS client, or repository cache, ignores `--cache-dir`, and does not check source freshness. Directory comparison includes all local files, including hidden or ignored additions.
 
 ## Checking source freshness
 

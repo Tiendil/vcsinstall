@@ -153,6 +153,8 @@ class TestApplication:
             ["remove", "-h"],
             ["install", "--help"],
             ["install", "-h"],
+            ["list", "--help"],
+            ["list", "-h"],
         ],
     )
     def test_project_independent_interfaces_ignore_unusable_config_and_cache(

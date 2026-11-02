@@ -41,6 +41,14 @@ def invoke_entry_remove(config: Path, *arguments: str) -> CommandResult:
     return result.exit_code, records, result.stdout
 
 
+def invoke_entry_list(config: Path, *arguments: str) -> CommandResult:
+    result = CliRunner().invoke(app, ["-p", "automation", "--config", str(config), "list", *arguments])
+    if result.exception is not None and not isinstance(result.exception, SystemExit):
+        raise result.exception
+    records = [json.loads(line) for line in result.stdout.splitlines()]
+    return result.exit_code, records, result.stdout
+
+
 def invoke_install(config: Path, cache: Path, *arguments: str) -> CommandResult:
     result = CliRunner().invoke(
         app, ["-p", "automation", "--config", str(config), "--cache-dir", str(cache), "install", *arguments]

@@ -8,6 +8,8 @@
 
 ### Changes
 
+- Implement `list [ENTRY_PATH...]` with exact entry-root selection, matching revisions, local status, and per-entry dependency labels, without source or cache access.
+
 - Implement `install` and `install --locked` with shared revision reuse, complete preparation before writes, protected restoration, obsolete-lock reconciliation, and source-independent success for satisfied installations.
 - Share dependency preparation, source-integrity checks, application, and result projection between `dependency add`/redefinition, `dependency update`, and `install` through `DependencyPlan`.
 - Separate acquisition freshness from dependency selectors so locked restoration preserves declared bindings and reuses cached revisions without refreshing unrelated references.

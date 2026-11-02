@@ -2,7 +2,7 @@
 
 `vcsinstall` is being developed to install files into a target repository from source repositories, record their origins in a lockfile, and push local changes back to their source.
 
-**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `dependency list` reports dependencies and local entry statistics, `dependency outdated` checks source revisions, `dependency update` refreshes dependencies and their entries, `dependency remove` removes unused dependencies, `add` installs file and directory entries at their locked revisions, `install` reproduces the complete declared project, and `remove` removes entries with local-change protection or retains their files as unmanaged content. Help, version output, and built-in usage documentation are available. Push back is planned.
+**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `dependency list` reports dependencies and local entry statistics, `dependency outdated` checks source revisions, `dependency update` refreshes dependencies and their entries, `dependency remove` removes unused dependencies, `add` installs file and directory entries at their locked revisions, `install` reproduces the complete declared project, `list` reports entries and their local changes, and `remove` removes entries with local-change protection or retains their files as unmanaged content. Help, version output, and built-in usage documentation are available. Push back is planned.
 
 ## Example
 
@@ -27,6 +27,7 @@ Available today:
 - **Dependency removal** — remove unused dependency declarations, revision locks, and obsolete baselines while preserving installed files.
 - **Entry installation** — install files or complete directories from a dependency's locked revision, rename destinations, and explicitly redefine entries with local-change protection.
 - **Project installation** — reproduce declared entries with `install`, establish missing dependency locks, and use `install --locked` to require matching records without changing lockfile bytes.
+- **Entry inspection** — list all or selected entry roots with their owning dependency, locked revision, and local status without source or cache access.
 - **Entry removal** — remove selected entries and verified content, explicitly discard local changes with `--force`, or retain files with `--keep-files`.
 - **Source detection** — recognize Git repositories before ordinary directories, probe unqualified remote URLs, and honor explicit backend choices.
 - **Output protocols** — human output, framed output for coding agents, and JSON Lines for programs.
@@ -163,6 +164,16 @@ vcsinstall -p automation dependency list
 ```
 
 Each dependency reports its repository, effective selector, matching locked revision, and `entries`, `modified`, `missing`, and `unlocked` counts. File and directory mappings each count as one entry. Dependencies without entries report zero counts. Missing or mismatching lock state produces a null revision and unlocked entries; malformed state fails. Listing preserves project files and installed content, requires no source access, VCS client, or cache, and does not check upstream freshness.
+
+Inspect all declared entries or select specific destination roots:
+
+```bash
+vcsinstall list
+vcsinstall list @/specs/shared
+vcsinstall -p automation list
+```
+
+Each entry reports its dependency, source mapping, matching revision, and local status: `unmodified`, `modified`, `missing`, or `unlocked`. Missing or mismatching locks or baselines produce a null revision. Directory entries include local additions when checking for changes. Explicit paths accept `@/` identifiers or contained filesystem paths and select exact entry roots, including absent destinations. Listing preserves project files and installed content and requires no source repository, VCS client, or cache. See the [CLI contract](specs/behavior/cli.md) or `vcsinstall skill usage` for details.
 
 Check whether configured source versions have moved:
 
