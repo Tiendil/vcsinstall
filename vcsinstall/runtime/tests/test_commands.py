@@ -16,8 +16,9 @@ from vcsinstall.cache import CacheRootPath
 from vcsinstall.cache import errors as cache_errors
 from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SourcePath, SourceRevision, VcsId
 from vcsinstall.domain.tests import make
+from vcsinstall.filesystem import errors as filesystem_errors
 from vcsinstall.hosting import GitHostingAdapter
-from vcsinstall.runtime import dependency_add, dependency_remove, entry_add, entry_remove
+from vcsinstall.runtime import dependency_add, dependency_list, dependency_remove, entry_add, entry_remove
 from vcsinstall.runtime.commands import _prepare_dependency_lock
 from vcsinstall.runtime.tests.conftest import CollectingEmitter
 from vcsinstall.sources import ResolvedSource
@@ -458,3 +459,67 @@ class TestDependencyRemove:
         assert lockfile.exists() == locked
         if locked:
             assert lockfile.read_text() == recorded
+
+
+@pytest.mark.usefixtures("isolated_settings")
+class TestDependencyList:
+    @pytest.fixture(autouse=True)
+    def initialize(self, isolated_settings: None) -> None:
+        settings.initialize(
+            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
+        )
+
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_preserves_repository_normalization_failures(
+        self, tmp_path: Path, emitter: CollectingEmitter, mocker: MockerFixture, locked: bool
+    ) -> None:
+        config = tmp_path / "vcsinstall.toml"
+        definition = 'version = 1\n[dependencies.ci]\nvcs = "noop"\nrepository = "source"\n'
+        config.write_text(definition)
+        lockfile = tmp_path / "vcsinstall.lock"
+        if locked:
+            lockfile.write_text(definition + 'revision = "recorded-revision"\n')
+        workspace = load_workspace(cwd=PathInput(tmp_path)).unwrap()
+        problem = path_errors.PathResolutionFailed(path="source", reason="Cannot resolve repository identity.")
+        failures: EnvironmentErrors = [problem]
+        source = ControlledSource()
+        mocker.patch.object(source, "normalize_repository", return_value=Err(failures))
+        mocker.patch("vcsinstall.runtime.commands.get_adapter", return_value=source)
+
+        with workspace.scope():
+            result = dependency_list()
+
+        assert result.unwrap_err() is failures
+        assert not emitter.cells
+        assert config.read_text() == definition
+        assert lockfile.exists() == locked
+
+    def test_preserves_inspection_diagnostics_and_emits_no_partial_results(
+        self, tmp_path: Path, emitter: CollectingEmitter, mocker: MockerFixture
+    ) -> None:
+        name = DependencyName("z-inspected")
+        workspace = Workspace(
+            config_path=ProjectConfigPath(tmp_path / "vcsinstall.toml"),
+            lockfile_path=LockfilePath(tmp_path / "vcsinstall.lock"),
+            config=Config(
+                version=1,
+                dependencies={key: make.dependency(vcs="noop") for key in (DependencyName("a-empty"), name)},
+                entries=(
+                    Entry.model_validate({"dependency": name, "source_path": "@/file", "destination": "@/local"}),
+                ),
+            ),
+            lockfile=None,
+        )
+        problem = filesystem_errors.AccessFailed(path=tmp_path / "local", reason="Permission denied")
+        original = PermissionError("Permission denied")
+        problem = problem.with_cause(original)
+        failures: EnvironmentErrors = [problem, path_errors.InvalidProjectPath(path="@/local")]
+        mocker.patch("vcsinstall.filesystem.FSClient.inspect_tree", return_value=Err(failures))
+
+        with workspace.scope():
+            result = dependency_list()
+
+        assert result.unwrap_err() is failures
+        assert result.unwrap_err()[0].cause is original
+        assert not emitter.cells
+        assert not tuple(tmp_path.iterdir())

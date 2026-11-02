@@ -24,7 +24,12 @@ from vcsinstall.cache import CacheRootPath, active_cache_root
 from vcsinstall.cache import errors as cache_errors
 from vcsinstall.cli import application
 from vcsinstall.cli.commands import dependency
-from vcsinstall.cli.commands.tests.helpers import declare_entry, invoke_add, invoke_dependency_remove
+from vcsinstall.cli.commands.tests.helpers import (
+    declare_entry,
+    invoke_add,
+    invoke_dependency_list,
+    invoke_dependency_remove,
+)
 from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SourceRevision, VcsId
 from vcsinstall.filesystem import errors as filesystem_errors
 from vcsinstall.filesystem import hashes
@@ -891,7 +896,7 @@ class TestAddDependency:
         else:
             assert code == 0, output
             assert [record["type"] for record in records] == ["dependency", "installation"]
-            assert records[1]["status"] == "clean"
+            assert records[1]["status"] == "unmodified"
             assert target.read_text() == "selected\n"
             assert tomllib.loads(lock.read_text())["entries"][0]["hash"] == hashes.hash_file(b"selected\n")
 
@@ -1461,6 +1466,424 @@ class TestAddDependency:
         assert records[1]["code"] == filesystem_errors.AccessFailed.model_fields["code"].default
         assert records[1]["path"] == str(tmp_path / "b")
         assert before == (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes())
+
+
+@pytest.mark.usefixtures("isolated_settings")
+class TestListDependencies:
+    @pytest.fixture(autouse=True)
+    def initialize(self, isolated_settings: None) -> None:
+        settings.initialize(
+            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
+        )
+
+    @pytest.fixture
+    def config(self, tmp_path: Path) -> Path:
+        project = tmp_path / "project"
+        project.mkdir()
+        config = project / "custom.toml"
+        definition = {
+            "vcs": "git",
+            "repository": "https://example.test/shared.git",
+            "selector": {"kind": "branch", "value": "main"},
+        }
+        config.write_text(tomli_w.dumps({"version": 1, "dependencies": dict.fromkeys(("z-unused", "ci"), definition)}))
+        config.with_name("vcsinstall.lock").write_text(
+            tomli_w.dumps(
+                {
+                    "version": 1,
+                    "dependencies": {
+                        name: {**definition, "revision": revision * 40}
+                        for name, revision in (("z-unused", "2"), ("ci", "1"))
+                    },
+                }
+            )
+        )
+        return config
+
+    def test_reports_ordered_dependencies_and_entry_counts_without_effects(  # noqa: CCR001 — Mixed local states.
+        self, config: Path, mocker: MockerFixture
+    ) -> None:
+        for destination, expected, actual in (
+            ("unmodified", b"original", b"original"),
+            ("modified", b"original", b"edited"),
+            ("missing", b"original", None),
+            ("directory", {"a": b"a", "nested/b": b"b"}, {"a": b"a", "nested/b": b"b"}),
+            ("partial", {"a": b"a", "b": b"b"}, {"a": b"a"}),
+            ("mixed", {"a": b"a", "b": b"b"}, {"a": b"edited"}),
+            ("addition", {"a": b"a"}, {"a": b"a", ".extra": b"new"}),
+        ):
+            declare_entry(config, source="@/" + destination, destination="@/" + destination, files=expected)
+            local = (
+                {destination: actual}
+                if isinstance(actual, bytes)
+                else {destination + "/" + child: data for child, data in (actual or {}).items()}
+            )
+            for path, data in local.items():
+                target = config.parent / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+        declarations = tomllib.loads(config.read_text())
+        declarations["entries"].append({"dependency": "ci", "source_path": "@/new", "destination": "@/unlocked"})
+        config.write_text(tomli_w.dumps(declarations))
+        before = {path: path.read_bytes() for path in config.parent.rglob("*") if path.is_file()}
+        for name in (
+            "vcsinstall.cli.commands.dependency.resolve_cache_root",
+            "vcsinstall.cli.commands.dependency.get_hosting",
+            "vcsinstall.cache.paths.user_cache_path",
+            "vcsinstall.vcs_clients.GitClient.run",
+            "vcsinstall.sources.adapters.git.GitSourceAdapter.resolve",
+            "vcsinstall.sources.adapters.git.GitSourceAdapter.inspect",
+        ):
+            mocker.patch(name, side_effect=AssertionError("Unexpected source or cache access"))
+
+        expected_records = [
+            {
+                "content": None,
+                "type": "dependency",
+                "operation": "dependency list",
+                "dependency": name,
+                "vcs": "git",
+                "repository": "https://example.test/shared.git",
+                "ref_kind": "branch",
+                "ref": "main",
+                "revision": revision * 40,
+                "entries": entries,
+                "modified": modified,
+                "missing": missing,
+                "unlocked": unlocked,
+            }
+            for name, revision, entries, modified, missing, unlocked in (
+                ("ci", "1", 8, 3, 2, 1),
+                ("z-unused", "2", 0, 0, 0, 0),
+            )
+        ]
+        for _ in range(2):
+            result = CliRunner().invoke(
+                application.app,
+                [
+                    "-p",
+                    "automation",
+                    "--config",
+                    str(config),
+                    "--cache-dir",
+                    str(config / "bad"),
+                    "dependency",
+                    "list",
+                ],
+            )
+
+            assert result.exit_code == 0, result.output
+            assert not result.stderr
+            assert cell_payloads([json.loads(line) for line in result.stdout.splitlines()]) == expected_records
+            assert not project_config.is_set()
+            assert not active_workspace.is_set()
+            assert not active_cache_root.is_set()
+        assert {path: path.read_bytes() for path in config.parent.rglob("*") if path.is_file()} == before
+
+    @pytest.mark.parametrize(
+        "expected,files,directories,status",
+        [
+            (b"base", {"installed": b"base"}, (), "unmodified"),
+            (b"base", {}, (), "missing"),
+            (b"base", {}, ("installed",), "missing"),
+            (b"base", {"installed/child": b"base"}, (), "modified"),
+            ({"a": b"base", "nested/b": b"base"}, {}, (), "missing"),
+            ({"a": b"base", "nested/b": b"base"}, {"installed/a": b"base"}, ("installed/nested/b",), "missing"),
+            ({"a": b"base", "nested/b": b"base"}, {"installed/nested": b"base"}, (), "modified"),
+            ({"a": b"base"}, {"installed": b""}, (), "modified"),
+            ({}, {}, (), "unmodified"),
+            ({}, {}, ("installed/empty/nested",), "unmodified"),
+            ({}, {"installed": b""}, (), "modified"),
+        ],
+    )
+    def test_file_and_directory_comparison(
+        self,
+        config: Path,
+        expected: bytes | dict[str, bytes],
+        files: dict[str, bytes],
+        directories: tuple[str, ...],
+        status: str,
+    ) -> None:
+        declare_entry(config, source="@/source", destination="@/installed", files=expected)
+        for path in directories:
+            (config.parent / path).mkdir(parents=True)
+        for path, data in files.items():
+            target = config.parent / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+
+        code, records, output = invoke_dependency_list(config)
+
+        assert code == 0, output
+        assert records[0]["entries"] == 1
+        assert {key: records[0][key] for key in ("modified", "missing", "unlocked")} == {
+            key: int(key == status) for key in ("modified", "missing", "unlocked")
+        }
+
+    @pytest.mark.parametrize(
+        "local,status", [("absent", "unmodified"), ("directory", "unmodified"), ("file", "modified")]
+    )
+    def test_expected_absence(self, config: Path, local: str, status: str) -> None:
+        declare_entry(config, source="@/source", destination="@/installed", files=b"base")
+        lockfile = config.with_name("vcsinstall.lock")
+        recorded = tomllib.loads(lockfile.read_text())
+        recorded["entries"][0].update(kind="absent")
+        recorded["entries"][0].pop("hash")
+        lockfile.write_text(tomli_w.dumps(recorded))
+        if local == "directory":
+            (config.parent / "installed").mkdir()
+        elif local == "file":
+            (config.parent / "installed").write_bytes(b"")
+
+        code, records, output = invoke_dependency_list(config)
+
+        assert code == 0, output
+        assert records[0]["modified"] == int(status == "modified")
+        assert records[0]["missing"] == records[0]["unlocked"] == 0
+
+    def test_regular_file_obstructing_an_entry_parent_is_modified(self, config: Path) -> None:
+        declare_entry(config, source="@/source", destination="@/parent/installed", files=b"base")
+        (config.parent / "parent").write_bytes(b"obstruction")
+
+        code, records, output = invoke_dependency_list(config)
+
+        assert code == 0, output
+        assert records[0]["modified"] == 1
+        assert records[0]["missing"] == records[0]["unlocked"] == 0
+
+    @pytest.mark.parametrize("state", ["absent", "empty", "missing_dependency", "repository", "selector", "backend"])
+    def test_missing_or_mismatching_dependency_lock_unlocks_all_its_entries(  # noqa: CCR001 — Stale-lock variants.
+        self, config: Path, state: str
+    ) -> None:
+        declare_entry(config, source="@/source", destination="@/installed", files=b"base")
+        lockfile = config.with_name("vcsinstall.lock")
+        recorded = tomllib.loads(lockfile.read_text())
+        if state == "absent":
+            lockfile.unlink()
+        elif state in ("empty", "missing_dependency"):
+            recorded["entries"] = []
+            recorded["dependencies"].pop("ci")
+            if state == "empty":
+                recorded["dependencies"] = {}
+            lockfile.write_text(tomli_w.dumps(recorded))
+        else:
+            locked = recorded["dependencies"]["ci"]
+            if state == "repository":
+                locked["repository"] = "https://example.test/other.git"
+            elif state == "selector":
+                locked["selector"] = {"kind": "tag", "value": "main"}
+            else:
+                locked.update(vcs="filesystem", repository="missing-source", revision=hashes.hash_file(b"base"))
+                locked.pop("selector")
+            lockfile.write_text(tomli_w.dumps(recorded))
+        before = (config.read_bytes(), lockfile.read_bytes() if lockfile.exists() else None)
+
+        code, records, output = invoke_dependency_list(config)
+
+        assert code == 0, output
+        assert records[0]["revision"] is None
+        assert records[0]["entries"] == records[0]["unlocked"] == 1
+        assert records[0]["modified"] == records[0]["missing"] == 0
+        assert (config.read_bytes(), lockfile.read_bytes() if lockfile.exists() else None) == before
+
+    @pytest.mark.parametrize(
+        "field,value", [("source_path", "@/other"), ("destination", "@/other"), ("dependency", "z-unused")]
+    )
+    def test_mismatching_entry_baseline_is_unlocked(self, config: Path, field: str, value: str) -> None:
+        declare_entry(config, source="@/source", destination="@/installed", files=b"base")
+        lockfile = config.with_name("vcsinstall.lock")
+        recorded = tomllib.loads(lockfile.read_text())
+        recorded["entries"][0][field] = value
+        lockfile.write_text(tomli_w.dumps(recorded))
+
+        code, records, output = invoke_dependency_list(config)
+
+        assert code == 0, output
+        assert records[0]["revision"] == "1" * 40
+        assert records[0]["unlocked"] == 1
+        assert records[0]["modified"] == records[0]["missing"] == 0
+
+    @pytest.mark.parametrize("kind", ["branch", "tag", "revision"])
+    def test_explicit_selectors(self, config: Path, kind: str) -> None:
+        value = "1" * 40 if kind == "revision" else "release"
+        for path in (config, config.with_name("vcsinstall.lock")):
+            document = tomllib.loads(path.read_text())
+            document["dependencies"]["ci"]["selector"] = {"kind": kind, "value": value}
+            path.write_text(tomli_w.dumps(document))
+
+        code, records, output = invoke_dependency_list(config)
+
+        assert code == 0, output
+        assert (records[0]["ref_kind"], records[0]["ref"], records[0]["revision"]) == (kind, value, "1" * 40)
+
+    @pytest.mark.parametrize("lock_kind", ["branch", "tag", "revision", None])
+    def test_omitted_git_selector_retains_only_a_matching_branch(self, config: Path, lock_kind: str | None) -> None:
+        document = tomllib.loads(config.read_text())
+        document["dependencies"]["ci"].pop("selector")
+        config.write_text(tomli_w.dumps(document))
+        lockfile = config.with_name("vcsinstall.lock")
+        if lock_kind is None:
+            lockfile.unlink()
+        else:
+            recorded = tomllib.loads(lockfile.read_text())
+            recorded["dependencies"]["ci"]["selector"] = {
+                "kind": lock_kind,
+                "value": "1" * 40 if lock_kind == "revision" else "main",
+            }
+            lockfile.write_text(tomli_w.dumps(recorded))
+
+        code, records, output = invoke_dependency_list(config)
+
+        assert code == 0, output
+        matching = lock_kind == "branch"
+        assert records[0]["ref_kind"] == ("branch" if matching else "default")
+        assert records[0]["ref"] == ("main" if matching else None)
+        assert records[0]["revision"] == ("1" * 40 if matching else None)
+
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("vcs", ["git", "filesystem"])
+    def test_normalizes_repository_identity_against_the_selected_project(
+        self, config: Path, monkeypatch: pytest.MonkeyPatch, locked: bool, vcs: str
+    ) -> None:
+        repository = config.parent.parent / "missing-source"
+        definition: dict[str, object] = {"vcs": vcs, "repository": "../missing-source"}
+        if vcs == "git":
+            definition["selector"] = {"kind": "branch", "value": "main"}
+        config.write_text(tomli_w.dumps({"version": 1, "dependencies": {"ci": definition}}))
+        revision = "1" * 40 if vcs == "git" else hashes.hash_file(b"base")
+        lockfile = config.with_name("vcsinstall.lock")
+        if locked:
+            recorded = {**definition, "repository": str(repository), "revision": revision}
+            lockfile.write_text(tomli_w.dumps({"version": 1, "dependencies": {"ci": recorded}}))
+        else:
+            lockfile.unlink()
+        nested = config.parent / "nested"
+        nested.mkdir()
+        monkeypatch.chdir(nested)
+
+        code, records, output = invoke_dependency_list(config)
+
+        assert code == 0, output
+        assert records[0]["repository"] == str(repository)
+        assert records[0]["revision"] == (revision if locked else None)
+        assert not repository.exists()
+
+    def test_discovery_uses_the_nearest_project(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        (tmp_path / "vcsinstall.toml").write_text("invalid parent configuration")
+        project = tmp_path / "project"
+        nested = project / "nested"
+        nested.mkdir(parents=True)
+        (project / "vcsinstall.toml").write_text("version = 1\n")
+        monkeypatch.chdir(nested)
+
+        result = CliRunner().invoke(application.app, ["-p", "automation", "dependency", "list"])
+
+        assert result.exit_code == 0, result.output
+        assert not result.stdout and not result.stderr
+        assert not (project / "vcsinstall.lock").exists()
+
+    @pytest.mark.parametrize("filename", ["custom.toml", "vcsinstall.lock"])
+    @pytest.mark.parametrize("protocol", ["human", "llm", "automation"])
+    def test_invalid_project_files_fail_through_the_shared_protocol(
+        self, config: Path, filename: str, protocol: str
+    ) -> None:
+        path = config.parent / filename
+        path.write_text("version = [")
+
+        result = CliRunner().invoke(application.app, ["-p", protocol, "--config", str(config), "dependency", "list"])
+
+        assert result.exit_code == 2, result.output
+        assert str(path) in result.stdout
+        assert not result.stderr
+        assert not project_config.is_set() and not active_workspace.is_set()
+        if protocol == "automation":
+            assert json.loads(result.stdout)["type"] == "error"
+        elif protocol == "llm":
+            assert "--VCSINSTALL-CELL " in result.stdout
+
+    def test_missing_explicit_configuration_does_not_fall_back(self, config: Path) -> None:
+        missing = config.parent / "missing.toml"
+
+        code, records, output = invoke_dependency_list(missing)
+
+        assert code == 2, output
+        assert records[0]["type"] == "error"
+        assert records[0]["path"] == str(missing)
+        assert not missing.exists()
+
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_unreadable_local_content_fails_instead_of_becoming_missing_or_unlocked(
+        self, config: Path, mocker: MockerFixture, locked: bool
+    ) -> None:
+        declare_entry(config, source="@/source", destination="@/installed", files=b"base")
+        target = config.parent / "installed"
+        target.write_bytes(b"base")
+        if not locked:
+            config.with_name("vcsinstall.lock").unlink()
+        before = config.read_bytes()
+        mocker.patch(
+            "vcsinstall.filesystem.client.hashlib.file_digest", side_effect=PermissionError("Unreadable file")
+        )
+
+        code, records, output = invoke_dependency_list(config)
+
+        assert code == 3, output
+        assert [record["type"] for record in records] == ["error"]
+        assert records[0]["code"] == filesystem_errors.AccessFailed.model_fields["code"].default
+        assert records[0]["path"] == str(target)
+        assert config.read_bytes() == before
+        assert target.read_bytes() == b"base"
+
+    @pytest.mark.parametrize("child", [False, True])
+    def test_symlinks_in_selected_content_fail(self, config: Path, child: bool) -> None:
+        declare_entry(config, source="@/source", destination="@/installed", files={"a": b"base"})
+        target = config.parent / "unmanaged"
+        target.write_bytes(b"base")
+        link = config.parent / "installed"
+        if child:
+            link.mkdir()
+            link = link / "a"
+        link.symlink_to(target)
+
+        code, records, output = invoke_dependency_list(config)
+
+        assert code == 3, output
+        assert [record["type"] for record in records] == ["error"]
+        assert link.is_symlink()
+        assert target.read_bytes() == b"base"
+
+    @pytest.mark.parametrize("arguments", [["ci"], ["--force"], ["--outdated"], ["--protocol", "automation"]])
+    def test_rejects_arguments_and_options_before_loading(self, arguments: list[str], mocker: MockerFixture) -> None:
+        load = mocker.patch.object(dependency, "load_workspace", side_effect=AssertionError("Unexpected loading"))
+
+        result = CliRunner().invoke(application.app, ["dependency", "list", *arguments])
+
+        assert result.exit_code == 2
+        load.assert_not_called()
+
+    @pytest.mark.parametrize("help_option", ["--help", "-h"])
+    def test_help_requires_no_project(self, help_option: str, mocker: MockerFixture) -> None:
+        load = mocker.patch.object(dependency, "load_workspace", side_effect=AssertionError("Unexpected loading"))
+
+        result = CliRunner().invoke(
+            application.app, ["--config", "/missing/config", "dependency", "list", help_option]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "locked revisions" in result.stdout
+        load.assert_not_called()
+
+    @pytest.mark.parametrize("protocol", ["human", "llm", "automation"])
+    def test_success_uses_shared_protocols(self, config: Path, protocol: str) -> None:
+        result = CliRunner().invoke(application.app, ["-p", protocol, "--config", str(config), "dependency", "list"])
+
+        assert result.exit_code == 0, result.output
+        assert not result.stderr
+        assert "ci" in result.stdout and "z-unused" in result.stdout
+        if protocol == "automation":
+            assert all(json.loads(line)["content"] is None for line in result.stdout.splitlines())
+        elif protocol == "llm":
+            assert "--VCSINSTALL-CELL " in result.stdout
 
 
 @pytest.mark.usefixtures("isolated_settings")

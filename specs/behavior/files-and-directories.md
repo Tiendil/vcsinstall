@@ -124,7 +124,7 @@ Existing objects at file or parent positions MUST undergo the applicable type an
 Unreadable content MUST remain an inspection failure rather than be classified as missing.
 
 Ordinary local inspection MUST continue to compare the actual installed state with the recorded baseline under Local comparison.
-Treating a missing file as restorable during installation or update MUST NOT report an incomplete installation as clean or rewrite a baseline to accept the missing content.
+Treating a missing file as restorable during installation or update MUST NOT report an incomplete installation as unmodified or rewrite a baseline to accept the missing content.
 Verification of existing content and installation-baseline transitions MUST follow Installation protection and Updating baselines in `specs/behavior/locking.md`.
 
 **Example:** A directory mapping selects `a.txt` and `b.txt` at the operation's source revision.
@@ -249,7 +249,7 @@ A later successful update MUST add newly published files to the baseline only wh
 
 ## Failures
 
-Unreadable selected or managed files MUST fail rather than be skipped or reported as clean.
+Unreadable selected or managed files MUST fail rather than be skipped or reported as unmodified.
 Unsupported objects and names that cannot satisfy the encoding or destination-containment contracts MUST fail when they are in the selected or managed scope.
 Files outside selected entry destinations MUST NOT be inspected merely to reject their object kinds.
 Containment and required-parent checks MAY inspect those paths when necessary to determine whether a proposed effect is permitted.

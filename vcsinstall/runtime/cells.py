@@ -3,10 +3,10 @@ from enum import StrEnum
 from llm_tool_cli.paths import ProjectPathId
 from llm_tool_cli.protocol.logic_cells.base import LogicCell
 from llm_tool_cli.protocol.logic_cells.uniform import UniformCell
-from llm_tool_cli.protocol.output_cells.base import OutputCell
+from llm_tool_cli.protocol.output_cells.base import MetaValue, OutputCell
 
 from vcsinstall.domain import Dependency, DependencyName, SourcePath, SourceRevision
-from vcsinstall.runtime.entities import EntryPlan
+from vcsinstall.runtime.entities import EntryPlan, LocalStatus
 from vcsinstall.sources import ResolvedSource
 from vcsinstall.workspace import Entry
 
@@ -29,6 +29,7 @@ class RefKind(StrEnum):
 
 class Operation(StrEnum):
     dependency_add = "dependency add"
+    dependency_list = "dependency list"
     dependency_remove = "dependency remove"
     add = "add"
     remove = "remove"
@@ -56,14 +57,14 @@ class DependencyCell(UniformCell):
     dependency: DependencyName
     definition: Dependency
     revision: SourceRevision | None
-    outcome: Outcome
+    outcome: Outcome | None = None
     previous_revision: SourceRevision | None = None
     redefinition: bool = False
 
     def _render(self, cell_type: type[OutputCell]) -> OutputCell:
         definition = self.definition
         selector = definition.selector
-        meta = dict(
+        meta: dict[str, MetaValue] = dict(
             operation=self.operation,
             dependency=self.dependency,
             vcs=definition.vcs,
@@ -71,11 +72,31 @@ class DependencyCell(UniformCell):
             ref_kind=RefKind(selector.kind.value) if selector is not None else RefKind.default,
             ref=selector.value if selector is not None else None,
             revision=self.revision,
-            outcome=self.outcome,
         )
+        if self.outcome is not None:
+            meta["outcome"] = self.outcome
         if self.redefinition:
             meta["previous_revision"] = self.previous_revision
         return cell_type.build_meta("dependency", type="dependency", **meta)
+
+
+class DependencyListCell(DependencyCell):
+    operation: Operation = Operation.dependency_list
+    entries: int
+    modified: int
+    missing: int
+    unlocked: int
+
+    def _render(self, cell_type: type[OutputCell]) -> OutputCell:
+        dependency = super()._render(cell_type)
+        return cell_type.build_meta(
+            "dependency",
+            **dependency.meta,
+            entries=self.entries,
+            modified=self.modified,
+            missing=self.missing,
+            unlocked=self.unlocked,
+        )
 
 
 class InstallationCell(DependencyCell):
@@ -88,7 +109,7 @@ class InstallationCell(DependencyCell):
             type="installation",
             destination=self.destination,
             source_path=self.source_path,
-            status="clean",
+            status=LocalStatus.unmodified,
         )
         if self.redefinition:
             meta["previous_revision"] = self.previous_revision

@@ -8,6 +8,7 @@ from llm_tool_cli.paths import ProjectPathId
 
 from vcsinstall.domain import ContentHash, DependencyName, SourceRevision, VersionSelector
 from vcsinstall.runtime import errors
+from vcsinstall.runtime.entities import LocalStatus
 
 
 def validate_redefinition(name: DependencyName, *, exists: bool, redefine: bool) -> Result[None]:
@@ -57,6 +58,24 @@ def content_matches(
     {a: edited} and {a: old, extra: new}. An empty actual file set matches.
     """
     return all(expected.get(path) == digest for path, digest in files.items())
+
+
+def local_content_status(
+    expected: Mapping[ProjectPathId, ContentHash],
+    *,
+    files: Mapping[ProjectPathId, ContentHash],
+) -> LocalStatus:
+    """Compare complete local file identities with a matching baseline.
+
+    Expected {a: old, b: old} and actual {a: old} are missing; actual
+    {a: edited} is modified despite the missing b. Equal empty file sets
+    are unmodified, including absent containers and empty directories.
+    """
+    if not content_matches(expected, files=files):
+        return LocalStatus.modified
+    if len(files) < len(expected):
+        return LocalStatus.missing
+    return LocalStatus.unmodified
 
 
 def validate_no_local_content_conflicts(

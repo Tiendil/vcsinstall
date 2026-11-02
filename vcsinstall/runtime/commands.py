@@ -1,3 +1,4 @@
+from collections import Counter
 from collections.abc import Callable
 from functools import partial
 from typing import BinaryIO
@@ -6,6 +7,7 @@ from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.output import output
 from llm_tool_cli.paths import ProjectPathId, project_path_parts
+from llm_tool_cli.protocol.logic_cells.base import LogicCell
 
 from vcsinstall.domain import (
     ContentKind,
@@ -22,14 +24,16 @@ from vcsinstall.hosting import HostingAdapter
 from vcsinstall.runtime import errors
 from vcsinstall.runtime.cells import (
     DependencyCell,
+    DependencyListCell,
     Operation,
     Outcome,
     RemovalCell,
     dependency_add_cells,
     entry_add_cell,
 )
-from vcsinstall.runtime.entities import EntryPlan
+from vcsinstall.runtime.entities import EntryPlan, LocalStatus
 from vcsinstall.runtime.validation import (
+    local_content_status,
     validate_entry_redefinition,
     validate_freshness,
     validate_no_local_content_conflicts,
@@ -324,6 +328,75 @@ def _prepare_dependency_lock(
         lockfile=workspace.lockfile.with_dependency(name, recorded.replace(repository=locked_repository)),
     )
     return prepared.require_matching_dependency_lock(name, source=source)
+
+
+@unwrap_to_error
+def _inspect_entry_status(
+    workspace: Workspace, entry: Entry, *, filesystem: FSClient, locked: bool
+) -> Result[LocalStatus]:
+    observed = filesystem.inspect_tree(entry.destination).unwrap()
+    if not locked:
+        return Ok(LocalStatus.unlocked)
+
+    result = workspace.require_matching_entry_baseline(entry)
+    if result.is_err(workspace_errors.MissingBaseline) or result.is_err(workspace_errors.BaselineMismatch):
+        return Ok(LocalStatus.unlocked)
+    baseline = result.unwrap()
+
+    parts = project_path_parts(entry.destination)
+    for end in range(1, len(parts)):
+        parent = ProjectPathId("@/" + "/".join(parts[:end]))
+        if filesystem.inspect_kind(parent).unwrap() == ContentKind.file:
+            return Ok(LocalStatus.modified)
+    return Ok(local_content_status(baseline.file_hashes(), files=observed.file_hashes))
+
+
+@unwrap_to_error
+def _dependency_list_cell(
+    workspace: Workspace, name: DependencyName, *, filesystem: FSClient
+) -> Result[DependencyListCell]:
+    definition = workspace.config.dependencies[name]
+    source = get_adapter(definition.vcs)
+    lock_result = _prepare_dependency_lock(workspace, name, source=source)
+    locked = None if lock_result.is_err(workspace_errors.DependencyLockRequired) else lock_result.unwrap()
+    repository = (
+        locked.repository
+        if locked is not None
+        else source.normalize_repository(definition.repository, cwd=workspace.project_root).unwrap()
+    )
+    definition = definition.replace(repository=repository or definition.repository)
+    if definition.selector is None and locked is not None:
+        definition = definition.replace(selector=locked.selector)
+
+    entries = workspace.config.entries_for_dependency(name)
+    counts = Counter(
+        _inspect_entry_status(workspace, entry, filesystem=filesystem, locked=locked is not None).unwrap()
+        for entry in entries
+    )
+    return Ok(
+        DependencyListCell(
+            dependency=name,
+            definition=definition,
+            revision=locked.revision if locked is not None else None,
+            entries=len(entries),
+            modified=counts[LocalStatus.modified],
+            missing=counts[LocalStatus.missing],
+            unlocked=counts[LocalStatus.unlocked],
+        )
+    )
+
+
+@unwrap_to_error
+def dependency_list() -> Result[None]:
+    """Report declared dependencies and local entry statistics without source access."""
+    workspace = active_workspace.get()
+    filesystem = FSClient(root=workspace.project_root)
+    cells: list[LogicCell] = [
+        _dependency_list_cell(workspace, name, filesystem=filesystem).unwrap()
+        for name in sorted(workspace.config.dependencies)
+    ]
+    output.get().emit(cells).unwrap()
+    return Ok(None)
 
 
 @unwrap_to_error

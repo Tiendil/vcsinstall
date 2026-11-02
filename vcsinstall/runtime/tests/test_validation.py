@@ -5,13 +5,43 @@ from llm_tool_cli.paths import ProjectPathId
 from vcsinstall.domain import ContentHash, DependencyName, SourceRevision
 from vcsinstall.domain.tests import make
 from vcsinstall.runtime import errors
+from vcsinstall.runtime.entities import LocalStatus
 from vcsinstall.runtime.validation import (
+    local_content_status,
     validate_entry_redefinition,
     validate_freshness,
     validate_no_local_content_conflicts,
     validate_redefinition,
     validate_removal_content,
 )
+
+
+class TestLocalContentStatus:
+    @pytest.mark.parametrize(
+        "actual,status",
+        [
+            ({"@/a": "old", "@/b": "old"}, LocalStatus.unmodified),
+            ({"@/a": "old"}, LocalStatus.missing),
+            ({}, LocalStatus.missing),
+            ({"@/a": "edited"}, LocalStatus.modified),
+            ({"@/a": "old", "@/b": "old", "@/extra": "new"}, LocalStatus.modified),
+            ({"@/": "old"}, LocalStatus.modified),
+            ({"@/a": "old", "@/b/child": "old"}, LocalStatus.modified),
+        ],
+    )
+    def test_complete_tree_comparison(self, actual: dict[str, str], status: LocalStatus) -> None:
+        expected = {ProjectPathId(path): ContentHash("old") for path in ("@/a", "@/b")}
+
+        assert (
+            local_content_status(
+                expected, files={ProjectPathId(path): ContentHash(value) for path, value in actual.items()}
+            )
+            == status
+        )
+
+    def test_empty_file_sets_are_unmodified(self) -> None:
+        assert local_content_status({}, files={}) == LocalStatus.unmodified
+        assert local_content_status({}, files={ProjectPathId("@/"): ContentHash("empty")}) == LocalStatus.modified
 
 
 class TestValidateRedefinition:

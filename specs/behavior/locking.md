@@ -108,7 +108,7 @@ Deleting a managed child within a directory entry MUST produce a local differenc
 
 1. The initial baseline records `kind = "file"` and the file's hash.
 2. Upstream deletes `LICENSE`; `vcsinstall dependency update ci` removes the unchanged local copy, advances the dependency's revision, and records `kind = "absent"` without a hash.
-3. The entry remains declared, and `vcsinstall list` reports it as clean because absence is expected. If upstream later recreates `LICENSE`, a subsequent dependency update restores the file.
+3. The entry remains declared, and `vcsinstall list` reports it as unmodified because absence is expected. If upstream later recreates `LICENSE`, a subsequent dependency update restores the file.
 
 Deleting the local copy alone leaves its baseline as a file and produces local status `missing`.
 Installation or update MUST restore it when it remains selected under Missing files in `specs/behavior/files-and-directories.md`.
@@ -120,16 +120,16 @@ Inspection MUST compare installed content against matching baselines without fet
 It MUST NOT create or modify project files.
 Local status MUST distinguish:
 
-- `clean` — Local content agrees with the matching baseline, including expected absence.
+- `unmodified` — Local content agrees with the matching baseline, including expected absence.
 - `modified` — Existing regular-file content differs from the baseline, an additional file exists within the owned destination, or a regular file obstructs a required directory; missing files alone do not produce this status.
 - `missing` — One or more regular files expected by the matching baseline are absent, including when an empty directory occupies an expected file position, while all existing files otherwise agree with the baseline.
-- `unlocked` — No matching record exists, so a trustworthy local-change comparison is unavailable.
+- `unlocked` — The dependency revision lock or entry baseline is missing or does not match the declaration, so a trustworthy local-change comparison is unavailable.
 
 A missing lockfile MUST classify declared entries as unlocked without creating one.
 An old binding's baseline MUST NOT be presented as the baseline of a new mapping.
-Malformed or unreadable state MUST fail rather than produce empty results or invented clean or unlocked states.
+Malformed or unreadable state MUST fail rather than produce empty results or invented unmodified or unlocked states.
 Modified, missing, or unlocked status MUST NOT by itself make inspection fail.
-An absent destination for an empty directory manifest MUST be clean under Directories in `specs/behavior/files-and-directories.md`.
+An absent destination for an empty directory manifest MUST be unmodified under Directories in `specs/behavior/files-and-directories.md`.
 When missing files coexist with local modifications, additions, or obstructing regular files, `modified` MUST take precedence over `missing`.
 
 ## Source integrity and cache independence

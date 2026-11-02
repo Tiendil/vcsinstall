@@ -532,7 +532,7 @@ It MUST NOT bypass destination validation or ignore failures while changing file
 ### Keeping installed content
 
 `--keep-files` MUST remove management metadata while leaving the selected files and directories untouched, including local modifications and additions.
-It MUST NOT require content verification or a clean installation baseline.
+It MUST NOT require content verification or a matching installation baseline.
 Retained content MUST become unmanaged project content.
 `--keep-files` MUST take precedence over `--force`; supplying both MUST still preserve all installed content.
 
@@ -659,7 +659,7 @@ Dependency list records MUST additionally expose these nonnegative integer count
 - `unlocked` — The number of those entries with local status `unlocked`.
 
 Each entry MUST contribute to exactly one category under Local state inspection in `specs/behavior/locking.md`.
-The sum of `modified`, `missing`, and `unlocked` MUST NOT exceed `entries`; all remaining entries MUST be clean.
+The sum of `modified`, `missing`, and `unlocked` MUST NOT exceed `entries`; all remaining entries MUST be unmodified.
 These counts MUST describe local state without implying that upstream freshness has been checked.
 
 Dependency outdated records MUST additionally expose `current_revision`, containing the current immutable revision resolved under the dependency's effective selector.

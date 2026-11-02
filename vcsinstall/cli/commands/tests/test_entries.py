@@ -584,7 +584,7 @@ class TestAddEntry:
         assert record["destination"] == "@/renamed"
         assert record["source_path"] == "@/" + selected
         assert record["outcome"] == "installed"
-        assert record["status"] == "clean"
+        assert record["status"] == "unmodified"
         assert record["revision"] == dependency[0]["revision"]
         assert record["content"] is None
         target = config.parent / "renamed"

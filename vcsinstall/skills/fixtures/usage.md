@@ -1,7 +1,7 @@
 # `vcsinstall` Usage
 
 `vcsinstall` is being developed to install files into a repository from other repositories, with lockfile and push-back support.
-The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking and removal, entry installation, and entry removal.
+The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking, listing and removal, entry installation, and entry removal.
 `dependency add` supports Git and ordinary filesystem sources, including protected replacement of existing dependency entries.
 Other dependency operations, general installation, and push-back commands are not implemented yet.
 
@@ -14,6 +14,7 @@ vcsinstall skill usage
 vcsinstall init
 vcsinstall dependency add ci 'git+https://example.com/team/shared.git#branch=main'
 vcsinstall add ci@/specs @/specs/shared
+vcsinstall dependency list
 vcsinstall remove @/specs/shared
 vcsinstall dependency remove ci
 ```
@@ -21,7 +22,7 @@ vcsinstall dependency remove ci
 `python -m vcsinstall` exposes the same CLI as the `vcsinstall` executable.
 The `skill` command defaults to the `usage` document.
 Help, version, and skill commands work without project configuration.
-Init creates configuration; dependency add, dependency remove, add, and remove require existing valid configuration.
+Init creates configuration; dependency add, dependency list, dependency remove, add, and remove require existing valid configuration.
 Dependency add resolves the selected revision, writes its declaration and lock, and creates no entry mappings.
 
 ## Adding dependencies
@@ -42,6 +43,19 @@ An existing name requires `--redefine`, even for an identical declaration. Redef
 
 Git sources require the installed Git client and use a shared per-user cache. Put `--cache-dir DIRECTORY` before `dependency` to override its root. Dependency add resolves the cache root for every backend. Filesystem sources do not create cache data. Project-independent commands do not resolve or access the cache. Native authentication remains owned by Git.
 Automation success emits a `dependency` record, followed by ordered `installation` records for refreshed entries. Errors use the selected shared protocol.
+
+## Listing dependencies
+
+```bash
+vcsinstall dependency list
+vcsinstall -p automation dependency list
+```
+
+List reports every declared dependency, including those without entries, ordered by name. Each record includes the backend, normalized repository, effective selector, and matching locked revision, or null when no matching lock exists. An omitted Git selector uses a matching lock's recorded branch; without one it reports `ref_kind = default` and null `ref`.
+
+The `entries` count includes each declared file or directory mapping once. `modified`, `missing`, and `unlocked` count entries whose existing files differ from their baseline, whose expected files are missing, or whose matching baseline is unavailable. Remaining entries are unmodified. Local additions and regular-file obstructions count as modifications; modifications take precedence over missing files. Empty directories do not affect comparison. An entry is locked when both its dependency revision lock and installation baseline match its declaration; otherwise it is unlocked. Malformed or unreadable state fails.
+
+The command accepts no arguments or command-specific options. It reads local content without changing project files, needs no source repository, network, VCS client, or repository cache, and ignores `--cache-dir`. It does not check upstream freshness. Automation emits metadata-only `dependency` records with operation `dependency list` and the four counts; it emits no installation records. An empty project succeeds without result records or creating a lockfile.
 
 ## Removing dependencies
 
@@ -72,7 +86,7 @@ The destination is the exact final file or directory path. It accepts `@/` proje
 An already declared destination requires `--redefine`, even for an identical mapping. Redefinition may change the owning dependency but still verifies the previous baseline and protects local edits and additions. Identical redefinitions report `unchanged`; missing selected files are restored. Files already equal to selected source content receive no writes. Empty directory selections record an empty manifest without requiring a destination directory.
 
 Add refreshes and checks the dependency's effective selector against its locked revision. A moved branch, tag, or live filesystem fingerprint fails unless `--allow-outdated` is supplied; `--redefine` grants no freshness permission. Even with `--allow-outdated`, refresh and resolution must succeed and the locked source path must remain available. Filesystem sources retain no historical snapshots, so a changed live source cannot reproduce an old fingerprint.
-Put global `--cache-dir DIRECTORY` before `add` to override the shared Git cache. Both add commands resolve its root for every backend; filesystem sources do not create cache data. Automation success emits one metadata-only `installation` record with operation `add`, status `clean`, and outcome `installed` or `unchanged`.
+Put global `--cache-dir DIRECTORY` before `add` to override the shared Git cache. Both add commands resolve its root for every backend; filesystem sources do not create cache data. Automation success emits one metadata-only `installation` record with operation `add`, status `unmodified`, and outcome `installed` or `unchanged`.
 
 ## Removing entries
 
