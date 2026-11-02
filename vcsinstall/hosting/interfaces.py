@@ -13,7 +13,12 @@ class HostingAdapter(Protocol):
         ...
 
     def acquire(
-        self, dependency: Dependency, *, revision: SourceRevision | None = None
+        self, dependency: Dependency, *, revision: SourceRevision | None = None, refresh: bool = True
     ) -> AbstractContextManager[Result[Path]]:
-        """Expose a normalized repository path and protect access until the context exits."""
+        """Expose a normalized repository path and protect access until the context exits.
+
+        Refresh version metadata when requested, independently of acquiring the
+        required immutable revision. Cached objects may satisfy a revision-only
+        request without contacting the source.
+        """
         ...

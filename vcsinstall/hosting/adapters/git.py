@@ -34,16 +34,18 @@ class GitHostingAdapter:
         return GitClient.probe_remote(repository)
 
     @contextmanager
-    def acquire(self, dependency: Dependency, *, revision: SourceRevision | None = None) -> Iterator[Result[Path]]:
+    def acquire(
+        self, dependency: Dependency, *, revision: SourceRevision | None = None, refresh: bool = True
+    ) -> Iterator[Result[Path]]:
         with RepoCache(root=self.root, dependency=dependency).lock() as cached:
             if cached.is_err():
                 yield Err(cached.unwrap_err())
             else:
-                yield self._acquire(dependency, cached.unwrap(), revision=revision)
+                yield self._acquire(dependency, cached.unwrap(), revision=revision, refresh=refresh)
 
     @unwrap_to_error
-    def _acquire(  # noqa: CCR001 — Refresh the selector and acquire any separately required locked revision.
-        self, dependency: Dependency, directory: Path, *, revision: SourceRevision | None = None
+    def _acquire(  # noqa: CCR001 — Acquire required objects and refresh version metadata only when requested.
+        self, dependency: Dependency, directory: Path, *, revision: SourceRevision | None = None, refresh: bool = True
     ) -> Result[Path]:
         path = resolve_inside_project(directory / "repository.git", resolve_project_root(directory).unwrap()).unwrap()
         client = GitClient(path=path, repository=dependency.repository)
@@ -62,14 +64,15 @@ class GitHostingAdapter:
                     ]
                 )
         selector = dependency.selector
-        if selector is None or selector.kind != SelectorKind.revision:
+        if refresh and selector is not None and selector.kind == SelectorKind.revision:
+            if client.resolve_object_id(selector.value).unwrap() is None:
+                if client.is_full_object_id(selector.value).unwrap():
+                    client.run(["fetch", "origin", selector.value.lower()]).unwrap()
+                else:
+                    client.fetch_references().unwrap()
+        elif refresh:
             client.fetch_references().unwrap()
             client.refresh_remote_head().unwrap()
-        elif client.resolve_object_id(selector.value).unwrap() is None:
-            if client.is_full_object_id(selector.value).unwrap():
-                client.run(["fetch", "origin", selector.value.lower()]).unwrap()
-            else:
-                client.fetch_references().unwrap()
         if revision is not None and client.resolve_object_id(revision).unwrap() is None:
             client.run(["fetch", "origin", revision]).unwrap()
         return Ok(path)

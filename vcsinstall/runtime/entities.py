@@ -1,8 +1,10 @@
 from enum import StrEnum
 
+import pydantic
 from llm_tool_cli.core.entities import BaseEntity
+from llm_tool_cli.paths import ProjectPathId
 
-from vcsinstall.domain import DependencyName, SourceRevision
+from vcsinstall.domain import Dependency, DependencyName, SourceRevision
 from vcsinstall.filesystem import ContentTree
 from vcsinstall.sources import ResolvedSource
 from vcsinstall.workspace import DependencyLock, Entry, InstallationBaseline
@@ -31,8 +33,20 @@ class DependencyPlan(BaseEntity):
     """Prepared lock and entry changes, independently of command-specific configuration edits."""
 
     name: DependencyName
-    resolved: ResolvedSource
+    definition: Dependency
+    resolved: ResolvedSource | None
     lock: DependencyLock
     entries: list[EntryPlan]
     previous_revision: SourceRevision | None
+    lock_unchanged: bool
     unchanged: bool
+
+
+class DependencyRequest(BaseEntity):
+    """Prepared dependency intent with optional observations for reusing an installation."""
+
+    name: DependencyName
+    definition: Dependency
+    lock: DependencyLock | None = None
+    observed: dict[ProjectPathId, ContentTree] = pydantic.Field(default_factory=dict)
+    retained: list[EntryPlan] = pydantic.Field(default_factory=list)

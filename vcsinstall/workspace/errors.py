@@ -18,6 +18,21 @@ class EnvironmentError(core_errors.EnvironmentError):
     """Root for expected workspace failures."""
 
 
+class LockfileRequired(EnvironmentError):
+    code: str = "lockfile_required"
+    message: str = "{error.path}: locked installation requires an existing lockfile."
+    ways_to_fix: list[str] = ["Run install to establish the complete project lock before using install --locked."]
+    path: Path
+
+
+class OrphanedDependencyLock(EnvironmentError):
+    code: str = "orphaned_dependency_lock"
+    message: str = "{error.path}: dependency {error.dependency!r} is locked but no longer declared."
+    ways_to_fix: list[str] = ["Run install without --locked to reconcile the lockfile with configuration."]
+    path: Path
+    dependency: DependencyName
+
+
 class DependencyLockRequired(EnvironmentError):
     code: str = "dependency_lock_required"
     message: str = "{error.path}: dependency {error.dependency!r} has no matching revision lock."

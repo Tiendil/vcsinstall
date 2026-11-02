@@ -62,7 +62,7 @@ class ProbingHosting:
         return self.result
 
     def acquire(
-        self, dependency: Dependency, *, revision: SourceRevision | None = None
+        self, dependency: Dependency, *, revision: SourceRevision | None = None, refresh: bool = True
     ) -> AbstractContextManager[Result[Path]]:
         raise AssertionError("Input preparation must not acquire a repository.")
 

@@ -84,6 +84,13 @@ class DependencyUpdateFailed(EnvironmentError):
     dependency: DependencyName
 
 
+class DependencyInstallationFailed(EnvironmentError):
+    code: str = "dependency_installation_failed"
+    message: str = "Cannot install dependency {error.dependency!r}."
+    ways_to_fix: list[str] = ["Resolve the accompanying diagnostics and retry install."]
+    dependency: DependencyName
+
+
 class SourcePathAbsent(EnvironmentError):
     code: str = "source_path_absent"
     message: str = "Dependency {error.dependency!r} has no source path {error.source_path} at {error.revision}."

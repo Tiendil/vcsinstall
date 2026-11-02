@@ -8,6 +8,7 @@ from vcsinstall.runtime.commands import (
     entry_add,
     entry_remove,
 )
+from vcsinstall.runtime.installations import install
 from vcsinstall.runtime.updates import dependency_update
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "dependency_update",
     "entry_add",
     "entry_remove",
+    "install",
     "errors",
 ]
 from vcsinstall.runtime import errors

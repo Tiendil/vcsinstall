@@ -34,7 +34,9 @@ class ScopedHosting:
         raise AssertionError("Updates must not probe declared repositories.")
 
     @contextmanager
-    def acquire(self, dependency: Dependency, *, revision: SourceRevision | None = None) -> Iterator[Result[Path]]:
+    def acquire(
+        self, dependency: Dependency, *, revision: SourceRevision | None = None, refresh: bool = True
+    ) -> Iterator[Result[Path]]:
         self.requests.append(dependency)
         self.active += 1
         try:
@@ -137,7 +139,9 @@ class TestDependencyUpdate:
         ).with_cause(cause)
 
         @contextmanager
-        def acquire(dependency: Dependency, *, revision: SourceRevision | None = None) -> Iterator[Result[Path]]:
+        def acquire(
+            dependency: Dependency, *, revision: SourceRevision | None = None, refresh: bool = True
+        ) -> Iterator[Result[Path]]:
             yield Err([problem])
 
         if stage == "acquisition":

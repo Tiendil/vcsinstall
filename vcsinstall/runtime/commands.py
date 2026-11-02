@@ -34,7 +34,7 @@ from vcsinstall.runtime.cells import (
     dependency_add_cells,
     entry_add_cell,
 )
-from vcsinstall.runtime.entities import DependencyPlan, EntryPlan, LocalStatus
+from vcsinstall.runtime.entities import DependencyPlan, DependencyRequest, EntryPlan, LocalStatus
 from vcsinstall.runtime.validation import (
     local_content_status,
     validate_entry_redefinition,
@@ -114,12 +114,13 @@ def _plan_entry(
     source: ContentTree,
     previous: InstallationBaseline | None,
     filesystem: FSClient,
+    observed: ContentTree | None = None,
 ) -> Result[EntryPlan]:
     destination = entry.destination
     previous_hashes = previous.file_hashes() if previous else {}
     source_hashes = source.file_hashes
 
-    observed = filesystem.inspect_tree(destination).unwrap()
+    observed = observed if observed is not None else filesystem.inspect_tree(destination).unwrap()
     validate_no_local_content_conflicts(
         previous_hashes,
         source_hashes,
@@ -128,43 +129,96 @@ def _plan_entry(
     ).unwrap()
     _validate_destination_parents(destination, filesystem=filesystem).unwrap()
 
+    baseline = _baseline(entry.dependency, entry, destination, source)
+    if previous is not None and (
+        previous.dependency == entry.dependency
+        and previous.source_path == entry.source_path
+        and not previous_hashes
+        and not source_hashes
+    ):
+        baseline = previous
+
     return Ok(
         EntryPlan(
             entry=entry,
             source=source,
             observed=observed,
             previous=previous,
-            baseline=_baseline(entry.dependency, entry, destination, source),
+            baseline=baseline,
         )
     )
 
 
 @unwrap_to_error
-def _plan_entries(
+def _plan_entries(  # noqa: CCR001 — Share retained-entry reuse, source availability, and baseline preparation.
     workspace: Workspace,
-    name: DependencyName,
+    request: DependencyRequest,
     *,
     content: dict[SourcePath, ContentTree],
-    filesystem: FSClient,
-    entries: dict[ProjectPathId, Entry],
+    resolved: ResolvedSource | None,
+    source: SourceAdapter,
+    allow_absent: bool,
 ) -> Result[list[EntryPlan]]:
+    plans = {plan.entry.destination: plan for plan in request.retained}
+    filesystem = FSClient(root=workspace.project_root)
+    for entry in workspace.config.entries_for_dependency(request.name):
+        if entry.destination in plans:
+            continue
+        assert resolved is not None
+        tree = content[entry.source_path]
+        previous = workspace.lockfile.baseline_for_destination(entry.destination) if workspace.lockfile else None
+        if (
+            not allow_absent
+            and tree.kind == ContentKind.absent
+            and (
+                previous is None
+                or previous.dependency != entry.dependency
+                or previous.source_path != entry.source_path
+            )
+        ):
+            return Err(
+                [
+                    errors.SourcePathAbsent(
+                        dependency=entry.dependency, source_path=entry.source_path, revision=resolved.revision
+                    )
+                ]
+            )
+        _validate_source_integrity(workspace, entry, tree, resolved=resolved, source=source).unwrap()
+        plans[entry.destination] = _plan_entry(
+            entry,
+            source=tree,
+            previous=previous,
+            filesystem=filesystem,
+            observed=request.observed.get(entry.destination),
+        ).unwrap()
+    return Ok([plan for destination, plan in sorted(plans.items())])
 
-    recorded = (
-        {baseline.destination: baseline for baseline in workspace.lockfile.entries_for_dependency(name)}
-        if workspace.lockfile
-        else {}
-    )
-    return Ok(
-        [
-            _plan_entry(
-                entry,
-                source=content[entry.source_path],
-                previous=recorded[destination],
-                filesystem=filesystem,
-            ).unwrap()
-            for destination, entry in sorted(entries.items())
-        ]
-    )
+
+@unwrap_to_error
+def _validate_source_integrity(
+    workspace: Workspace,
+    entry: Entry,
+    tree: ContentTree,
+    *,
+    resolved: ResolvedSource,
+    source: SourceAdapter,
+) -> Result[None]:
+    """Require retrieved content to agree with a baseline for the same immutable source state.
+
+    Example: a guide recorded at revision A cannot have different bytes when
+    retrieved again from A. A different source path or revision is a new state.
+    """
+    previous = workspace.lockfile.baseline_for_destination(entry.destination) if workspace.lockfile else None
+    if previous is None or previous.source_path != entry.source_path:
+        return Ok(None)
+    assert workspace.lockfile is not None
+    previous_lock = workspace.lockfile.dependencies[previous.dependency]
+    if previous_lock.vcs != resolved.dependency.vcs or previous_lock.revision != resolved.revision:
+        return Ok(None)
+    repository = source.normalize_repository(previous_lock.repository, cwd=workspace.project_root).unwrap()
+    if repository == resolved.dependency.repository and previous.file_hashes() != tree.file_hashes:
+        return Err([errors.SourceIntegrityMismatch(destination=entry.destination)])
+    return Ok(None)
 
 
 @unwrap_to_error
@@ -200,68 +254,77 @@ def _apply_entry_changes(
     return Ok(None)
 
 
+def _apply_dependency_plan(plan: DependencyPlan, *, filesystem: FSClient, source: SourceAdapter) -> Result[None]:
+    """Apply prepared entry changes while retaining the plan's immutable source binding."""
+    if plan.resolved is None:
+        return Ok(None)
+    return _apply_entry_changes(
+        plan.entries, filesystem=filesystem, copy_file=partial(source.copy_file, plan.resolved)
+    )
+
+
 @unwrap_to_error
 def _prepare_dependency_plan(  # noqa: CCR001 — Keep source inspection and baseline checks in one preparation scope.
     workspace: Workspace,
-    name: DependencyName,
-    resolved: ResolvedSource,
+    request: DependencyRequest,
+    resolved: ResolvedSource | None,
     *,
     source: SourceAdapter,
+    allow_absent: bool = True,
 ) -> Result[DependencyPlan]:
     """Prepare one shared lock and its entry changes without writing files or project records."""
-    source.validate_revision_lock(resolved.dependency, resolved.revision).unwrap()
-    entries = {entry.destination: entry for entry in workspace.config.entries_for_dependency(name)}
-    paths = tuple(entry.source_path for entry in entries.values())
-    content = source.inspect(resolved, paths).unwrap() if paths else {}
+    entries = workspace.config.entries_for_dependency(request.name)
+    retained = {plan.entry.destination for plan in request.retained}
+    paths = tuple(dict.fromkeys(entry.source_path for entry in entries if entry.destination not in retained))
+    assert request.lock is not None or resolved is not None
+    definition = resolved.dependency if resolved is not None else request.definition
+    revision = resolved.revision if resolved is not None else request.lock.revision  # type: ignore[union-attr]
+    if resolved is not None:
+        source.validate_revision_lock(definition, revision).unwrap()
+    content = source.inspect(resolved, paths).unwrap() if paths and resolved is not None else {}
     plans = _plan_entries(
         workspace,
-        name,
+        request,
         content=content,
-        filesystem=FSClient(root=workspace.project_root),
-        entries=entries,
+        resolved=resolved,
+        source=source,
+        allow_absent=allow_absent,
     ).unwrap()
-    # Empty structural directories and expected absence have the same zero-file
-    # content; their existence alone does not require changing a baseline.
-    plans = [
-        (
-            plan.replace(baseline=plan.previous)
-            if (
-                plan.previous is not None
-                and plan.previous.source_path == plan.entry.source_path
-                and not plan.previous.file_hashes()
-                and not plan.source.file_hashes
-            )
-            else plan
-        )
-        for plan in plans
-    ]
-    previous_lock = workspace.lockfile.dependencies.get(name) if workspace.lockfile else None
-    lock = DependencyLock(**resolved.dependency.model_dump(), revision=resolved.revision)
+    previous_lock = workspace.lockfile.dependencies.get(request.name) if workspace.lockfile else None
+    lock = DependencyLock(**definition.model_dump(), revision=revision)
     lock_unchanged = False
     if previous_lock is not None and previous_lock.vcs == lock.vcs:
         repository = source.normalize_repository(previous_lock.repository, cwd=workspace.project_root).unwrap()
         lock_unchanged = repository is not None and previous_lock.replace(repository=repository) == lock
         if lock_unchanged:
             lock = previous_lock
-        if repository == resolved.dependency.repository and previous_lock.revision == resolved.revision:
-            for plan in plans:
-                previous = plan.previous
-                if (
-                    previous is not None
-                    and previous.source_path == plan.entry.source_path
-                    and previous.file_hashes() != plan.source.file_hashes
-                ):
-                    return Err([errors.SourceIntegrityMismatch(destination=plan.entry.destination)])
+    recorded = workspace.lockfile.entries_for_dependency(request.name) if workspace.lockfile else ()
     return Ok(
         DependencyPlan(
-            name=name,
+            name=request.name,
+            definition=definition,
             resolved=resolved,
             lock=lock,
             entries=plans,
             previous_revision=previous_lock.revision if previous_lock else None,
-            unchanged=lock_unchanged and all(not plan.changed for plan in plans),
+            lock_unchanged=lock_unchanged,
+            unchanged=(
+                lock_unchanged
+                and {baseline.destination for baseline in recorded} == {entry.destination for entry in entries}
+                and all(not plan.changed for plan in plans)
+            ),
         )
     )
+
+
+def _lockfile_with_plans(workspace: Workspace, plans: list[DependencyPlan]) -> Lockfile:
+    """Record the prepared shared locks and baselines while preserving unrelated state and record order."""
+    lockfile = workspace.lockfile or Lockfile(version=1)
+    for plan in plans:
+        lockfile = lockfile.with_dependency(plan.name, plan.lock).with_baselines(
+            entry.baseline for entry in plan.entries
+        )
+    return lockfile
 
 
 @unwrap_to_error
@@ -285,16 +348,14 @@ def dependency_add(  # noqa: CFQ002 — Explicit source intent and independently
 
     with hosting.acquire(dependency) as acquired:
         resolved = source.resolve(dependency, acquired.unwrap()).unwrap()
-        plan = _prepare_dependency_plan(workspace, name, resolved, source=source).unwrap()
+        request = DependencyRequest(name=name, definition=dependency)
+        plan = _prepare_dependency_plan(workspace, request, resolved, source=source).unwrap()
         config = workspace.config.with_dependency(name, resolved.dependency)
-        lockfile = (workspace.lockfile or Lockfile(version=1)).with_dependency(name, plan.lock)
-        lockfile = lockfile.with_baselines(entry.baseline for entry in plan.entries)
+        lockfile = _lockfile_with_plans(workspace, [plan])
         serialized = serialize_workspace_changes(workspace, config, lockfile)
 
-        _apply_entry_changes(
-            plan.entries,
-            filesystem=FSClient(root=workspace.project_root, readonly=False),
-            copy_file=partial(source.copy_file, resolved),
+        _apply_dependency_plan(
+            plan, filesystem=FSClient(root=workspace.project_root, readonly=False), source=source
         ).unwrap()
         write_workspace_files(workspace, serialized).unwrap()
         output.get().emit(
@@ -327,12 +388,7 @@ def _install_added_entry(
                 )
             ]
         )
-    if previous is not None and (
-        previous.dependency == entry.dependency
-        and previous.source_path == entry.source_path
-        and previous.file_hashes() != tree.file_hashes
-    ):
-        return Err([errors.SourceIntegrityMismatch(destination=entry.destination)])
+    _validate_source_integrity(workspace, entry, tree, resolved=resolved, source=source).unwrap()
     filesystem = FSClient(root=workspace.project_root, readonly=False)
     plan = _plan_entry(entry, source=tree, previous=previous, filesystem=filesystem).unwrap()
     config = workspace.config.with_entry(entry)
@@ -365,6 +421,27 @@ def _prepare_dependency_lock(
         lockfile=workspace.lockfile.with_dependency(name, recorded.replace(repository=locked_repository)),
     )
     return prepared.require_matching_dependency_lock(name, source=source)
+
+
+@unwrap_to_error
+def _prepare_dependency_request(
+    workspace: Workspace, name: DependencyName, *, source: SourceAdapter
+) -> Result[DependencyRequest]:
+    """Prepare normalized source intent, retaining a matching lock's effective selector when available."""
+    matching = _prepare_dependency_lock(workspace, name, source=source)
+    dependency_lock = None
+    if not matching.is_err(workspace_errors.DependencyLockRequired):
+        definition = Dependency.model_validate(matching.unwrap().model_dump(exclude={"revision"}))
+        assert workspace.lockfile is not None
+        dependency_lock = workspace.lockfile.dependencies[name]
+    else:
+        declared = workspace.config.dependencies[name]
+        repository = source.normalize_repository(declared.repository, cwd=workspace.project_root).unwrap()
+        if repository is None:
+            return Err([InvalidArguments(reason=f"Unsupported repository locator for dependency {name!r}.")])
+        definition = declared.replace(repository=repository)
+    source.validate_input(definition).unwrap()
+    return Ok(DependencyRequest(name=name, definition=definition, lock=dependency_lock))
 
 
 @unwrap_to_error

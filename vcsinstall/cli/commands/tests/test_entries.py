@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 import tomli_w
+from llm_tool_cli.config import errors as config_errors
 from llm_tool_cli.config.project import project_config
 from llm_tool_cli.core import settings
 from llm_tool_cli.core.result import Err, Result
@@ -16,10 +17,17 @@ from typer.testing import CliRunner
 
 from vcsinstall.cache import active_cache_root
 from vcsinstall.cli.application import app
-from vcsinstall.cli.commands.tests.helpers import declare_entry, invoke_add, invoke_entry_add, invoke_entry_remove
+from vcsinstall.cli.commands.tests.helpers import (
+    declare_entry,
+    invoke_add,
+    invoke_entry_add,
+    invoke_entry_remove,
+    invoke_install,
+)
 from vcsinstall.filesystem import errors as filesystem_errors
 from vcsinstall.filesystem import hashes
 from vcsinstall.runtime import errors as runtime_errors
+from vcsinstall.sources import errors as source_errors
 from vcsinstall.vcs_clients import GitClient
 from vcsinstall.vcs_clients.tests.helpers import create_repository
 from vcsinstall.workspace import active_workspace
@@ -1052,3 +1060,571 @@ class TestAddEntry:
         assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
         assert not active_workspace.is_set()
         assert not active_cache_root.is_set()
+
+
+@pytest.mark.usefixtures("isolated_settings")
+class TestInstallEntries:
+    @pytest.fixture(autouse=True)
+    def initialize(self, isolated_settings: None) -> None:
+        settings.initialize(
+            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
+        )
+
+    @pytest.fixture
+    def client(self, tmp_path: Path) -> GitClient:
+        client = create_repository(tmp_path / "source")
+        (client.path / "docs/nested").mkdir(parents=True)
+        (client.path / "docs/a").write_bytes(b"first")
+        (client.path / "docs/nested/b").write_bytes(b"second")
+        client.add(".").unwrap()
+        client.commit("Add directory content").unwrap()
+        return client
+
+    @pytest.fixture
+    def config(self, tmp_path: Path, client: GitClient) -> Path:
+        project = tmp_path / "project"
+        project.mkdir()
+        config = project / "custom.toml"
+        definition = {"vcs": "git", "repository": str(client.path), "selector": {"kind": "branch", "value": "trunk"}}
+        config.write_text(
+            tomli_w.dumps(
+                {
+                    "version": 1,
+                    "dependencies": {"z-empty": definition, "ci": definition},
+                    "entries": [
+                        {"dependency": "ci", "source_path": "@/guide.txt", "destination": "@/z-guide.txt"},
+                        {"dependency": "ci", "source_path": "@/docs", "destination": "@/a-docs"},
+                    ],
+                }
+            )
+        )
+        return config
+
+    def test_installs_complete_project_once_and_reports_ordered_records(
+        self, config: Path, client: GitClient, tmp_path: Path
+    ) -> None:
+        original = config.read_bytes()
+        revision = client.run(["rev-parse", "HEAD"]).unwrap().decode().strip()
+
+        code, records, output = invoke_install(config, tmp_path / "cache")
+
+        assert code == 0, output
+        assert config.read_bytes() == original
+        assert (config.parent / "z-guide.txt").read_bytes() == b"original\n"
+        assert (config.parent / "a-docs/a").read_bytes() == b"first"
+        assert (config.parent / "a-docs/nested/b").read_bytes() == b"second"
+        assert [record["type"] for record in records] == ["dependency", "dependency", "installation", "installation"]
+        assert [record["dependency"] for record in records] == ["ci", "z-empty", "ci", "ci"]
+        assert [record["destination"] for record in records[2:]] == ["@/a-docs", "@/z-guide.txt"]
+        for record in records:
+            assert record["operation"] == "install"
+            assert record["outcome"] == "installed"
+            assert record["revision"] == revision
+            assert record["ref_kind"] == "branch"
+            assert record["ref"] == "trunk"
+            assert record["repository"] == str(client.path)
+            assert record["content"] is None
+            assert "previous_revision" not in record
+        assert all(record["status"] == "unmodified" for record in records[2:])
+        locked = tomllib.loads(config.with_name("vcsinstall.lock").read_text())
+        assert set(locked["dependencies"]) == {"ci", "z-empty"}
+        directory = next(entry for entry in locked["entries"] if entry["kind"] == "directory")
+        assert [file["path"] for file in directory["files"]] == ["@/a", "@/nested/b"]
+        assert not active_workspace.is_set()
+        assert not active_cache_root.is_set()
+        assert not project_config.is_set()
+
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_satisfied_installation_needs_no_source_client_or_cache_access(
+        self, config: Path, tmp_path: Path, mocker: MockerFixture, locked: bool
+    ) -> None:
+        assert invoke_install(config, tmp_path / "cache")[0] == 0
+        lockfile = config.with_name("vcsinstall.lock")
+        lockfile.write_bytes(b"# preserve lock formatting\n" + lockfile.read_bytes())
+        before = config.read_bytes(), lockfile.read_bytes()
+        original = (config.parent / "z-guide.txt").stat()
+        mocker.patch(
+            "vcsinstall.cli.commands.entries.get_hosting", side_effect=AssertionError("unexpected acquisition")
+        )
+        mocker.patch.object(GitClient, "run", side_effect=AssertionError("unexpected Git access"))
+
+        code, records, output = invoke_install(config, tmp_path / "unused-cache", *(("--locked",) if locked else ()))
+
+        assert code == 0, output
+        assert all(record["outcome"] == "unchanged" for record in records)
+        assert (config.read_bytes(), lockfile.read_bytes()) == before
+        current = (config.parent / "z-guide.txt").stat()
+        assert (current.st_ino, current.st_mtime_ns) == (original.st_ino, original.st_mtime_ns)
+        assert not (tmp_path / "unused-cache").exists()
+
+    def test_new_entries_and_restoration_use_existing_revision_without_refresh(
+        self, config: Path, client: GitClient, tmp_path: Path
+    ) -> None:
+        cache = tmp_path / "cache"
+        assert invoke_install(config, cache)[0] == 0
+        lockfile = config.with_name("vcsinstall.lock")
+        revision = tomllib.loads(lockfile.read_text())["dependencies"]["ci"]["revision"]
+        (client.path / "guide.txt").write_bytes(b"advanced")
+        client.add(".").unwrap()
+        client.commit("Advance source branch").unwrap()
+        declaration = tomllib.loads(config.read_text())
+        declaration["entries"].append(
+            {"dependency": "ci", "source_path": "@/guide.txt", "destination": "@/new-guide.txt"}
+        )
+        config.write_text(tomli_w.dumps(declaration))
+        (config.parent / "z-guide.txt").unlink()
+        client.path.rename(tmp_path / "offline-source")
+
+        code, records, output = invoke_install(config, cache)
+
+        assert code == 0, output
+        assert all(record["revision"] == revision for record in records)
+        assert (config.parent / "new-guide.txt").read_bytes() == b"original\n"
+        assert (config.parent / "z-guide.txt").read_bytes() == b"original\n"
+        assert next(record for record in records if record.get("destination") == "@/a-docs")["outcome"] == "unchanged"
+        assert records[1]["outcome"] == "unchanged"
+
+    def test_locked_restoration_rebuilds_cache_without_changing_lock_bytes(
+        self, config: Path, client: GitClient, tmp_path: Path
+    ) -> None:
+        cache = tmp_path / "cache"
+        assert invoke_install(config, cache)[0] == 0
+        lockfile = config.with_name("vcsinstall.lock")
+        lockfile.write_bytes(b"# byte preservation\n" + lockfile.read_bytes())
+        before = lockfile.read_bytes()
+        (config.parent / "z-guide.txt").unlink()
+        (config.parent / "a-docs/nested/b").unlink()
+        unchanged = (config.parent / "a-docs/a").stat()
+        cache.rename(tmp_path / "old-cache")
+        (client.path / "guide.txt").write_bytes(b"advanced")
+        client.add(".").unwrap()
+        client.commit("Advance source").unwrap()
+
+        code, records, output = invoke_install(config, cache, "--locked")
+
+        assert code == 0, output
+        assert lockfile.read_bytes() == before
+        assert (config.parent / "z-guide.txt").read_bytes() == b"original\n"
+        assert (config.parent / "a-docs/nested/b").read_bytes() == b"second"
+        assert (config.parent / "a-docs/a").stat().st_mtime_ns != unchanged.st_mtime_ns
+        assert records[0]["outcome"] == "installed"
+        assert records[1]["outcome"] == "unchanged"
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            "lockfile",
+            "dependency",
+            "baseline",
+            "source_path",
+            "destination",
+            "repository",
+            "selector",
+            "obsolete_dependency",
+            "obsolete_entry",
+            "reassigned",
+        ],
+    )
+    def test_locked_requires_a_complete_match_before_source_access(  # noqa: CCR001 — Independent stale-state cases.
+        self, config: Path, tmp_path: Path, mocker: MockerFixture, change: str
+    ) -> None:
+        assert invoke_install(config, tmp_path / "cache")[0] == 0
+        lockfile = config.with_name("vcsinstall.lock")
+        declaration = tomllib.loads(config.read_text())
+        recorded = tomllib.loads(lockfile.read_text())
+        if change == "lockfile":
+            lockfile.unlink()
+        elif change == "dependency":
+            declaration["dependencies"]["new"] = declaration["dependencies"]["ci"]
+        elif change == "baseline":
+            recorded["entries"].pop()
+        elif change in ("source_path", "destination"):
+            declaration["entries"][0][change] = "@/different"
+        elif change == "repository":
+            declaration["dependencies"]["ci"]["repository"] = "../other"
+        elif change == "selector":
+            declaration["dependencies"]["ci"]["selector"]["value"] = "other"
+        elif change == "obsolete_dependency":
+            declaration["dependencies"].pop("z-empty")
+        elif change == "obsolete_entry":
+            declaration["entries"].pop()
+        elif change == "reassigned":
+            declaration["entries"][0]["dependency"] = "z-empty"
+        config.write_text(tomli_w.dumps(declaration))
+        if change != "lockfile":
+            lockfile.write_text(tomli_w.dumps(recorded))
+        before = config.read_bytes(), lockfile.read_bytes() if lockfile.exists() else None
+        mocker.patch(
+            "vcsinstall.cli.commands.entries.get_hosting", side_effect=AssertionError("unexpected acquisition")
+        )
+
+        code, records, output = invoke_install(config, tmp_path / "unused-cache", "--locked")
+
+        assert code == 3, output
+        assert all(record["type"] == "error" for record in records)
+        assert str(lockfile) in output
+        assert (config.read_bytes(), lockfile.read_bytes() if lockfile.exists() else None) == before
+        assert (config.parent / "z-guide.txt").read_bytes() == b"original\n"
+        assert (config.parent / "a-docs/nested/b").read_bytes() == b"second"
+        assert not (tmp_path / "unused-cache").exists()
+
+    def test_reconciles_obsolete_records_and_new_dependencies_without_deleting_removed_content(
+        self, config: Path, tmp_path: Path
+    ) -> None:
+        assert invoke_install(config, tmp_path / "cache")[0] == 0
+        declaration = tomllib.loads(config.read_text())
+        declaration["dependencies"].pop("z-empty")
+        declaration["entries"] = declaration["entries"][:1]
+        directory = tmp_path / "files"
+        directory.mkdir()
+        (directory / "new").write_bytes(b"filesystem content")
+        declaration["dependencies"]["local"] = {"vcs": "filesystem", "repository": str(directory)}
+        declaration["entries"].append({"dependency": "local", "source_path": "@/new", "destination": "@/new"})
+        config.write_text("# retain configuration exactly\n" + tomli_w.dumps(declaration))
+        original = config.read_bytes()
+        (config.parent / "a-docs/local-added").write_bytes(b"unmanaged after removal")
+        (config.parent / "a-docs/a").write_bytes(b"local changes")
+
+        code, records, output = invoke_install(config, tmp_path / "cache")
+
+        assert code == 0, output
+        assert config.read_bytes() == original
+        recorded = tomllib.loads(config.with_name("vcsinstall.lock").read_text())
+        assert set(recorded["dependencies"]) == {"ci", "local"}
+        assert {entry["destination"] for entry in recorded["entries"]} == {"@/z-guide.txt", "@/new"}
+        assert (config.parent / "a-docs/a").read_bytes() == b"local changes"
+        assert (config.parent / "a-docs/local-added").read_bytes() == b"unmanaged after removal"
+        assert (config.parent / "new").read_bytes() == b"filesystem content"
+        assert records[0]["outcome"] == "installed"
+        assert (
+            next(record for record in records if record.get("destination") == "@/z-guide.txt")["outcome"]
+            == "unchanged"
+        )
+
+    @pytest.mark.parametrize("local", [b"original\n", b"new\n", b"conflict\n"])
+    def test_changed_binding_protects_previous_baseline_or_accepts_complete_source_content(
+        self, config: Path, client: GitClient, tmp_path: Path, local: bytes
+    ) -> None:
+        assert invoke_install(config, tmp_path / "cache")[0] == 0
+        client.run(["checkout", "-b", "replacement"]).unwrap()
+        (client.path / "guide.txt").write_bytes(b"new\n")
+        (client.path / "docs/new").write_bytes(b"new child")
+        client.add(".").unwrap()
+        client.commit("Changed binding content").unwrap()
+        declaration = tomllib.loads(config.read_text())
+        declaration["dependencies"]["ci"]["selector"]["value"] = "replacement"
+        config.write_text(tomli_w.dumps(declaration))
+        target = config.parent / "z-guide.txt"
+        target.write_bytes(local)
+        before = target.stat(), config.with_name("vcsinstall.lock").read_bytes()
+
+        code, records, output = invoke_install(config, tmp_path / "cache")
+
+        if local == b"conflict\n":
+            assert code == 3, output
+            assert any(
+                record["code"] == runtime_errors.LocalConflict.model_fields["code"].default for record in records
+            )
+            assert target.read_bytes() == local
+            assert config.with_name("vcsinstall.lock").read_bytes() == before[1]
+            assert not (config.parent / "a-docs/new").exists()
+        else:
+            assert code == 0, output
+            assert target.read_bytes() == b"new\n"
+            assert (config.parent / "a-docs/new").read_bytes() == b"new child"
+            if local == b"new\n":
+                assert target.stat().st_mtime_ns == before[0].st_mtime_ns
+
+    @pytest.mark.parametrize("change", ["source_path", "dependency"])
+    def test_changed_entry_mapping_uses_prior_destination_baseline(
+        self, config: Path, tmp_path: Path, change: str
+    ) -> None:
+        assert invoke_install(config, tmp_path / "cache")[0] == 0
+        declaration = tomllib.loads(config.read_text())
+        declaration["entries"][0][change] = "@/docs/a" if change == "source_path" else "z-empty"
+        config.write_text(tomli_w.dumps(declaration))
+
+        code, records, output = invoke_install(config, tmp_path / "cache")
+
+        assert code == 0, output
+        assert (config.parent / "z-guide.txt").read_bytes() == (b"first" if change == "source_path" else b"original\n")
+        recorded = tomllib.loads(config.with_name("vcsinstall.lock").read_text())
+        baseline = next(entry for entry in recorded["entries"] if entry["destination"] == "@/z-guide.txt")
+        assert baseline[change] == declaration["entries"][0][change]
+        assert records[-1]["outcome"] == "installed"
+
+    @pytest.mark.parametrize("local_change", ["edited", "addition", "obstruction"])
+    def test_restoration_never_hides_existing_local_conflicts(
+        self, config: Path, tmp_path: Path, local_change: str
+    ) -> None:
+        assert invoke_install(config, tmp_path / "cache")[0] == 0
+        before = config.with_name("vcsinstall.lock").read_bytes()
+        (config.parent / "z-guide.txt").unlink()
+        if local_change == "edited":
+            (config.parent / "a-docs/a").write_bytes(b"local edit")
+        elif local_change == "addition":
+            (config.parent / "a-docs/.ignored").write_bytes(b"local addition")
+        else:
+            (config.parent / "a-docs/nested/b").unlink()
+            (config.parent / "a-docs/nested").rmdir()
+            (config.parent / "a-docs/nested").write_bytes(b"obstruction")
+
+        code, records, output = invoke_install(config, tmp_path / "cache", "--locked")
+
+        assert code == 3, output
+        assert any(record["code"] == runtime_errors.LocalConflict.model_fields["code"].default for record in records)
+        assert not (config.parent / "z-guide.txt").exists()
+        assert config.with_name("vcsinstall.lock").read_bytes() == before
+
+    def test_source_integrity_failure_preserves_expected_hash_and_all_installed_content(
+        self, config: Path, tmp_path: Path
+    ) -> None:
+        assert invoke_install(config, tmp_path / "cache")[0] == 0
+        lockfile = config.with_name("vcsinstall.lock")
+        recorded = tomllib.loads(lockfile.read_text())
+        baseline = next(entry for entry in recorded["entries"] if entry["kind"] == "file")
+        baseline["hash"] = hashes.hash_file(b"untrusted source bytes")
+        lockfile.write_text(tomli_w.dumps(recorded))
+        before = lockfile.read_bytes()
+        (config.parent / "z-guide.txt").unlink()
+        (config.parent / "a-docs/nested/b").unlink()
+
+        code, records, output = invoke_install(config, tmp_path / "cache", "--locked")
+
+        assert code == 3, output
+        assert any(
+            record["code"] == runtime_errors.SourceIntegrityMismatch.model_fields["code"].default for record in records
+        )
+        assert lockfile.read_bytes() == before
+        assert not (config.parent / "z-guide.txt").exists()
+        assert not (config.parent / "a-docs/nested/b").exists()
+
+    def test_prepares_every_dependency_before_writing_files_or_lockfile(self, config: Path, tmp_path: Path) -> None:
+        declaration = tomllib.loads(config.read_text())
+        declaration["dependencies"]["z-empty"] = {"vcs": "filesystem", "repository": str(tmp_path / "unavailable")}
+        config.write_text(tomli_w.dumps(declaration))
+        original = config.read_bytes()
+
+        code, records, output = invoke_install(config, tmp_path / "cache")
+
+        assert code == 3, output
+        assert records[0]["dependency"] == "z-empty"
+        assert config.read_bytes() == original
+        assert not config.with_name("vcsinstall.lock").exists()
+        assert list(config.parent.iterdir()) == [config]
+
+    def test_missing_initial_source_path_is_not_recorded_as_absence(self, config: Path, tmp_path: Path) -> None:
+        declaration = tomllib.loads(config.read_text())
+        declaration["entries"][0]["source_path"] = "@/unavailable"
+        config.write_text(tomli_w.dumps(declaration))
+
+        code, records, output = invoke_install(config, tmp_path / "cache")
+
+        assert code == 3, output
+        assert any(
+            record["code"] == runtime_errors.SourcePathAbsent.model_fields["code"].default for record in records
+        )
+        assert not config.with_name("vcsinstall.lock").exists()
+        assert list(config.parent.iterdir()) == [config]
+
+    @pytest.mark.parametrize("arguments", [["ci"], ["@/entry"], ["--vcs", "git"], ["--branch", "trunk"], ["--force"]])
+    def test_rejects_arguments_and_source_selection_options_before_project_loading(
+        self, tmp_path: Path, arguments: list[str]
+    ) -> None:
+        result = CliRunner().invoke(app, ["--config", str(tmp_path / "missing"), "install", *arguments])
+
+        assert result.exit_code == 2, result.output
+        assert not tuple(tmp_path.iterdir())
+
+    @pytest.mark.parametrize("protocol", ["human", "llm", "automation"])
+    def test_protocol_delivery_and_context_restoration(self, config: Path, tmp_path: Path, protocol: str) -> None:
+        result = CliRunner().invoke(
+            app, ["-p", protocol, "--config", str(config), "--cache-dir", str(tmp_path / "cache"), "install"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert not result.stderr
+        assert "install" in result.stdout
+        assert "\x1b" not in result.stdout
+        if protocol == "llm":
+            assert "--VCSINSTALL-CELL " in result.stdout
+        assert not active_workspace.is_set()
+        assert not active_cache_root.is_set()
+        assert not project_config.is_set()
+
+    def test_discovers_configuration_and_resolves_cache_relative_to_invocation(
+        self, config: Path, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        declaration = tomllib.loads(config.read_text())
+        for definition in declaration["dependencies"].values():
+            definition["repository"] = "../source"
+        config.write_text(tomli_w.dumps(declaration))
+        config = config.rename(config.with_name("vcsinstall.toml"))
+        invocation = config.parent / "tools"
+        invocation.mkdir()
+        mocker.patch("pathlib.Path.cwd", return_value=invocation)
+
+        result = CliRunner().invoke(app, ["--cache-dir", "../selected-cache", "install"])
+
+        assert result.exit_code == 0, result.output
+        assert (config.parent / "selected-cache/repos/git").is_dir()
+        assert (config.parent / "z-guide.txt").read_bytes() == b"original\n"
+
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_empty_project_requires_existing_lock_only_in_locked_mode(self, tmp_path: Path, locked: bool) -> None:
+        config = tmp_path / "vcsinstall.toml"
+        config.write_text("version = 1\n")
+
+        code, records, output = invoke_install(config, tmp_path / "cache", *(("--locked",) if locked else ()))
+
+        assert code == (3 if locked else 0), output
+        if locked:
+            assert records[0]["code"] == workspace_errors.LockfileRequired.model_fields["code"].default
+            assert not config.with_name("vcsinstall.lock").exists()
+        else:
+            assert not records
+            assert tomllib.loads(config.with_name("vcsinstall.lock").read_text()) == {
+                "version": 1,
+                "dependencies": {},
+                "entries": [],
+            }
+        assert not (tmp_path / "cache").exists()
+
+    def test_filesystem_source_is_only_needed_when_locked_content_requires_restoration(self, tmp_path: Path) -> None:
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "guide").write_bytes(b"live content")
+        (source / "outside-selection").write_bytes(b"original")
+        project = tmp_path / "project"
+        project.mkdir()
+        config = project / "vcsinstall.toml"
+        config.write_text(
+            tomli_w.dumps(
+                {
+                    "version": 1,
+                    "dependencies": {"local": {"vcs": "filesystem", "repository": "../source"}},
+                    "entries": [{"dependency": "local", "source_path": "@/guide", "destination": "@/guide"}],
+                }
+            )
+        )
+        cache = tmp_path / "unused-cache"
+        assert invoke_install(config, cache)[0] == 0
+        lockfile = project / "vcsinstall.lock"
+        before = lockfile.read_bytes()
+        (source / "outside-selection").write_bytes(b"changed")
+
+        code, records, output = invoke_install(config, cache, "--locked")
+
+        assert code == 0, output
+        assert all(record["outcome"] == "unchanged" for record in records)
+        (project / "guide").unlink()
+
+        code, records, output = invoke_install(config, cache, "--locked")
+
+        assert code == 3, output
+        assert records[-1]["code"] == source_errors.RevisionMismatch.model_fields["code"].default
+        assert lockfile.read_bytes() == before
+        assert not (project / "guide").exists()
+        assert not cache.exists()
+
+    @pytest.mark.parametrize("kind", ["directory", "absent"])
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_zero_file_baselines_preserve_kind_and_bytes_without_source_access(
+        self, tmp_path: Path, kind: str, existing: bool
+    ) -> None:
+        config = tmp_path / "vcsinstall.toml"
+        definition = {"vcs": "filesystem", "repository": "../unavailable"}
+        entry = {"dependency": "local", "source_path": "@/empty", "destination": "@/empty"}
+        config.write_text(tomli_w.dumps({"version": 1, "dependencies": {"local": definition}, "entries": [entry]}))
+        baseline: dict[str, object] = dict(entry, kind=kind)
+        if kind == "directory":
+            baseline.update(hash=hashes.hash_files({}), files=[])
+        lockfile = config.with_name("vcsinstall.lock")
+        lockfile.write_text(
+            tomli_w.dumps(
+                {
+                    "version": 1,
+                    "dependencies": {"local": dict(definition, revision="sha256:" + "1" * 64)},
+                    "entries": [baseline],
+                }
+            )
+        )
+        if existing:
+            (tmp_path / "empty/nested").mkdir(parents=True)
+        before = lockfile.read_bytes()
+
+        code, records, output = invoke_install(config, tmp_path / "cache", "--locked")
+
+        assert code == 0, output
+        assert all(record["outcome"] == "unchanged" for record in records)
+        assert lockfile.read_bytes() == before
+        assert (tmp_path / "empty").exists() == existing
+        assert not (tmp_path / "cache").exists()
+
+    def test_omitted_git_selector_preserves_the_inferred_branch_and_relative_locked_locator(
+        self, config: Path, client: GitClient, tmp_path: Path
+    ) -> None:
+        declaration = tomllib.loads(config.read_text())
+        declaration["dependencies"]["ci"].pop("selector")
+        config.write_text(tomli_w.dumps(declaration))
+        original = config.read_bytes()
+        cache = tmp_path / "cache"
+        assert invoke_install(config, cache)[0] == 0
+        assert config.read_bytes() == original
+        lockfile = config.with_name("vcsinstall.lock")
+        recorded = tomllib.loads(lockfile.read_text())
+        assert recorded["dependencies"]["ci"]["selector"] == {"kind": "branch", "value": "trunk"}
+        recorded["dependencies"]["ci"]["repository"] = "../source"
+        lockfile.write_text("# retain relative native locator\n" + tomli_w.dumps(recorded))
+        before = lockfile.read_bytes()
+        client.run(["checkout", "-b", "new-default"]).unwrap()
+        (client.path / "guide.txt").write_bytes(b"new default content")
+        client.add(".").unwrap()
+        client.commit("New default branch").unwrap()
+        (config.parent / "z-guide.txt").unlink()
+
+        code, records, output = invoke_install(config, cache, "--locked")
+
+        assert code == 0, output
+        assert lockfile.read_bytes() == before
+        assert records[0]["repository"] == str(client.path)
+        assert records[0]["ref"] == "trunk"
+        assert (config.parent / "z-guide.txt").read_bytes() == b"original\n"
+
+    @pytest.mark.parametrize("state", ["missing", "malformed", "symlink"])
+    def test_invalid_project_state_preserves_shared_loading_diagnostics(self, tmp_path: Path, state: str) -> None:
+        config = tmp_path / "vcsinstall.toml"
+        lockfile = config.with_name("vcsinstall.lock")
+        expected_code = config_errors.Unreadable.model_fields["code"].default
+        if state != "missing":
+            config.write_text("version = 1\n")
+            if state == "malformed":
+                lockfile.write_text("invalid[")
+                expected_code = config_errors.InvalidToml.model_fields["code"].default
+            else:
+                target = tmp_path / "target"
+                target.write_text("version = 1\n")
+                lockfile.symlink_to(target)
+
+        code, records, output = invoke_install(config, tmp_path / "cache")
+
+        assert code == (3 if state == "symlink" else 2), output
+        if state != "symlink":
+            assert records[0]["code"] == expected_code
+        assert not (tmp_path / "cache").exists()
+
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_rejects_production_noop_even_when_lock_state_needs_no_source(self, tmp_path: Path, locked: bool) -> None:
+        config = tmp_path / "vcsinstall.toml"
+        config.write_text('version = 1\n[dependencies.fixture]\nvcs = "noop"\nrepository = "fixture-id"\n')
+        lockfile = config.with_name("vcsinstall.lock")
+        lockfile.write_text(config.read_text() + 'revision = "fixture-revision"\n')
+        before = config.read_bytes(), lockfile.read_bytes()
+
+        code, records, output = invoke_install(config, tmp_path / "cache", *(("--locked",) if locked else ()))
+
+        assert code == 1, output
+        assert records[0]["type"] == "error"
+        assert "noop" in output
+        assert (config.read_bytes(), lockfile.read_bytes()) == before
+        assert not (tmp_path / "cache").exists()

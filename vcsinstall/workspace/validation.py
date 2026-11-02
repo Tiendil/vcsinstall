@@ -209,3 +209,26 @@ def require_matching_entry_baseline(workspace: Workspace, entry: Entry) -> Resul
             ]
         )
     return Ok(baseline)
+
+
+@unwrap_to_error
+def validate_complete_records(workspace: Workspace) -> Result[None]:
+    """Require exactly the declared dependency and entry records with matching entry mappings.
+
+    Example: a new entry without a baseline, a removed dependency still in
+    the lockfile, or a changed source path fails. An empty project needs an
+    existing empty lockfile. Source-owned dependency binding checks remain
+    separate so callers can first prepare repository identities.
+    """
+    if workspace.lockfile is None:
+        return Err([errors.LockfileRequired(path=workspace.lockfile_path)])
+
+    for name in sorted(workspace.lockfile.dependencies.keys() - workspace.config.dependencies.keys()):
+        return Err([errors.OrphanedDependencyLock(path=workspace.lockfile_path, dependency=name)])
+    for name in sorted(workspace.config.dependencies):
+        if name not in workspace.lockfile.dependencies:
+            return Err([errors.DependencyLockRequired(path=workspace.lockfile_path, dependency=name)])
+        validate_no_orphaned_baselines(workspace, name).unwrap()
+    for entry in workspace.config.entries:
+        require_matching_entry_baseline(workspace, entry).unwrap()
+    return Ok(None)

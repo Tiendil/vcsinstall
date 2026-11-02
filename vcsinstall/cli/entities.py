@@ -163,3 +163,8 @@ ForceRemovalOption = Annotated[
     bool,
     typer.Option("--force", help="Allow deletion of modified content or content without a matching baseline."),
 ]
+
+LockedOption = Annotated[
+    bool,
+    typer.Option("--locked", help="Require a complete matching lockfile and leave its bytes unchanged."),
+]

@@ -87,6 +87,15 @@ class Workspace(BaseEntity):
         """
         return validation.validate_destination_ownership(self, destination)
 
+    def validate_complete_records(self) -> Result[None]:
+        """Require an existing lockfile with exact declaration membership and entry mappings.
+
+        Example: a missing baseline or an obsolete dependency lock fails;
+        matching records pass. Dependency repository and selector matching
+        is checked separately through require_matching_dependency_lock.
+        """
+        return validation.validate_complete_records(self)
+
     @contextmanager
     def scope(self) -> Iterator[None]:
         """Activate this loaded workspace and restore previous bindings on exit."""

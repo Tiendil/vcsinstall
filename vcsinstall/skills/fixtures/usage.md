@@ -1,9 +1,9 @@
 # `vcsinstall` Usage
 
 `vcsinstall` is being developed to install files into a repository from other repositories, with lockfile and push-back support.
-The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking, listing, freshness checks, updates and removal, entry installation, and entry removal.
+The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking, listing, freshness checks, updates and removal, entry installation, complete project installation, and entry removal.
 `dependency add` supports Git and ordinary filesystem sources, including protected replacement of existing dependency entries.
-General installation and push-back commands are not implemented yet.
+Push-back commands are not implemented yet.
 
 ## Commands
 
@@ -14,6 +14,8 @@ vcsinstall skill usage
 vcsinstall init
 vcsinstall dependency add ci 'git+https://example.com/team/shared.git#branch=main'
 vcsinstall add ci@/specs @/specs/shared
+vcsinstall install
+vcsinstall install --locked
 vcsinstall dependency list
 vcsinstall dependency outdated
 vcsinstall dependency update
@@ -24,7 +26,7 @@ vcsinstall dependency remove ci
 `python -m vcsinstall` exposes the same CLI as the `vcsinstall` executable.
 The `skill` command defaults to the `usage` document.
 Help, version, and skill commands work without project configuration.
-Init creates configuration; dependency add, dependency list, dependency outdated, dependency update, dependency remove, add, and remove require existing valid configuration.
+Init creates configuration; dependency add, dependency list, dependency outdated, dependency update, dependency remove, add, install, and remove require existing valid configuration.
 Dependency add resolves the selected revision, writes its declaration and lock, and creates no entry mappings.
 
 ## Adding dependencies
@@ -69,7 +71,7 @@ vcsinstall -p automation dependency outdated ci
 
 Without names, outdated checks every declared dependency, including those without entries. Names select exactly those dependencies; repeated names select each once. Unknown names fail as invalid arguments. There are no command-specific options.
 
-Every selected dependency must have a matching revision lock before any source fetching. Use `dependency update NAME` to establish or refresh its lock and entries; general `install` is planned. Unselected locks and installation baselines need not match. Installed files may be missing or modified without blocking this check.
+Every selected dependency must have a matching revision lock before any source fetching. Use `install` to establish missing locks or `dependency update NAME` to refresh a dependency and its entries. Unselected locks and installation baselines need not match. Installed files may be missing or modified without blocking this check.
 
 The command refreshes and resolves the effective branch, tag, or default selector, then compares its complete immutable revision with the lock. Moved tags, rewound branches, and new commits with identical content count as outdated. An omitted Git selector retains a matching lock's recorded branch even when the remote default changes. Revision pins keep selecting their pinned state and do not refresh merely to find newer commits. Required acquisition or resolution failures remain errors; stale cached references do not satisfy a failed refresh. Filesystem sources compare the complete live fingerprint, including changes outside installed entry paths; an unavailable pinned fingerprint fails.
 
@@ -116,7 +118,7 @@ vcsinstall add --redefine ci@/guides @/docs/shared
 vcsinstall add --allow-outdated ci@/examples @/examples/shared
 ```
 
-Add declares and installs exactly one file or complete directory from an existing dependency's matching lock. It keeps that shared revision and all other entries unchanged. Use `dependency update NAME` to establish or refresh a missing or mismatching dependency lock before adding entries; general `install` is planned.
+Add declares and installs exactly one file or complete directory from an existing dependency's matching lock. It keeps that shared revision and all other entries unchanged. Use `install` to establish a missing or mismatching dependency lock, or `dependency update NAME` to refresh it before adding entries.
 
 Sources use `NAME@/PATH`, with `NAME@/` selecting the repository root. Source paths retain literal percent signs, plus signs, query characters, and fragment characters; quote them for your shell when needed. Repository URLs and version options belong to `dependency add`.
 The destination is the exact final file or directory path. It accepts `@/` project identifiers, contained absolute paths, or paths relative to the invocation directory. An existing directory does not append the source basename. Destinations cannot overlap another entry or either project file.
@@ -125,6 +127,24 @@ An already declared destination requires `--redefine`, even for an identical map
 
 Add refreshes and checks the dependency's effective selector against its locked revision. A moved branch, tag, or live filesystem fingerprint fails unless `--allow-outdated` is supplied; `--redefine` grants no freshness permission. Even with `--allow-outdated`, refresh and resolution must succeed and the locked source path must remain available. Filesystem sources retain no historical snapshots, so a changed live source cannot reproduce an old fingerprint.
 Put global `--cache-dir DIRECTORY` before `add` to override the shared Git cache. Both add commands resolve its root for every backend; filesystem sources do not create cache data. Automation success emits one metadata-only `installation` record with operation `add`, status `unmodified`, and outcome `installed` or `unchanged`.
+
+## Installing the project
+
+```bash
+vcsinstall install
+vcsinstall install --locked
+vcsinstall -p automation install
+```
+
+Install covers every declared dependency and entry, including dependencies without entries. It accepts no positional arguments or source-selection options. Configuration remains unchanged. Matching dependency locks retain their revisions even when branches or tags move; newly declared entries also use those revisions. Missing or changed bindings are resolved once per dependency, and an omitted Git selector retains a matching lock's recorded branch.
+
+Existing local files must collectively agree with their prior baseline or the selected source across the complete entry tree. Local additions are protected, missing files are restored, and changed entry roots are recopied completely. Entries already matching a trustworthy baseline need no source, VCS client, or cache access. Every dependency is prepared before any project mutation. Preparation failure preserves all installed files and records; an application failure may leave content inconsistent with the prior records and is reported explicitly.
+
+Ordinary install establishes complete matching lock state and removes obsolete records after successful preparation and installation. It leaves content from manually removed declarations in place. An empty project succeeds without result records and establishes an empty lockfile.
+
+`--locked` requires an existing lockfile with exactly the declared dependencies and entry mappings before fetching source content. Missing, changed, or obsolete records fail. Lockfile bytes remain unchanged. Missing source data may be fetched at its locked immutable revision without refreshing tracking references; unavailable revisions fail rather than advance. This mode does not imply offline execution. Filesystem sources retain no historical snapshots, so restoration requires the complete live source fingerprint to match the lock, including files outside the selected entry paths.
+
+Put global `--cache-dir DIRECTORY` before `install` to override the cache root. Install resolves that root for every backend but creates cache data only when needed. Automation success emits metadata-only `dependency` records ordered by name, followed by `installation` records ordered by destination. Records use operation `install` and outcome `installed` or `unchanged`; installation status is `unmodified`.
 
 ## Removing entries
 

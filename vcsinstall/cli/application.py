@@ -34,6 +34,7 @@ register_init_command(
 app.add_typer(dependency.app, name="dependency")
 app.command("add")(entries.add_entry)
 app.command("remove")(entries.remove_entries)
+app.command("install")(entries.install_entries)
 
 
 def main() -> None:

@@ -35,6 +35,7 @@ class Operation(StrEnum):
     dependency_update = "dependency update"
     add = "add"
     remove = "remove"
+    install = "install"
 
 
 class RemovalCell(UniformCell):
@@ -144,20 +145,22 @@ def entry_add_cell(entry: Entry, resolved: ResolvedSource, *, unchanged: bool) -
 
 
 def _dependency_installation_cells(plan: DependencyPlan, *, operation: Operation) -> list[InstallationCell]:
-    """Project the shared revision and entry changes for an add or update result."""
+    """Project the shared revision and entry changes for dependency mutation results."""
+    installing = operation == Operation.install
+    revision_unchanged = plan.lock_unchanged if installing else plan.previous_revision == plan.lock.revision
     return [
         InstallationCell(
             operation=operation,
             dependency=plan.name,
-            definition=plan.resolved.dependency,
-            revision=plan.resolved.revision,
+            definition=plan.definition,
+            revision=plan.lock.revision,
             outcome=(
                 Outcome.unchanged
-                if not entry_plan.changed and plan.previous_revision == plan.resolved.revision
-                else Outcome.updated
+                if not entry_plan.changed and revision_unchanged
+                else Outcome.installed if installing else Outcome.updated
             ),
             previous_revision=plan.previous_revision,
-            redefinition=True,
+            redefinition=not installing,
             destination=entry_plan.entry.destination,
             source_path=entry_plan.entry.source_path,
         )
@@ -171,8 +174,8 @@ def dependency_add_cells(plan: DependencyPlan, *, redefinition: bool, unchanged:
     cells: list[LogicCell] = [
         DependencyCell(
             dependency=plan.name,
-            definition=plan.resolved.dependency,
-            revision=plan.resolved.revision,
+            definition=plan.definition,
+            revision=plan.lock.revision,
             outcome=outcome,
             previous_revision=plan.previous_revision,
             redefinition=redefinition,
@@ -182,23 +185,22 @@ def dependency_add_cells(plan: DependencyPlan, *, redefinition: bool, unchanged:
     return cells
 
 
-def dependency_update_cells(plans: list[DependencyPlan]) -> list[LogicCell]:
+def dependency_change_cells(plans: list[DependencyPlan], *, operation: Operation) -> list[LogicCell]:
     """Report dependencies by name, followed by entries across the selection by destination."""
+    installing = operation == Operation.install
     cells: list[LogicCell] = [
         DependencyCell(
-            operation=Operation.dependency_update,
+            operation=operation,
             dependency=plan.name,
-            definition=plan.resolved.dependency,
-            revision=plan.resolved.revision,
-            outcome=Outcome.unchanged if plan.unchanged else Outcome.updated,
+            definition=plan.definition,
+            revision=plan.lock.revision,
+            outcome=Outcome.unchanged if plan.unchanged else Outcome.installed if installing else Outcome.updated,
             previous_revision=plan.previous_revision,
-            redefinition=True,
+            redefinition=not installing,
         )
         for plan in plans
     ]
-    installations = [
-        cell for plan in plans for cell in _dependency_installation_cells(plan, operation=Operation.dependency_update)
-    ]
+    installations = [cell for plan in plans for cell in _dependency_installation_cells(plan, operation=operation)]
     installations.sort(key=lambda cell: cell.destination)
     cells.extend(installations)
     return cells

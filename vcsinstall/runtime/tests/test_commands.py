@@ -49,7 +49,9 @@ class ControlledHosting:
         raise AssertionError("Runtime must not probe repository input.")
 
     @contextmanager
-    def acquire(self, dependency: Dependency, *, revision: SourceRevision | None = None) -> Iterator[Result[Path]]:
+    def acquire(
+        self, dependency: Dependency, *, revision: SourceRevision | None = None, refresh: bool = True
+    ) -> Iterator[Result[Path]]:
         self.requests.append(dependency)
         self.revisions.append(revision)
         yield Ok(self.path)
@@ -531,7 +533,9 @@ class TestDependencyOutdated:
         problems: EnvironmentErrors = [problem, path_errors.PathResolutionFailed(path="Fixture", reason="unavailable")]
 
         @contextmanager
-        def acquire(dependency: Dependency, *, revision: SourceRevision | None = None) -> Iterator[Result[Path]]:
+        def acquire(
+            dependency: Dependency, *, revision: SourceRevision | None = None, refresh: bool = True
+        ) -> Iterator[Result[Path]]:
             yield Err(problems)
 
         if stage == "normalization":

@@ -2,7 +2,7 @@
 
 `vcsinstall` is being developed to install files into a target repository from source repositories, record their origins in a lockfile, and push local changes back to their source.
 
-**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `dependency list` reports dependencies and local entry statistics, `dependency outdated` checks source revisions, `dependency update` refreshes dependencies and their entries, `dependency remove` removes unused dependencies, `add` installs file and directory entries at their locked revisions, and `remove` removes entries with local-change protection or retains their files as unmanaged content. Help, version output, and built-in usage documentation are available. General installation and push back are planned.
+**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `dependency list` reports dependencies and local entry statistics, `dependency outdated` checks source revisions, `dependency update` refreshes dependencies and their entries, `dependency remove` removes unused dependencies, `add` installs file and directory entries at their locked revisions, `install` reproduces the complete declared project, and `remove` removes entries with local-change protection or retains their files as unmanaged content. Help, version output, and built-in usage documentation are available. Push back is planned.
 
 ## Example
 
@@ -26,6 +26,7 @@ Available today:
 - **Dependency updates** — advance all or named dependencies within their configured selectors and refresh every entry together while protecting local changes.
 - **Dependency removal** — remove unused dependency declarations, revision locks, and obsolete baselines while preserving installed files.
 - **Entry installation** — install files or complete directories from a dependency's locked revision, rename destinations, and explicitly redefine entries with local-change protection.
+- **Project installation** — reproduce declared entries with `install`, establish missing dependency locks, and use `install --locked` to require matching records without changing lockfile bytes.
 - **Entry removal** — remove selected entries and verified content, explicitly discard local changes with `--force`, or retain files with `--keep-files`.
 - **Source detection** — recognize Git repositories before ordinary directories, probe unqualified remote URLs, and honor explicit backend choices.
 - **Output protocols** — human output, framed output for coding agents, and JSON Lines for programs.
@@ -33,7 +34,6 @@ Available today:
 
 Planned:
 
-- **Project installation** — reproduce every declared entry and reconcile missing dependency locks.
 - **Push back** — transfer local changes to installed files back to their source repository.
 
 ## Rationale
@@ -117,6 +117,17 @@ vcsinstall add --allow-outdated ci@/examples @/examples/shared
 ```
 
 `NAME@/PATH` selects a file or directory within a declared dependency; `NAME@/` selects its repository root. The destination is the exact final path, using `@/` project identifiers or contained filesystem paths relative to the invocation directory. Add requires a matching dependency lock and preserves its revision. It checks the current source selector before installation and requires `--allow-outdated` when that selector has moved. This permission still requires a successful freshness check and availability of the locked content. An existing entry destination requires `--redefine`, including an identical mapping; redefinition preserves local-content protection and can change the owning dependency.
+
+Install the complete configuration, including hand-written declarations:
+
+```bash
+vcsinstall install
+vcsinstall install --locked
+```
+
+Install preserves matching dependency revisions, restores missing files, and resolves missing or changed dependency bindings. It prepares every entry before changing project files, protects local modifications and additions, and leaves configuration unchanged. Obsolete lock records are removed after success; content whose declaration was removed stays in place. Fully satisfied entries need no source access.
+
+`--locked` requires an existing complete configuration match and preserves lockfile bytes. It can fetch missing immutable source content, so it does not imply offline execution. Filesystem sources retain no history: restoration fails if the live source no longer has the locked fingerprint. Put global `--cache-dir DIRECTORY` before `install` to override the Git cache root.
 
 Remove declared entry roots:
 

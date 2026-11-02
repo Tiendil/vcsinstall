@@ -13,11 +13,13 @@ from vcsinstall.cli.entities import (
     EntryPathsArgument,
     ForceRemovalOption,
     KeepFilesOption,
+    LockedOption,
     RedefineEntryOption,
     SourceArgument,
 )
+from vcsinstall.domain import VcsId
 from vcsinstall.hosting import get_hosting
-from vcsinstall.runtime import entry_add, entry_remove
+from vcsinstall.runtime import entry_add, entry_remove, install
 from vcsinstall.sources import get_adapter
 from vcsinstall.workspace import Entry, load_workspace
 
@@ -69,3 +71,27 @@ def remove_entries(
             normalize_path(path.strip(), workspace.project_root, cwd=cwd).unwrap() for path in entry_paths
         )
         entry_remove(destinations, keep_files=keep_files, force=force).unwrap()
+
+
+def install_entries(context: typer.Context, locked: LockedOption = False) -> None:
+    """Install all declared entries, reusing matching dependency revisions."""
+    with command_context(context) as command:
+        cwd = Path.cwd()
+        cache_input = context.find_root().params.get("cache_dir")
+        cache_root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
+        context.with_resource(active_cache_root.scope(cache_root))
+        workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
+        context.with_resource(workspace.scope())
+        unsupported = sorted(
+            name for name, dependency in workspace.config.dependencies.items() if dependency.vcs == VcsId.noop
+        )
+        if unsupported:
+            Err(
+                [
+                    InvalidArguments(
+                        reason=f"Dependency {name!r} uses noop, which is available only to test environments."
+                    )
+                    for name in unsupported
+                ]
+            ).unwrap()
+        install(source_for=get_adapter, hosting_for=get_hosting, locked=locked).unwrap()

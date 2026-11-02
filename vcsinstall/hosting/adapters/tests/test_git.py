@@ -14,6 +14,38 @@ from vcsinstall.vcs_clients.tests.helpers import create_repository
 
 
 class TestGitHostingAdapter:
+    @pytest.mark.parametrize("selector_kind", [None, "branch", "tag"])
+    def test_acquire__reuses_locked_revision_without_refreshing_binding(
+        self, tmp_path: Path, selector_kind: str | None
+    ) -> None:
+        client = create_repository(tmp_path / "source")
+        revision = client.resolve_commit("HEAD").unwrap()
+        selector = make.selector(selector_kind, "release") if selector_kind else None
+        dependency = make.dependency(repository=str(client.path), selector=selector)
+        hosting = GitHostingAdapter(root=CacheRootPath(tmp_path / "cache"))
+        with hosting.acquire(dependency) as acquired:
+            acquired.unwrap()
+        client.path.rename(tmp_path / "unavailable-source")
+
+        with hosting.acquire(dependency, revision=SourceRevision(revision), refresh=False) as acquired:
+            cached = GitClient(path=acquired.unwrap(), repository=dependency.repository)
+            assert cached.resolve_commit(revision).unwrap() == revision
+
+    def test_acquire__fetches_missing_locked_revision_without_refreshing_binding(self, tmp_path: Path) -> None:
+        client = create_repository(tmp_path / "source")
+        initial = client.resolve_commit("HEAD").unwrap()
+        dependency = make.dependency(repository=client.path.as_uri(), selector=make.selector("branch", "trunk"))
+        hosting = GitHostingAdapter(root=CacheRootPath(tmp_path / "cache"))
+        with hosting.acquire(dependency) as acquired:
+            acquired.unwrap()
+        (client.path / "guide.txt").write_bytes(b"locked content")
+        revision = client.commit("Advance source", all_tracked=True).unwrap()
+
+        with hosting.acquire(dependency, revision=SourceRevision(revision), refresh=False) as acquired:
+            cached = GitClient(path=acquired.unwrap(), repository=dependency.repository)
+            assert cached.resolve_commit(revision).unwrap() == revision
+            assert cached.resolve_commit("refs/heads/trunk").unwrap() == initial
+
     def test_acquire__fetches_required_unreferenced_revision_while_refreshing_selector(self, tmp_path: Path) -> None:
         client = create_repository(tmp_path / "source")
         client.create_branch("detached-history", checkout=True).unwrap()

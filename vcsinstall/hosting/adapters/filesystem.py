@@ -15,7 +15,9 @@ class FilesystemHostingAdapter:
         return Ok(False)
 
     @contextmanager
-    def acquire(self, dependency: Dependency, *, revision: SourceRevision | None = None) -> Iterator[Result[Path]]:
+    def acquire(
+        self, dependency: Dependency, *, revision: SourceRevision | None = None, refresh: bool = True
+    ) -> Iterator[Result[Path]]:
         yield self._acquire(dependency)
 
     @unwrap_to_error
