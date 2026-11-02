@@ -2,7 +2,7 @@
 
 `vcsinstall` is being developed to install files into a target repository from source repositories, record their origins in a lockfile, and push local changes back to their source.
 
-**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `add` installs file and directory entries at their locked revisions, and `remove` removes entries with local-change protection or retains their files as unmanaged content. Help, version output, and built-in usage documentation are available. Other dependency commands, general installation, and push back are planned.
+**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `dependency remove` removes unused dependencies, `add` installs file and directory entries at their locked revisions, and `remove` removes entries with local-change protection or retains their files as unmanaged content. Help, version output, and built-in usage documentation are available. Other dependency commands, general installation, and push back are planned.
 
 ## Example
 
@@ -21,6 +21,7 @@ Available today:
 - **CLI scaffold** — help, package version output, and built-in usage documentation.
 - **Project configuration** — create a starter with `init`, discover or explicitly select configuration, and validate configuration and existing lock state.
 - **Dependency locking** — add Git or filesystem sources, select branches, tags, or immutable revisions, and explicitly redefine dependencies while protecting local edits.
+- **Dependency removal** — remove unused dependency declarations, revision locks, and obsolete baselines while preserving installed files.
 - **Entry installation** — install files or complete directories from a dependency's locked revision, rename destinations, and explicitly redefine entries with local-change protection.
 - **Entry removal** — remove selected entries and verified content, explicitly discard local changes with `--force`, or retain files with `--keep-files`.
 - **Source detection** — recognize Git repositories before ordinary directories, probe unqualified remote URLs, and honor explicit backend choices.
@@ -123,6 +124,14 @@ vcsinstall remove --force @/examples/shared
 ```
 
 Removal checks every selected entry before changing files. Modified or unverified existing content requires `--force` for deletion. `--keep-files` preserves all content as unmanaged project files and takes precedence over `--force`. Missing installed content does not prevent removal. Dependency declarations and their shared revision locks remain, including after their last entry is removed. Removal needs no source access, Git client, or repository cache.
+
+Remove an unused dependency after removing or reassigning its entries:
+
+```bash
+vcsinstall dependency remove ci
+```
+
+Dependency removal deletes its declaration, shared revision lock, and obsolete entry baselines. It preserves installed content and unrelated records, works with missing lock state, and requires no source or cache access. A baseline still protecting a reassigned entry must be reconciled before removing its old dependency.
 
 Without `--config`, loading discovers the nearest `vcsinstall.toml` in the current directory or its parents. An explicit path overrides discovery. The selected configuration's parent is the project root, and its fixed sibling `vcsinstall.lock` is the [lockfile](specs/behavior/lockfile.md). A missing lockfile is allowed; an invalid existing lockfile fails validation. Loading changes neither file and does not access sources or installed contents.
 

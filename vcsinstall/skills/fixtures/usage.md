@@ -1,7 +1,7 @@
 # `vcsinstall` Usage
 
 `vcsinstall` is being developed to install files into a repository from other repositories, with lockfile and push-back support.
-The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration and locking, entry installation, and entry removal.
+The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking and removal, entry installation, and entry removal.
 `dependency add` supports Git and ordinary filesystem sources, including protected replacement of existing dependency entries.
 Other dependency operations, general installation, and push-back commands are not implemented yet.
 
@@ -15,12 +15,13 @@ vcsinstall init
 vcsinstall dependency add ci 'git+https://example.com/team/shared.git#branch=main'
 vcsinstall add ci@/specs @/specs/shared
 vcsinstall remove @/specs/shared
+vcsinstall dependency remove ci
 ```
 
 `python -m vcsinstall` exposes the same CLI as the `vcsinstall` executable.
 The `skill` command defaults to the `usage` document.
 Help, version, and skill commands work without project configuration.
-Init creates configuration; dependency add, add, and remove require existing valid configuration.
+Init creates configuration; dependency add, dependency remove, add, and remove require existing valid configuration.
 Dependency add resolves the selected revision, writes its declaration and lock, and creates no entry mappings.
 
 ## Adding dependencies
@@ -41,6 +42,18 @@ An existing name requires `--redefine`, even for an identical declaration. Redef
 
 Git sources require the installed Git client and use a shared per-user cache. Put `--cache-dir DIRECTORY` before `dependency` to override its root. Dependency add resolves the cache root for every backend. Filesystem sources do not create cache data. Project-independent commands do not resolve or access the cache. Native authentication remains owned by Git.
 Automation success emits a `dependency` record, followed by ordered `installation` records for refreshed entries. Errors use the selected shared protocol.
+
+## Removing dependencies
+
+```bash
+vcsinstall dependency remove ci
+```
+
+Dependency remove requires exactly one declared name and refuses dependencies with declared entries, identifying their destinations. Remove or reassign those entries first; there is no cascade or force option. Unknown names fail as invalid arguments.
+
+It removes the declaration, shared revision lock, and obsolete installation baselines, preserving installed files and unrelated records. A baseline still protecting an entry reassigned to another dependency must be reconciled first. Missing lock state does not block removal or create a lockfile; existing metadata must still validate.
+
+The command needs no source repository, network, Git client, or repository cache and ignores `--cache-dir`. Automation success emits one metadata-only `dependency` record with operation `dependency remove` and outcome `removed`. It describes the definition observed before removal, with its matching locked revision or null when none matches. An omitted Git selector reports a matching lock's inferred branch, or `ref_kind = default` and null `ref` without one.
 
 ## Adding entries
 

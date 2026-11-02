@@ -78,6 +78,17 @@ class Lockfile(BaseEntity):
         """Return a copy adding or replacing one shared lock without changing entry baselines."""
         return self.replace(dependencies=self.dependencies | {name: dependency})
 
+    def without_dependency(self, name: DependencyName) -> Self:
+        """Return a copy removing one shared lock and its installation baselines.
+
+        Unrelated locks and baselines retain their order. The caller decides
+        whether discarding this dependency's recorded installations is allowed.
+        """
+        return self.replace(
+            dependencies={key: value for key, value in self.dependencies.items() if key != name},
+            entries=tuple(entry for entry in self.entries if entry.dependency != name),
+        )
+
     def with_baselines(self, baselines: Iterable[InstallationBaseline]) -> Self:
         """Return a copy replacing baselines in place and appending new destinations in input order.
 

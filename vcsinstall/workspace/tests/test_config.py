@@ -71,6 +71,19 @@ class TestConfig:
         assert updated is not config
         assert config.model_dump() == before
 
+    @pytest.mark.parametrize("name", ["ci", "missing"])
+    def test_without_dependency__removes_only_an_unused_declaration(self, config: Config, name: str) -> None:
+        config = config.without_entries((ProjectPathId("@/docs/guide"),))
+        before = config.model_dump()
+
+        updated = config.without_dependency(DependencyName(name))
+
+        assert tuple(updated.dependencies) == (("formatting",) if name == "ci" else ("ci", "formatting"))
+        assert updated.entries == config.entries
+        assert updated.without_dependency(DependencyName(name)) == updated
+        assert Config.model_validate(updated.model_dump()) == updated
+        assert config.model_dump() == before
+
     def test_minimal_config_defaults_and_serialization(self) -> None:
         config = Config.model_validate({"version": 1})
 

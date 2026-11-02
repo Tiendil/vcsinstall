@@ -83,6 +83,29 @@ def validate_no_orphaned_baselines(workspace: Workspace, dependency: DependencyN
     return Ok(None)
 
 
+def validate_no_reassigned_baselines(workspace: Workspace, dependency: DependencyName) -> Result[None]:
+    """Keep prior baselines protecting entries reassigned to another dependency.
+
+    Example: an old ci baseline at '@/docs' blocks discarding ci's records
+    while formatting declares '@/docs'. An undeclared old destination passes.
+    """
+    if workspace.lockfile is None:
+        return Ok(None)
+    for baseline in workspace.lockfile.entries_for_dependency(dependency):
+        entry = workspace.config.entry_for_destination(baseline.destination)
+        if entry is not None and entry.dependency != dependency:
+            return Err(
+                [
+                    errors.BaselineMismatch(
+                        path=workspace.lockfile_path,
+                        dependency=entry.dependency,
+                        destination=entry.destination,
+                    )
+                ]
+            )
+    return Ok(None)
+
+
 def require_matching_dependency_lock(
     workspace: Workspace, dependency: DependencyName, *, source: SourceAdapter
 ) -> Result[DependencyLock]:

@@ -89,6 +89,20 @@ class TestLockfile:
         assert updated.entries == lockfile.entries
         assert lockfile.model_dump() == before
 
+    @pytest.mark.parametrize("name,retained", [("ci", (1,)), ("formatting", (0,)), ("missing", (0, 1))])
+    def test_without_dependency__removes_its_lock_and_baselines_only(
+        self, lockfile: Lockfile, name: str, retained: tuple[int, ...]
+    ) -> None:
+        before = lockfile.model_dump()
+
+        updated = lockfile.without_dependency(DependencyName(name))
+
+        assert tuple(updated.dependencies) == tuple(key for key in lockfile.dependencies if key != name)
+        assert updated.entries == tuple(lockfile.entries[index] for index in retained)
+        assert updated.without_dependency(DependencyName(name)) == updated
+        assert Lockfile.model_validate(updated.model_dump()) == updated
+        assert lockfile.model_dump() == before
+
     def test_with_baselines__replaces_in_place_and_appends_in_input_order(self, lockfile: Lockfile) -> None:
         before = lockfile.model_dump()
         changed = lockfile.entries[0].replace(

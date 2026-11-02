@@ -20,7 +20,14 @@ from vcsinstall.filesystem import (
 )
 from vcsinstall.hosting import HostingAdapter
 from vcsinstall.runtime import errors
-from vcsinstall.runtime.cells import RemovalCell, dependency_add_cells, entry_add_cell
+from vcsinstall.runtime.cells import (
+    DependencyCell,
+    Operation,
+    Outcome,
+    RemovalCell,
+    dependency_add_cells,
+    entry_add_cell,
+)
 from vcsinstall.runtime.entities import EntryPlan
 from vcsinstall.runtime.validation import (
     validate_entry_redefinition,
@@ -317,6 +324,58 @@ def _prepare_dependency_lock(
         lockfile=workspace.lockfile.with_dependency(name, recorded.replace(repository=locked_repository)),
     )
     return prepared.require_matching_dependency_lock(name, source=source)
+
+
+@unwrap_to_error
+def dependency_remove(  # noqa: CCR001 — Keep removal validation, prior-lock reporting, and persistence together.
+    name: DependencyName,
+) -> Result[None]:
+    """Remove an unused declaration and its recorded state without accessing content."""
+    workspace = active_workspace.get()
+    definition = workspace.config.dependencies.get(name)
+    if definition is None:
+        return Err([InvalidArguments(reason=f"Unknown dependency {name!r}.")])
+    entries = workspace.config.entries_for_dependency(name)
+    if entries:
+        destinations = ", ".join(sorted(entry.destination for entry in entries))
+        return Err(
+            [
+                InvalidArguments(
+                    reason=f"Dependency {name!r} still has declared entries: {destinations}.",
+                    ways_to_fix=["Remove or reassign these entries before removing the dependency."],
+                )
+            ]
+        )
+
+    workspace.validate_no_reassigned_baselines(name).unwrap()
+    source = get_adapter(definition.vcs)
+    lock_result = _prepare_dependency_lock(workspace, name, source=source)
+    locked = None if lock_result.is_err(workspace_errors.DependencyLockRequired) else lock_result.unwrap()
+    repository = (
+        locked.repository
+        if locked is not None
+        else source.normalize_repository(definition.repository, cwd=workspace.project_root).unwrap()
+    )
+    definition = definition.replace(repository=repository or definition.repository)
+    if definition.selector is None and locked is not None:
+        definition = definition.replace(selector=locked.selector)
+
+    config = workspace.config.without_dependency(name)
+    lockfile = workspace.lockfile.without_dependency(name) if workspace.lockfile is not None else None
+    serialized = serialize_workspace_changes(workspace, config, lockfile)
+    write_workspace_files(workspace, serialized).unwrap()
+    output.get().emit(
+        [
+            DependencyCell(
+                operation=Operation.dependency_remove,
+                dependency=name,
+                definition=definition,
+                revision=locked.revision if locked is not None else None,
+                outcome=Outcome.removed,
+            )
+        ]
+    ).unwrap()
+    return Ok(None)
 
 
 @unwrap_to_error

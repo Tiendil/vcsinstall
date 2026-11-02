@@ -39,6 +39,14 @@ class Config(BaseEntity):
         """Return a copy adding or replacing one dependency without changing entry mappings."""
         return self.replace(dependencies=self.dependencies | {name: dependency})
 
+    def without_dependency(self, name: DependencyName) -> Self:
+        """Return a copy removing one declaration, preserving all entry mappings.
+
+        The caller must first ensure the dependency is unused. An unknown name
+        leaves the data unchanged; unrelated declarations retain their order.
+        """
+        return self.replace(dependencies={key: value for key, value in self.dependencies.items() if key != name})
+
     def with_entry(self, entry: Entry) -> Self:
         """Return a copy replacing an exact destination in place, or appending a new entry.
 

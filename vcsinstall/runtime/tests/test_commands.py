@@ -6,6 +6,7 @@ from typing import BinaryIO
 import pytest
 from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core import settings
+from llm_tool_cli.core.errors import EnvironmentErrors
 from llm_tool_cli.core.result import Err, Ok, Result
 from llm_tool_cli.paths import PathInput, ProjectConfigPath, ProjectPathId
 from llm_tool_cli.paths import errors as path_errors
@@ -16,7 +17,7 @@ from vcsinstall.cache import errors as cache_errors
 from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SourcePath, SourceRevision, VcsId
 from vcsinstall.domain.tests import make
 from vcsinstall.hosting import GitHostingAdapter
-from vcsinstall.runtime import dependency_add, entry_add, entry_remove
+from vcsinstall.runtime import dependency_add, dependency_remove, entry_add, entry_remove
 from vcsinstall.runtime.commands import _prepare_dependency_lock
 from vcsinstall.runtime.tests.conftest import CollectingEmitter
 from vcsinstall.sources import ResolvedSource
@@ -419,4 +420,41 @@ class TestDependencyAdd:
         if recorded is None:
             assert not lockfile.exists()
         else:
+            assert lockfile.read_text() == recorded
+
+
+@pytest.mark.usefixtures("isolated_settings")
+class TestDependencyRemove:
+    @pytest.fixture(autouse=True)
+    def initialize(self, isolated_settings: None) -> None:
+        settings.initialize(
+            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
+        )
+
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_preserves_normalization_errors_without_mutation_or_output(
+        self, tmp_path: Path, emitter: CollectingEmitter, mocker: MockerFixture, locked: bool
+    ) -> None:
+        config = tmp_path / "vcsinstall.toml"
+        definition = 'version = 1\n[dependencies.ci]\nvcs = "noop"\nrepository = "source"\n'
+        config.write_text(definition)
+        lockfile = tmp_path / "vcsinstall.lock"
+        recorded = definition + 'revision = "recorded-revision"\n'
+        if locked:
+            lockfile.write_text(recorded)
+        workspace = load_workspace(cwd=PathInput(tmp_path), path=ProjectConfigPath(config)).unwrap()
+        problem = path_errors.PathResolutionFailed(path="source", reason="Cannot resolve repository identity.")
+        failures: EnvironmentErrors = [problem]
+        source = ControlledSource()
+        mocker.patch.object(source, "normalize_repository", return_value=Err(failures))
+        mocker.patch("vcsinstall.runtime.commands.get_adapter", return_value=source)
+
+        with workspace.scope():
+            result = dependency_remove(DependencyName("ci"))
+
+        assert result.unwrap_err() is failures
+        assert not emitter.cells
+        assert config.read_text() == definition
+        assert lockfile.exists() == locked
+        if locked:
             assert lockfile.read_text() == recorded

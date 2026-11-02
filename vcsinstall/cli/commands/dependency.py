@@ -19,7 +19,7 @@ from vcsinstall.cli.entities import (
 )
 from vcsinstall.domain import Dependency, RepositoryLocator, SelectorKind, VcsId, VersionSelector, urls
 from vcsinstall.hosting import GitHostingAdapter, HostingAdapter, get_hosting
-from vcsinstall.runtime import dependency_add
+from vcsinstall.runtime import dependency_add, dependency_remove
 from vcsinstall.sources import (
     DEFAULT_ADAPTERS,
     DETECTION_ORDER,
@@ -146,3 +146,12 @@ def add_dependency(  # noqa: CFQ002 — Typer exposes these independent command 
             hosting=get_hosting(dependency.vcs).unwrap(),
             redefine=redefine,
         ).unwrap()
+
+
+@app.command("remove")
+def remove_dependency(context: typer.Context, name: DependencyNameArgument) -> None:
+    """Remove an unused dependency declaration and its lock, preserving installed files."""
+    with command_context(context) as command:
+        workspace = load_workspace(cwd=PathInput(Path.cwd()), path=command.config_input).unwrap()
+        context.with_resource(workspace.scope())
+        dependency_remove(name).unwrap()

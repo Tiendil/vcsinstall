@@ -6,6 +6,8 @@
 
 ### Changes
 
+- Implement `dependency remove` for unused declarations, removing their revision locks and obsolete baselines while preserving installed content and unrelated state without source or cache access.
+
 - Encapsulate configuration and lockfile record updates in methods returning modified copies, keeping collection reconstruction out of runtime operations.
 
 - Implement `remove` with whole-selection validation, local-change protection, forced deletion, and `--keep-files`, preserving dependency declarations and revision locks without source or cache access.

@@ -45,6 +45,14 @@ class Workspace(BaseEntity):
         """
         return validation.validate_no_missing_baselines(self, dependency)
 
+    def validate_no_reassigned_baselines(self, dependency: DependencyName) -> Result[None]:
+        """Reject discarding baselines still protecting another dependency's entries.
+
+        Example: an old ci baseline at '@/docs' fails while formatting declares
+        '@/docs'; it passes when that destination has no declaration.
+        """
+        return validation.validate_no_reassigned_baselines(self, dependency)
+
     def require_matching_dependency_lock(
         self, dependency: DependencyName, *, source: SourceAdapter
     ) -> Result[DependencyLock]:

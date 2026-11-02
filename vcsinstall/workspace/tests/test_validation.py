@@ -104,6 +104,33 @@ class TestValidateNoOrphanedBaselines:
         assert workspace.validate_no_orphaned_baselines(DependencyName("ci")).is_ok()
 
 
+class TestValidateNoReassignedBaselines:
+    @pytest.mark.parametrize("state", ["matching", "removed", "reassigned", "missing_lockfile"])
+    def test_preserves_baselines_at_destinations_reassigned_to_other_dependencies(
+        self, workspace: Workspace, mocker: MockerFixture, state: str
+    ) -> None:
+        if state == "removed":
+            workspace = workspace.replace(config=workspace.config.replace(entries=()))
+        elif state == "reassigned":
+            entry = workspace.config.entries[0].replace(dependency=DependencyName("formatting"))
+            workspace = workspace.replace(config=workspace.config.replace(entries=(entry,)))
+        elif state == "missing_lockfile":
+            workspace = workspace.replace(lockfile=None)
+        before = workspace.model_dump()
+        mocker.patch.object(Path, "resolve", side_effect=AssertionError("unexpected filesystem access"))
+
+        result = workspace.validate_no_reassigned_baselines(DependencyName("ci"))
+
+        assert result.is_ok() == (state != "reassigned")
+        assert workspace.model_dump() == before
+        if state == "reassigned":
+            problem = result.unwrap_err()[0]
+            assert isinstance(problem, errors.BaselineMismatch)
+            assert problem.dependency == "formatting"
+            assert problem.destination == "@/installed"
+            assert problem.path == workspace.lockfile_path
+
+
 class TestValidateNoMissingBaselines:
     def test_accepts_matching_baselines_and_ignores_other_dependencies(self, workspace: Workspace) -> None:
         entry = Entry.model_validate(

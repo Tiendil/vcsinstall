@@ -16,6 +16,7 @@ from llm_tool_cli.core import errors as core_errors
 from llm_tool_cli.core import settings
 from llm_tool_cli.core.entities import ExitCode
 from llm_tool_cli.core.result import Err, Ok, Result
+from llm_tool_cli.protocol.tests.helpers import cell_payloads
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
@@ -23,8 +24,9 @@ from vcsinstall.cache import CacheRootPath, active_cache_root
 from vcsinstall.cache import errors as cache_errors
 from vcsinstall.cli import application
 from vcsinstall.cli.commands import dependency
-from vcsinstall.cli.commands.tests.helpers import declare_entry, invoke_add
+from vcsinstall.cli.commands.tests.helpers import declare_entry, invoke_add, invoke_dependency_remove
 from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SourceRevision, VcsId
+from vcsinstall.filesystem import errors as filesystem_errors
 from vcsinstall.filesystem import hashes
 from vcsinstall.hosting import HostingAdapter
 from vcsinstall.sources import DEFAULT_ADAPTERS, SourceAdapter
@@ -928,6 +930,7 @@ class TestAddDependency:
 
         assert code == 3, output
         assert before == (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes())
+
         assert (installed / "a").read_bytes() == local_a
         assert not (installed / "new").exists()
         if local_change == "added":
@@ -1458,3 +1461,361 @@ class TestAddDependency:
         assert records[1]["code"] == filesystem_errors.AccessFailed.model_fields["code"].default
         assert records[1]["path"] == str(tmp_path / "b")
         assert before == (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes())
+
+
+@pytest.mark.usefixtures("isolated_settings")
+class TestRemoveDependency:
+    @pytest.fixture(autouse=True)
+    def initialize(self, isolated_settings: None) -> None:
+        settings.initialize(
+            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
+        )
+
+    @pytest.fixture
+    def config(self, tmp_path: Path) -> Path:
+        project = tmp_path / "project"
+        project.mkdir()
+        config = project / "custom.toml"
+        definition = {
+            "vcs": "git",
+            "repository": "https://example.test/shared.git",
+            "selector": {"kind": "branch", "value": "main"},
+        }
+        config.write_text(
+            tomli_w.dumps({"version": 1, "dependencies": dict.fromkeys(("ci", "formatting"), definition)})
+        )
+        config.with_name("vcsinstall.lock").write_text(
+            tomli_w.dumps(
+                {
+                    "version": 1,
+                    "dependencies": {
+                        name: {**definition, "revision": revision * 40}
+                        for name, revision in (("ci", "1"), ("formatting", "2"))
+                    },
+                }
+            )
+        )
+        (project / "unmanaged").write_bytes(b"local content")
+        return config
+
+    def test_removes_only_the_named_dependency_and_reports_its_prior_definition(self, config: Path) -> None:
+        lockfile = config.with_name("vcsinstall.lock")
+        declarations = tomllib.loads(config.read_text())
+        recorded = tomllib.loads(lockfile.read_text())
+
+        code, records, output = invoke_dependency_remove(config, "ci")
+
+        assert code == 0, output
+        assert cell_payloads(records) == [
+            {
+                "content": None,
+                "type": "dependency",
+                "operation": "dependency remove",
+                "dependency": "ci",
+                "vcs": "git",
+                "repository": "https://example.test/shared.git",
+                "ref_kind": "branch",
+                "ref": "main",
+                "revision": "1" * 40,
+                "outcome": "removed",
+            }
+        ]
+        assert tomllib.loads(config.read_text()) == {
+            **declarations,
+            "dependencies": {"formatting": declarations["dependencies"]["formatting"]},
+            "entries": [],
+        }
+        assert tomllib.loads(lockfile.read_text()) == {
+            **recorded,
+            "dependencies": {"formatting": recorded["dependencies"]["formatting"]},
+            "entries": [],
+        }
+        assert (config.parent / "unmanaged").read_bytes() == b"local content"
+        assert not project_config.is_set()
+        assert not active_workspace.is_set()
+        assert not active_cache_root.is_set()
+
+    @pytest.mark.parametrize("state", ["absent", "empty", "missing_dependency"])
+    def test_missing_lock_state_allows_removal_without_creating_or_rewriting_a_lock(
+        self, config: Path, state: str
+    ) -> None:
+        lockfile = config.with_name("vcsinstall.lock")
+        if state == "absent":
+            lockfile.unlink()
+        elif state == "empty":
+            lockfile.write_text("version = 1\n# Preserve these bytes.\n")
+        else:
+            recorded = tomllib.loads(lockfile.read_text())
+            del recorded["dependencies"]["ci"]
+            lockfile.write_text(tomli_w.dumps(recorded) + "# Preserve these bytes.\n")
+        before = lockfile.read_bytes() if lockfile.exists() else None
+
+        code, records, output = invoke_dependency_remove(config, "ci")
+
+        assert code == 0, output
+        assert records[0]["revision"] is None
+        assert records[0]["ref_kind"] == "branch"
+        assert (lockfile.read_bytes() if lockfile.exists() else None) == before
+        assert "ci" not in tomllib.loads(config.read_text())["dependencies"]
+
+    @pytest.mark.parametrize("mismatch", ["repository", "selector", "backend"])
+    def test_discards_a_stale_lock_without_reporting_its_revision(self, config: Path, mismatch: str) -> None:
+        lockfile = config.with_name("vcsinstall.lock")
+        recorded = tomllib.loads(lockfile.read_text())
+        if mismatch == "repository":
+            recorded["dependencies"]["ci"]["repository"] = "https://example.test/old.git"
+        elif mismatch == "selector":
+            recorded["dependencies"]["ci"]["selector"] = {"kind": "tag", "value": "main"}
+        else:
+            recorded["dependencies"]["ci"] = {
+                "vcs": "filesystem",
+                "repository": "../old-source",
+                "revision": "sha256:" + "1" * 64,
+            }
+        lockfile.write_text(tomli_w.dumps(recorded))
+
+        code, records, output = invoke_dependency_remove(config, "ci")
+
+        assert code == 0, output
+        assert records[0]["revision"] is None
+        assert records[0]["vcs"] == "git"
+        assert records[0]["repository"] == "https://example.test/shared.git"
+        assert records[0]["ref_kind"] == "branch" and records[0]["ref"] == "main"
+        assert "ci" not in tomllib.loads(lockfile.read_text())["dependencies"]
+
+    @pytest.mark.parametrize("matching", [False, True])
+    def test_omitted_git_selector_reuses_only_a_matching_branch_lock(self, config: Path, matching: bool) -> None:
+        declarations = tomllib.loads(config.read_text())
+        del declarations["dependencies"]["ci"]["selector"]
+        config.write_text(tomli_w.dumps(declarations))
+        if not matching:
+            lockfile = config.with_name("vcsinstall.lock")
+            recorded = tomllib.loads(lockfile.read_text())
+            recorded["dependencies"]["ci"]["selector"]["kind"] = "tag"
+            lockfile.write_text(tomli_w.dumps(recorded))
+
+        code, records, output = invoke_dependency_remove(config, "ci")
+
+        assert code == 0, output
+        assert records[0]["ref_kind"] == ("branch" if matching else "default")
+        assert records[0]["ref"] == ("main" if matching else None)
+        assert records[0]["revision"] == ("1" * 40 if matching else None)
+
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_normalizes_local_repository_identity_against_the_selected_project(
+        self, config: Path, mocker: MockerFixture, locked: bool
+    ) -> None:
+        declarations = tomllib.loads(config.read_text())
+        declarations["dependencies"]["ci"] = {"vcs": "filesystem", "repository": "../unavailable-source"}
+        config.write_text(tomli_w.dumps(declarations))
+        lockfile = config.with_name("vcsinstall.lock")
+        recorded = tomllib.loads(lockfile.read_text())
+        repository = config.parent.parent / "unavailable-source"
+        recorded["dependencies"].pop("ci")
+        if locked:
+            recorded["dependencies"]["ci"] = {
+                "vcs": "filesystem",
+                "repository": str(repository),
+                "revision": "sha256:" + "3" * 64,
+            }
+        lockfile.write_text(tomli_w.dumps(recorded))
+        invocation = config.parent / "nested"
+        invocation.mkdir()
+        mocker.patch.object(Path, "cwd", return_value=invocation)
+
+        code, records, output = invoke_dependency_remove(config, "ci")
+
+        assert code == 0, output
+        assert records[0]["repository"] == str(repository)
+        assert records[0]["ref_kind"] == "default" and records[0]["ref"] is None
+        assert records[0]["revision"] == ("sha256:" + "3" * 64 if locked else None)
+        assert not repository.exists()
+
+    def test_refuses_all_declared_entries_even_when_their_content_or_baselines_are_missing(self, config: Path) -> None:
+        declarations = tomllib.loads(config.read_text())
+        declarations["entries"] = [
+            {"dependency": "ci", "source_path": "@/guide", "destination": path}
+            for path in ("@/z-missing", "@/a-local")
+        ]
+        config.write_text(tomli_w.dumps(declarations))
+        (config.parent / "a-local").write_bytes(b"local changes")
+        lockfile = config.with_name("vcsinstall.lock")
+        before = config.read_bytes(), lockfile.read_bytes()
+
+        code, records, output = invoke_dependency_remove(config, "ci")
+
+        assert code == 1, output
+        assert len(records) == 1 and records[0]["code"] == InvalidArguments.model_fields["code"].default
+        assert "ci" in output and "@/a-local, @/z-missing" in output
+        assert "Remove or reassign" in output
+        assert (config.read_bytes(), lockfile.read_bytes()) == before
+        assert (config.parent / "a-local").read_bytes() == b"local changes"
+
+    def test_removes_obsolete_baselines_without_touching_files_or_unrelated_records(self, config: Path) -> None:
+        declare_entry(config, source="@/guide", destination="@/obsolete", files=b"old")
+        declarations = tomllib.loads(config.read_text())
+        declarations["entries"] = [
+            {"dependency": "formatting", "source_path": "@/guide", "destination": "@/unselected"}
+        ]
+        config.write_text(tomli_w.dumps(declarations))
+        lockfile = config.with_name("vcsinstall.lock")
+        recorded = tomllib.loads(lockfile.read_text())
+        unselected = {**recorded["entries"][0], "dependency": "formatting", "destination": "@/unselected"}
+        recorded["entries"].append(unselected)
+        lockfile.write_text(tomli_w.dumps(recorded))
+        (config.parent / "obsolete").write_bytes(b"locally modified old installation")
+        (config.parent / "unselected").write_bytes(b"unselected local changes")
+
+        code, records, output = invoke_dependency_remove(config, "ci")
+
+        assert code == 0, output
+        assert len(records) == 1
+        assert tomllib.loads(config.read_text())["entries"] == declarations["entries"]
+        assert tomllib.loads(lockfile.read_text())["entries"] == [unselected]
+        assert (config.parent / "obsolete").read_bytes() == b"locally modified old installation"
+        assert (config.parent / "unselected").read_bytes() == b"unselected local changes"
+
+    def test_preserves_a_baseline_still_protecting_a_reassigned_entry(self, config: Path) -> None:
+        declare_entry(config, source="@/guide", destination="@/installed", files=b"old")
+        declarations = tomllib.loads(config.read_text())
+        declarations["entries"][0]["dependency"] = "formatting"
+        config.write_text(tomli_w.dumps(declarations))
+        lockfile = config.with_name("vcsinstall.lock")
+        before = config.read_bytes(), lockfile.read_bytes()
+
+        code, records, output = invoke_dependency_remove(config, "ci")
+
+        assert code == 3, output
+        assert records[0]["code"] == workspace_errors.BaselineMismatch.model_fields["code"].default
+        assert records[0]["destination"] == "@/installed"
+        assert records[0]["dependency"] == "formatting"
+        assert (config.read_bytes(), lockfile.read_bytes()) == before
+
+    def test_last_dependency_leaves_valid_empty_project_files(self, config: Path) -> None:
+        assert invoke_dependency_remove(config, "ci")[0] == 0
+
+        code, records, output = invoke_dependency_remove(config, "formatting")
+
+        assert code == 0, output
+        assert records[0]["dependency"] == "formatting"
+        for path in (config, config.with_name("vcsinstall.lock")):
+            assert tomllib.loads(path.read_text()) == {"version": 1, "dependencies": {}, "entries": []}
+
+    def test_unknown_name_preserves_project_files(self, config: Path) -> None:
+        lockfile = config.with_name("vcsinstall.lock")
+        before = config.read_bytes(), lockfile.read_bytes()
+
+        code, records, output = invoke_dependency_remove(config, "unknown")
+
+        assert code == 1, output
+        assert records[0]["code"] == InvalidArguments.model_fields["code"].default
+        assert "unknown" in output
+        assert (config.read_bytes(), lockfile.read_bytes()) == before
+
+    @pytest.mark.parametrize(
+        "arguments", [[], ["ci", "formatting"], ["--force", "ci"], ["--keep-files", "ci"], ["Bad"], ["ci/name"]]
+    )
+    def test_invalid_command_shape_precedes_project_loading(self, tmp_path: Path, arguments: list[str]) -> None:
+        config = tmp_path / "missing.toml"
+
+        result = CliRunner().invoke(application.app, ["--config", str(config), "dependency", "remove", *arguments])
+
+        assert result.exit_code == 2, result.output
+        assert not config.exists()
+
+    @pytest.mark.parametrize("filename", ["custom.toml", "vcsinstall.lock"])
+    @pytest.mark.parametrize("content", ["invalid[", "version = 2\n"])
+    def test_invalid_existing_metadata_is_never_bypassed(self, config: Path, filename: str, content: str) -> None:
+        (config.parent / filename).write_text(content)
+        lockfile = config.with_name("vcsinstall.lock")
+        before = config.read_bytes(), lockfile.read_bytes()
+
+        code, records, output = invoke_dependency_remove(config, "ci")
+
+        assert code == 2, output
+        assert len(records) == 1 and records[0]["type"] == "error"
+        assert records[0]["path"] == str(config.parent / filename)
+        assert (config.read_bytes(), lockfile.read_bytes()) == before
+
+    def test_source_content_and_cache_access_are_unused(self, config: Path, mocker: MockerFixture) -> None:
+        for name in (
+            "vcsinstall.cli.commands.dependency.resolve_cache_root",
+            "vcsinstall.cli.commands.dependency.get_hosting",
+            "vcsinstall.vcs_clients.GitClient.run",
+            "vcsinstall.cache.paths.user_cache_path",
+            "vcsinstall.filesystem.FSClient.inspect_tree",
+            "vcsinstall.filesystem.FSClient.remove",
+        ):
+            mocker.patch(name, side_effect=AssertionError("unexpected source, content, or cache access"))
+        cache = config.parent / "cache"
+        cache.mkdir()
+        cached_repository = cache / "repository"
+        cached_repository.write_bytes(b"retained cache")
+
+        result = CliRunner().invoke(
+            application.app,
+            ["--config", str(config), "--cache-dir", str(config / "invalid-cache"), "dependency", "remove", "ci"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert cached_repository.read_bytes() == b"retained cache"
+
+    @pytest.mark.parametrize("failed_file", ["custom.toml", "vcsinstall.lock"])
+    def test_write_failures_report_the_path_and_completed_effects(
+        self, config: Path, mocker: MockerFixture, failed_file: str
+    ) -> None:
+        original = Path.write_bytes
+        failure = config.parent / failed_file
+        lockfile = config.with_name("vcsinstall.lock")
+        before = config.read_bytes(), lockfile.read_bytes()
+
+        def write(path: Path, data: bytes) -> int:
+            if path == failure:
+                raise PermissionError("project write denied")
+            return original(path, data)
+
+        mocker.patch.object(Path, "write_bytes", autospec=True, side_effect=write)
+
+        code, records, output = invoke_dependency_remove(config, "ci")
+
+        assert code == 3, output
+        assert len(records) == 1
+        assert records[0]["code"] == filesystem_errors.AccessFailed.model_fields["code"].default
+        assert records[0]["path"] == str(failure)
+        assert "completed project writes" in output
+        assert lockfile.read_bytes() == before[1]
+        assert (config.read_bytes() == before[0]) == (failed_file == "custom.toml")
+        assert (config.parent / "unmanaged").read_bytes() == b"local content"
+        assert not active_workspace.is_set()
+
+    @pytest.mark.parametrize("protocol", ["human", "llm", "automation"])
+    def test_success_and_expected_failure_use_shared_protocol(self, config: Path, protocol: str) -> None:
+        arguments = ["-p", protocol, "--config", str(config), "dependency", "remove", "ci"]
+
+        success = CliRunner().invoke(application.app, arguments)
+        unknown = CliRunner().invoke(application.app, arguments)
+
+        assert success.exit_code == 0, success.output
+        assert unknown.exit_code == 1, unknown.output
+        assert not success.stderr and not unknown.stderr
+        assert "ci" in success.stdout
+        if protocol == "llm":
+            assert "--VCSINSTALL-CELL " in success.stdout
+            assert "--VCSINSTALL-CELL " in unknown.stdout
+        elif protocol == "automation":
+            assert json.loads(success.stdout)["operation"] == "dependency remove"
+            assert json.loads(unknown.stdout)["type"] == "error"
+
+    @pytest.mark.parametrize("help_option", ["--help", "-h"])
+    def test_help_requires_no_project_or_external_access(
+        self, config: Path, mocker: MockerFixture, help_option: str
+    ) -> None:
+        load = mocker.patch.object(dependency, "load_workspace", side_effect=AssertionError("unexpected loading"))
+
+        result = CliRunner().invoke(
+            application.app, ["--config", str(config / "invalid"), "dependency", "remove", help_option]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "NAME" in result.stdout
+        load.assert_not_called()

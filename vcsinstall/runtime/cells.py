@@ -5,7 +5,7 @@ from llm_tool_cli.protocol.logic_cells.base import LogicCell
 from llm_tool_cli.protocol.logic_cells.uniform import UniformCell
 from llm_tool_cli.protocol.output_cells.base import OutputCell
 
-from vcsinstall.domain import DependencyName, SourcePath, SourceRevision
+from vcsinstall.domain import Dependency, DependencyName, SourcePath, SourceRevision
 from vcsinstall.runtime.entities import EntryPlan
 from vcsinstall.sources import ResolvedSource
 from vcsinstall.workspace import Entry
@@ -29,6 +29,7 @@ class RefKind(StrEnum):
 
 class Operation(StrEnum):
     dependency_add = "dependency add"
+    dependency_remove = "dependency remove"
     add = "add"
     remove = "remove"
 
@@ -53,13 +54,14 @@ class RemovalCell(UniformCell):
 class DependencyCell(UniformCell):
     operation: Operation = Operation.dependency_add
     dependency: DependencyName
-    source: ResolvedSource
+    definition: Dependency
+    revision: SourceRevision | None
     outcome: Outcome
     previous_revision: SourceRevision | None = None
     redefinition: bool = False
 
     def _render(self, cell_type: type[OutputCell]) -> OutputCell:
-        definition = self.source.dependency
+        definition = self.definition
         selector = definition.selector
         meta = dict(
             operation=self.operation,
@@ -68,7 +70,7 @@ class DependencyCell(UniformCell):
             repository=definition.repository,
             ref_kind=RefKind(selector.kind.value) if selector is not None else RefKind.default,
             ref=selector.value if selector is not None else None,
-            revision=self.source.revision,
+            revision=self.revision,
             outcome=self.outcome,
         )
         if self.redefinition:
@@ -100,7 +102,8 @@ def entry_add_cell(entry: Entry, resolved: ResolvedSource, *, unchanged: bool) -
     return InstallationCell(
         operation=Operation.add,
         dependency=entry.dependency,
-        source=resolved,
+        definition=resolved.dependency,
+        revision=resolved.revision,
         outcome=Outcome.unchanged if unchanged else Outcome.installed,
         destination=entry.destination,
         source_path=entry.source_path,
@@ -121,7 +124,8 @@ def dependency_add_cells(  # noqa: CFQ002 — Explicit revision and redefinition
     cells: list[LogicCell] = [
         DependencyCell(
             dependency=name,
-            source=resolved,
+            definition=resolved.dependency,
+            revision=resolved.revision,
             outcome=outcome,
             previous_revision=previous_revision,
             redefinition=redefinition,
@@ -130,7 +134,8 @@ def dependency_add_cells(  # noqa: CFQ002 — Explicit revision and redefinition
     cells.extend(
         InstallationCell(
             dependency=name,
-            source=resolved,
+            definition=resolved.dependency,
+            revision=resolved.revision,
             outcome=(
                 Outcome.unchanged
                 if not plan.changed and previous_revision is not None and previous_revision == resolved.revision
