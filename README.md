@@ -2,7 +2,7 @@
 
 `vcsinstall` is being developed to install files into a target repository from source repositories, record their origins in a lockfile, and push local changes back to their source.
 
-**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `dependency list` reports dependencies and local entry statistics, `dependency remove` removes unused dependencies, `add` installs file and directory entries at their locked revisions, and `remove` removes entries with local-change protection or retains their files as unmanaged content. Help, version output, and built-in usage documentation are available. Other dependency commands, general installation, and push back are planned.
+**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `dependency list` reports dependencies and local entry statistics, `dependency outdated` checks source revisions, `dependency remove` removes unused dependencies, `add` installs file and directory entries at their locked revisions, and `remove` removes entries with local-change protection or retains their files as unmanaged content. Help, version output, and built-in usage documentation are available. Other dependency commands, general installation, and push back are planned.
 
 ## Example
 
@@ -22,6 +22,7 @@ Available today:
 - **Project configuration** — create a starter with `init`, discover or explicitly select configuration, and validate configuration and existing lock state.
 - **Dependency locking** — add Git or filesystem sources, select branches, tags, or immutable revisions, and explicitly redefine dependencies while protecting local edits.
 - **Dependency inspection** — list declared sources, effective selectors, locked revisions, and counts of modified, missing, and unlocked entries without source or cache access.
+- **Source freshness** — check all or named dependencies for differing locked and current revisions without changing project files or installed content.
 - **Dependency removal** — remove unused dependency declarations, revision locks, and obsolete baselines while preserving installed files.
 - **Entry installation** — install files or complete directories from a dependency's locked revision, rename destinations, and explicitly redefine entries with local-change protection.
 - **Entry removal** — remove selected entries and verified content, explicitly discard local changes with `--force`, or retain files with `--keep-files`.
@@ -150,6 +151,15 @@ vcsinstall -p automation dependency list
 ```
 
 Each dependency reports its repository, effective selector, matching locked revision, and `entries`, `modified`, `missing`, and `unlocked` counts. File and directory mappings each count as one entry. Dependencies without entries report zero counts. Missing or mismatching lock state produces a null revision and unlocked entries; malformed state fails. Listing preserves project files and installed content, requires no source access, VCS client, or cache, and does not check upstream freshness.
+
+Check whether configured source versions have moved:
+
+```bash
+vcsinstall dependency outdated
+vcsinstall dependency outdated ci formatting
+```
+
+The command checks all dependencies or the named selection, including dependencies without entries. It requires matching revision locks before accessing sources, refreshes branch and tag observations, and compares complete revisions. Immutable pins keep selecting their pinned revision; filesystem sources track their complete live fingerprint. Only outdated dependencies produce records, with `revision` and `current_revision`; finding changes still exits successfully. The check preserves configuration, lockfile bytes, and installed files, and does not verify local changes or promise that an update will succeed. It resolves the global cache location and may populate or refresh Git cache data.
 
 ## Specifications
 

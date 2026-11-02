@@ -40,6 +40,15 @@ DependencyNameArgument = Annotated[
     ),
 ]
 
+DependencyNamesArgument = Annotated[
+    list[DependencyName] | None,
+    typer.Argument(
+        metavar="NAME...",
+        parser=_parse_dependency_name,
+        help="Dependency names; omit to check every declared dependency.",
+    ),
+]
+
 RepositoryArgument = Annotated[
     RepositoryLocator,
     typer.Argument(

@@ -14,6 +14,8 @@ from vcsinstall.domain import (
     Dependency,
     DependencyName,
     SourcePath,
+    SourceRevision,
+    VcsId,
 )
 from vcsinstall.filesystem import (
     ContentTree,
@@ -25,6 +27,7 @@ from vcsinstall.runtime import errors
 from vcsinstall.runtime.cells import (
     DependencyCell,
     DependencyListCell,
+    DependencyOutdatedCell,
     Operation,
     Outcome,
     RemovalCell,
@@ -395,6 +398,65 @@ def dependency_list() -> Result[None]:
         _dependency_list_cell(workspace, name, filesystem=filesystem).unwrap()
         for name in sorted(workspace.config.dependencies)
     ]
+    output.get().emit(cells).unwrap()
+    return Ok(None)
+
+
+@unwrap_to_error
+def _dependency_current_revision(
+    locked: DependencyLock,
+    *,
+    source: SourceAdapter,
+    hosting_for: Callable[[VcsId], Result[HostingAdapter]],
+) -> Result[SourceRevision]:
+    definition = Dependency.model_validate(locked.model_dump(exclude={"revision"}))
+    source.validate_input(definition).unwrap()
+    hosting = hosting_for(definition.vcs).unwrap()
+    with hosting.acquire(definition) as acquired:
+        resolved = source.resolve(definition, acquired.unwrap()).unwrap()
+        return Ok(resolved.revision)
+
+
+@unwrap_to_error
+def dependency_outdated(
+    names: tuple[DependencyName, ...] = (),
+    *,
+    source_for: Callable[[VcsId], SourceAdapter],
+    hosting_for: Callable[[VcsId], Result[HostingAdapter]],
+) -> Result[None]:
+    """Compare selected matching dependency locks with current source revisions without project writes."""
+    workspace = active_workspace.get()
+    selected = sorted(set(names) if names else workspace.config.dependencies)
+    unknown = [name for name in selected if name not in workspace.config.dependencies]
+    if unknown:
+        return Err([InvalidArguments(reason=f"Unknown dependency {name!r}.") for name in unknown])
+
+    sources = {name: source_for(workspace.config.dependencies[name].vcs) for name in selected}
+    locks = {
+        name: (
+            _prepare_dependency_lock(workspace, name, source=sources[name])
+            .map_err(lambda problems: [errors.DependencyCheckFailed(dependency=name), *problems])
+            .unwrap()
+        )
+        for name in selected
+    }
+
+    cells: list[LogicCell] = []
+    for name, locked in locks.items():
+        current_revision = (
+            _dependency_current_revision(locked, source=sources[name], hosting_for=hosting_for)
+            .map_err(lambda problems: [errors.DependencyCheckFailed(dependency=name), *problems])
+            .unwrap()
+        )
+        if current_revision != locked.revision:
+            cells.append(
+                DependencyOutdatedCell(
+                    dependency=name,
+                    definition=Dependency.model_validate(locked.model_dump(exclude={"revision"})),
+                    revision=locked.revision,
+                    current_revision=current_revision,
+                )
+            )
     output.get().emit(cells).unwrap()
     return Ok(None)
 

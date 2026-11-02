@@ -70,6 +70,13 @@ class OutdatedDependency(EnvironmentError):
         return f"{self.selector.kind} {self.selector.value!r}" if self.selector else "default selector"
 
 
+class DependencyCheckFailed(EnvironmentError):
+    code: str = "dependency_check_failed"
+    message: str = "Cannot check the current revision of dependency {error.dependency!r}."
+    ways_to_fix: list[str] = ["Resolve the accompanying source-access or revision-resolution diagnostics and retry."]
+    dependency: DependencyName
+
+
 class SourcePathAbsent(EnvironmentError):
     code: str = "source_path_absent"
     message: str = "Dependency {error.dependency!r} has no source path {error.source_path} at {error.revision}."

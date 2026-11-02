@@ -30,6 +30,7 @@ class RefKind(StrEnum):
 class Operation(StrEnum):
     dependency_add = "dependency add"
     dependency_list = "dependency list"
+    dependency_outdated = "dependency outdated"
     dependency_remove = "dependency remove"
     add = "add"
     remove = "remove"
@@ -97,6 +98,16 @@ class DependencyListCell(DependencyCell):
             missing=self.missing,
             unlocked=self.unlocked,
         )
+
+
+class DependencyOutdatedCell(DependencyCell):
+    operation: Operation = Operation.dependency_outdated
+    revision: SourceRevision
+    current_revision: SourceRevision
+
+    def _render(self, cell_type: type[OutputCell]) -> OutputCell:
+        dependency = super()._render(cell_type)
+        return cell_type.build_meta("dependency", **dependency.meta, current_revision=self.current_revision)
 
 
 class InstallationCell(DependencyCell):

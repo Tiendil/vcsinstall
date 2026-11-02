@@ -1,6 +1,21 @@
 """Command-independent operation coordination."""
 
-from vcsinstall.runtime.commands import dependency_add, dependency_list, dependency_remove, entry_add, entry_remove
+from vcsinstall.runtime.commands import (
+    dependency_add,
+    dependency_list,
+    dependency_outdated,
+    dependency_remove,
+    entry_add,
+    entry_remove,
+)
 
-__all__ = ["dependency_add", "dependency_list", "dependency_remove", "entry_add", "entry_remove", "errors"]
+__all__ = [
+    "dependency_add",
+    "dependency_list",
+    "dependency_outdated",
+    "dependency_remove",
+    "entry_add",
+    "entry_remove",
+    "errors",
+]
 from vcsinstall.runtime import errors

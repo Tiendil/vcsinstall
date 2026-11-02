@@ -18,7 +18,15 @@ from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, Sou
 from vcsinstall.domain.tests import make
 from vcsinstall.filesystem import errors as filesystem_errors
 from vcsinstall.hosting import GitHostingAdapter
-from vcsinstall.runtime import dependency_add, dependency_list, dependency_remove, entry_add, entry_remove
+from vcsinstall.runtime import (
+    dependency_add,
+    dependency_list,
+    dependency_outdated,
+    dependency_remove,
+    entry_add,
+    entry_remove,
+)
+from vcsinstall.runtime import errors as runtime_errors
 from vcsinstall.runtime.commands import _prepare_dependency_lock
 from vcsinstall.runtime.tests.conftest import CollectingEmitter
 from vcsinstall.sources import ResolvedSource
@@ -462,6 +470,110 @@ class TestDependencyRemove:
 
 
 @pytest.mark.usefixtures("isolated_settings")
+class TestDependencyOutdated:
+    @pytest.fixture
+    def workspace(self, tmp_path: Path) -> Workspace:
+        definition = make.dependency(vcs="noop", repository="Fixture")
+        names = (DependencyName("z-last"), DependencyName("a-first"))
+        return Workspace(
+            config_path=ProjectConfigPath(tmp_path / "vcsinstall.toml"),
+            lockfile_path=LockfilePath(tmp_path / "vcsinstall.lock"),
+            config=Config(version=1, dependencies=dict.fromkeys((*names, DependencyName("unselected")), definition)),
+            lockfile=Lockfile(
+                version=1,
+                dependencies={
+                    name: DependencyLock(**definition.model_dump(), revision=SourceRevision("previous revision"))
+                    for name in names
+                },
+            ),
+        )
+
+    def test_independent_adapters_check_only_selected_dependencies_without_content_access(
+        self, workspace: Workspace, tmp_path: Path, emitter: CollectingEmitter, mocker: MockerFixture
+    ) -> None:
+        source = ControlledSource()
+        hosting = ControlledHosting(tmp_path / "fixture")
+        resolve = mocker.spy(source, "resolve")
+        inspect = mocker.spy(source, "inspect")
+        copy = mocker.spy(source, "copy_file")
+        before = workspace.model_dump()
+
+        with workspace.scope():
+            dependency_outdated(
+                (DependencyName("z-last"), DependencyName("a-first"), DependencyName("z-last")),
+                source_for=lambda vcs: source,
+                hosting_for=lambda vcs: Ok(hosting),
+            ).unwrap()
+
+        records = [cell.render_automation()[0].meta for cell in emitter.cells]
+        assert [record["dependency"] for record in records] == ["a-first", "z-last"]
+        assert all(record["revision"] == "previous revision" for record in records)
+        assert all(record["current_revision"] == "controlled revision" for record in records)
+        assert hosting.requests == [workspace.config.dependencies[DependencyName("a-first")]] * 2
+        assert hosting.revisions == [None, None]
+        assert resolve.call_count == 2
+        assert all(call.args[1] == hosting.path for call in resolve.call_args_list)
+        inspect.assert_not_called()
+        copy.assert_not_called()
+        assert workspace.model_dump() == before
+        assert not tuple(tmp_path.iterdir())
+
+    @pytest.mark.parametrize("stage", ["normalization", "validation", "hosting", "acquisition", "resolution"])
+    def test_failure_retains_source_errors_and_causes_with_dependency_context(
+        self, workspace: Workspace, tmp_path: Path, emitter: CollectingEmitter, mocker: MockerFixture, stage: str
+    ) -> None:
+        source = ControlledSource()
+        hosting = ControlledHosting(tmp_path / "fixture")
+        original = PermissionError("Permission denied")
+        problem = source_errors.RepositoryAccess(
+            vcs=VcsId.noop, repository=RepositoryLocator("Fixture"), reason="Permission denied"
+        ).with_cause(original)
+        problems: EnvironmentErrors = [problem, path_errors.PathResolutionFailed(path="Fixture", reason="unavailable")]
+
+        @contextmanager
+        def acquire(dependency: Dependency, *, revision: SourceRevision | None = None) -> Iterator[Result[Path]]:
+            yield Err(problems)
+
+        if stage == "normalization":
+            mocker.patch.object(source, "normalize_repository", return_value=Err(problems))
+        elif stage == "validation":
+            mocker.patch.object(source, "validate_input", return_value=Err(problems))
+        elif stage == "acquisition":
+            mocker.patch.object(hosting, "acquire", side_effect=acquire)
+        elif stage == "resolution":
+            mocker.patch.object(source, "resolve", return_value=Err(problems))
+
+        with workspace.scope():
+            result = dependency_outdated(
+                (DependencyName("a-first"),),
+                source_for=lambda vcs: source,
+                hosting_for=lambda vcs: Err(problems) if stage == "hosting" else Ok(hosting),
+            )
+
+        failures = result.unwrap_err()
+        assert isinstance(failures[0], runtime_errors.DependencyCheckFailed)
+        assert failures[0].dependency == "a-first"
+        assert failures[1:] == problems
+        assert failures[1].cause is original
+        assert not emitter.cells
+
+    def test_unknown_names_are_rejected_before_adapters_are_selected(
+        self, workspace: Workspace, emitter: CollectingEmitter, mocker: MockerFixture
+    ) -> None:
+        source_for = mocker.Mock(side_effect=AssertionError("Unexpected source selection"))
+        hosting_for = mocker.Mock(side_effect=AssertionError("Unexpected hosting selection"))
+
+        with workspace.scope():
+            result = dependency_outdated(
+                (DependencyName("a-first"), DependencyName("unknown")), source_for=source_for, hosting_for=hosting_for
+            )
+
+        assert result.is_err(InvalidArguments)
+        source_for.assert_not_called()
+        hosting_for.assert_not_called()
+        assert not emitter.cells
+
+
 class TestDependencyList:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:

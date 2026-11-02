@@ -1,7 +1,7 @@
 # `vcsinstall` Usage
 
 `vcsinstall` is being developed to install files into a repository from other repositories, with lockfile and push-back support.
-The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking, listing and removal, entry installation, and entry removal.
+The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking, listing, freshness checks and removal, entry installation, and entry removal.
 `dependency add` supports Git and ordinary filesystem sources, including protected replacement of existing dependency entries.
 Other dependency operations, general installation, and push-back commands are not implemented yet.
 
@@ -15,6 +15,7 @@ vcsinstall init
 vcsinstall dependency add ci 'git+https://example.com/team/shared.git#branch=main'
 vcsinstall add ci@/specs @/specs/shared
 vcsinstall dependency list
+vcsinstall dependency outdated
 vcsinstall remove @/specs/shared
 vcsinstall dependency remove ci
 ```
@@ -22,7 +23,7 @@ vcsinstall dependency remove ci
 `python -m vcsinstall` exposes the same CLI as the `vcsinstall` executable.
 The `skill` command defaults to the `usage` document.
 Help, version, and skill commands work without project configuration.
-Init creates configuration; dependency add, dependency list, dependency remove, add, and remove require existing valid configuration.
+Init creates configuration; dependency add, dependency list, dependency outdated, dependency remove, add, and remove require existing valid configuration.
 Dependency add resolves the selected revision, writes its declaration and lock, and creates no entry mappings.
 
 ## Adding dependencies
@@ -56,6 +57,24 @@ List reports every declared dependency, including those without entries, ordered
 The `entries` count includes each declared file or directory mapping once. `modified`, `missing`, and `unlocked` count entries whose existing files differ from their baseline, whose expected files are missing, or whose matching baseline is unavailable. Remaining entries are unmodified. Local additions and regular-file obstructions count as modifications; modifications take precedence over missing files. Empty directories do not affect comparison. An entry is locked when both its dependency revision lock and installation baseline match its declaration; otherwise it is unlocked. Malformed or unreadable state fails.
 
 The command accepts no arguments or command-specific options. It reads local content without changing project files, needs no source repository, network, VCS client, or repository cache, and ignores `--cache-dir`. It does not check upstream freshness. Automation emits metadata-only `dependency` records with operation `dependency list` and the four counts; it emits no installation records. An empty project succeeds without result records or creating a lockfile.
+
+## Checking source freshness
+
+```bash
+vcsinstall dependency outdated
+vcsinstall dependency outdated ci formatting
+vcsinstall -p automation dependency outdated ci
+```
+
+Without names, outdated checks every declared dependency, including those without entries. Names select exactly those dependencies; repeated names select each once. Unknown names fail as invalid arguments. There are no command-specific options.
+
+Every selected dependency must have a matching revision lock before any source fetching. Missing or mismatching locks require `install` or `dependency update NAME`; these commands are planned, so use `dependency add --redefine` where applicable in the current CLI. Unselected locks and installation baselines need not match. Installed files may be missing or modified without blocking this check.
+
+The command refreshes and resolves the effective branch, tag, or default selector, then compares its complete immutable revision with the lock. Moved tags, rewound branches, and new commits with identical content count as outdated. An omitted Git selector retains a matching lock's recorded branch even when the remote default changes. Revision pins keep selecting their pinned state and do not refresh merely to find newer commits. Required acquisition or resolution failures remain errors; stale cached references do not satisfy a failed refresh. Filesystem sources compare the complete live fingerprint, including changes outside installed entry paths; an unavailable pinned fingerprint fails.
+
+Success emits only metadata-only `dependency` records, ordered by name, with operation `dependency outdated`. Each includes source identity, effective selector, locked `revision`, and differing `current_revision`. It emits no entry counts or installation records and makes no promise that an update can succeed. Finding outdated dependencies exits successfully; an empty selection or no differences produces no result records.
+
+Configuration, lockfile bytes, and installed content remain unchanged. Put global `--cache-dir DIRECTORY` before `dependency` to select the cache root. The command resolves that root for every backend and may populate or refresh Git cache data; filesystem sources do not create cache data. Git source access requires the native Git client and its configured authentication.
 
 ## Removing dependencies
 

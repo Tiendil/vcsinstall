@@ -11,6 +11,7 @@ from vcsinstall.cache import active_cache_root, resolve_cache_root
 from vcsinstall.cli.entities import (
     BranchOption,
     DependencyNameArgument,
+    DependencyNamesArgument,
     RedefineOption,
     RepositoryArgument,
     RevisionOption,
@@ -19,7 +20,7 @@ from vcsinstall.cli.entities import (
 )
 from vcsinstall.domain import Dependency, RepositoryLocator, SelectorKind, VcsId, VersionSelector, urls
 from vcsinstall.hosting import GitHostingAdapter, HostingAdapter, get_hosting
-from vcsinstall.runtime import dependency_add, dependency_list, dependency_remove
+from vcsinstall.runtime import dependency_add, dependency_list, dependency_outdated, dependency_remove
 from vcsinstall.sources import (
     DEFAULT_ADAPTERS,
     DETECTION_ORDER,
@@ -164,3 +165,16 @@ def remove_dependency(context: typer.Context, name: DependencyNameArgument) -> N
         workspace = load_workspace(cwd=PathInput(Path.cwd()), path=command.config_input).unwrap()
         context.with_resource(workspace.scope())
         dependency_remove(name).unwrap()
+
+
+@app.command("outdated")
+def outdated_dependencies(context: typer.Context, names: DependencyNamesArgument = None) -> None:
+    """Report dependencies whose configured source version differs from their locked revision."""
+    with command_context(context) as command:
+        cwd = Path.cwd()
+        cache_input = context.find_root().params.get("cache_dir")
+        cache_root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
+        context.with_resource(active_cache_root.scope(cache_root))
+        workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
+        context.with_resource(workspace.scope())
+        dependency_outdated(tuple(names or ()), source_for=get_adapter, hosting_for=get_hosting).unwrap()

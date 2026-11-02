@@ -28,6 +28,7 @@ from vcsinstall.cli.commands.tests.helpers import (
     declare_entry,
     invoke_add,
     invoke_dependency_list,
+    invoke_dependency_outdated,
     invoke_dependency_remove,
 )
 from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SourceRevision, VcsId
@@ -39,7 +40,7 @@ from vcsinstall.sources import errors as source_errors
 from vcsinstall.sources import parse_repository
 from vcsinstall.sources.adapters.filesystem import FilesystemSourceAdapter
 from vcsinstall.sources.adapters.noop import NoopSourceAdapter
-from vcsinstall.vcs_clients import clone_mirror
+from vcsinstall.vcs_clients import GitClient, clone_mirror
 from vcsinstall.vcs_clients import errors as vcs_errors
 from vcsinstall.vcs_clients.tests.helpers import create_repository
 from vcsinstall.workspace import active_workspace
@@ -1884,6 +1885,337 @@ class TestListDependencies:
             assert all(json.loads(line)["content"] is None for line in result.stdout.splitlines())
         elif protocol == "llm":
             assert "--VCSINSTALL-CELL " in result.stdout
+
+
+@pytest.mark.usefixtures("isolated_settings")
+class TestOutdatedDependencies:
+    @pytest.fixture(autouse=True)
+    def initialize(self, isolated_settings: None) -> None:
+        settings.initialize(
+            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
+        )
+
+    @pytest.fixture
+    def config(self, tmp_path: Path) -> Path:
+        project = tmp_path / "project"
+        project.mkdir()
+        config = project / "custom.toml"
+        config.write_text("# Preserve this configuration.\nversion = 1\n")
+        return config
+
+    @pytest.fixture
+    def client(self, tmp_path: Path) -> GitClient:
+        return create_repository(tmp_path / "source")
+
+    @pytest.mark.parametrize("object_format", ["sha1", "sha256"])
+    @pytest.mark.parametrize("selector", ["branch", "tag", "annotated"])
+    def test_reports_moved_selectors_even_when_content_is_identical(  # noqa: CCR001 — Selector variants.
+        self, config: Path, tmp_path: Path, object_format: str, selector: str
+    ) -> None:
+        client = create_repository(tmp_path / "source", object_format=object_format)
+        if selector != "branch":
+            client.create_tag("release", message="Release" if selector == "annotated" else None).unwrap()
+        reference = "#branch=trunk" if selector == "branch" else "#tag=release"
+        cache = tmp_path / "cache"
+        code, added, output = invoke_add(config, cache, "ci", "git+" + client.path.as_uri() + reference)
+        assert code == 0, output
+        locked_revision = added[0]["revision"]
+        client.run(["commit", "--allow-empty", "-m", "New revision, same tree"]).unwrap()
+        current_revision = client.resolve_commit("HEAD").unwrap()
+        if selector != "branch":
+            client.run(["tag", "--force", "release"]).unwrap()
+        before = (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes())
+
+        for _ in range(2):
+            code, records, output = invoke_dependency_outdated(config, cache)
+
+            assert code == 0, output
+            assert cell_payloads(records) == [
+                {
+                    "type": "dependency",
+                    "content": None,
+                    "operation": "dependency outdated",
+                    "dependency": "ci",
+                    "vcs": "git",
+                    "repository": str(client.path),
+                    "ref_kind": "branch" if selector == "branch" else "tag",
+                    "ref": "trunk" if selector == "branch" else "release",
+                    "revision": locked_revision,
+                    "current_revision": current_revision,
+                }
+            ]
+            assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+            assert not project_config.is_set()
+            assert not active_workspace.is_set()
+            assert not active_cache_root.is_set()
+
+    @pytest.mark.parametrize("names", [[], ["z-last", "a-first", "z-last"]])
+    def test_selects_all_or_unique_named_dependencies_in_name_order(
+        self, config: Path, tmp_path: Path, client: GitClient, names: list[str]
+    ) -> None:
+        cache = tmp_path / "cache"
+        revision = client.resolve_commit("HEAD").unwrap()
+        for name in ("z-last", "a-first", "unselected"):
+            assert invoke_add(config, cache, name, str(client.path))[0] == 0
+        assert invoke_add(config, cache, "--rev", revision, "pinned", str(client.path))[0] == 0
+        (client.path / "guide.txt").write_bytes(b"changed")
+        client.commit("Advance branch", all_tracked=True).unwrap()
+
+        code, records, output = invoke_dependency_outdated(config, cache, *names)
+
+        assert code == 0, output
+        assert [record["dependency"] for record in records] == (
+            ["a-first", "z-last"] if names else ["a-first", "unselected", "z-last"]
+        )
+
+    def test_unchanged_selector_and_empty_project_emit_no_records(
+        self, config: Path, tmp_path: Path, client: GitClient
+    ) -> None:
+        cache = tmp_path / "cache"
+        assert invoke_dependency_outdated(config, cache)[:2] == (0, [])
+        assert not config.with_name("vcsinstall.lock").exists()
+        assert not cache.exists()
+        assert invoke_add(config, cache, "ci", str(client.path))[0] == 0
+
+        assert invoke_dependency_outdated(config, cache)[:2] == (0, [])
+
+    def test_revision_pin_uses_available_cache_without_refresh(
+        self, config: Path, tmp_path: Path, client: GitClient, mocker: MockerFixture
+    ) -> None:
+        cache = tmp_path / "cache"
+        revision = client.resolve_commit("HEAD").unwrap()
+        assert invoke_add(config, cache, "--rev", revision, "ci", str(client.path))[0] == 0
+        (client.path / "guide.txt").write_bytes(b"newer")
+        client.commit("Newer source revision", all_tracked=True).unwrap()
+        client.path.rename(tmp_path / "unavailable-source")
+        fetch = mocker.spy(GitClient, "fetch_references")
+        refresh_head = mocker.spy(GitClient, "refresh_remote_head")
+
+        code, records, output = invoke_dependency_outdated(config, cache)
+
+        assert code == 0, output
+        assert not records
+        fetch.assert_not_called()
+        refresh_head.assert_not_called()
+
+    @pytest.mark.parametrize("fresh_cache", [False, True])
+    def test_omitted_git_selector_keeps_recorded_branch_after_default_changes(
+        self, config: Path, tmp_path: Path, client: GitClient, fresh_cache: bool
+    ) -> None:
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", str(client.path))[0] == 0
+        declarations = tomllib.loads(config.read_text())
+        del declarations["dependencies"]["ci"]["selector"]
+        declarations["dependencies"]["ci"]["repository"] = "../source"
+        config.write_text(tomli_w.dumps(declarations))
+        client.create_branch("new-default").unwrap()
+        client.set_symbolic_reference("HEAD", "refs/heads/new-default").unwrap()
+        client.run(["commit", "--allow-empty", "-m", "New default branch revision"]).unwrap()
+        original = client.resolve_commit("trunk").unwrap()
+        client.set_symbolic_reference("HEAD", "refs/heads/trunk").unwrap()
+        client.run(["commit", "--allow-empty", "-m", "Tracked branch revision"]).unwrap()
+        current_revision = client.resolve_commit("trunk").unwrap()
+        client.set_symbolic_reference("HEAD", "refs/heads/new-default").unwrap()
+        before = (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes())
+
+        code, records, output = invoke_dependency_outdated(config, tmp_path / "fresh-cache" if fresh_cache else cache)
+
+        assert code == 0, output
+        assert len(records) == 1
+        assert records[0]["ref_kind"] == "branch"
+        assert records[0]["ref"] == "trunk"
+        assert records[0]["revision"] == original
+        assert records[0]["current_revision"] == current_revision
+        assert records[0]["repository"] == str(client.path)
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+
+    def test_branch_rewind_is_outdated(self, config: Path, tmp_path: Path, client: GitClient) -> None:
+        original = client.resolve_commit("HEAD").unwrap()
+        client.run(["commit", "--allow-empty", "-m", "Advance source"]).unwrap()
+        cache = tmp_path / "cache"
+        code, added, output = invoke_add(config, cache, "ci", str(client.path))
+        assert code == 0, output
+        client.run(["update-ref", "refs/heads/trunk", original]).unwrap()
+
+        code, records, output = invoke_dependency_outdated(config, cache)
+
+        assert code == 0, output
+        assert records[0]["revision"] == added[0]["revision"]
+        assert records[0]["current_revision"] == original
+
+    def test_filesystem_checks_complete_live_fingerprint_without_local_entry_inspection(
+        self, config: Path, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "guide.txt").write_bytes(b"original")
+        cache = tmp_path / "cache"
+        code, added, output = invoke_add(config, cache, "ci", source.as_uri())
+        assert code == 0, output
+        declare_entry(config, source="@/guide.txt", destination="@/installed", files=b"original")
+        declarations = tomllib.loads(config.read_text())
+        declarations["entries"].append({"dependency": "ci", "source_path": "@/missing", "destination": "@/unlocked"})
+        config.write_text(tomli_w.dumps(declarations))
+        installed = config.parent / "installed"
+        installed.write_bytes(b"local modifications")
+        (source / "uninstalled.txt").write_bytes(b"change outside installed entry")
+        before = (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes(), installed.read_bytes())
+        inspect = mocker.spy(FilesystemSourceAdapter, "inspect")
+        mocker.patch("vcsinstall.runtime.commands.FSClient", side_effect=AssertionError("Unexpected local inspection"))
+        mocker.patch("vcsinstall.vcs_clients.GitClient.run", side_effect=AssertionError("Unexpected Git access"))
+
+        code, records, output = invoke_dependency_outdated(config, cache)
+
+        assert code == 0, output
+        assert len(records) == 1
+        assert records[0]["revision"] == added[0]["revision"]
+        assert records[0]["current_revision"] != records[0]["revision"]
+        current_revision = records[0]["current_revision"]
+        assert isinstance(current_revision, str)
+        assert current_revision.startswith("sha256:")
+        assert records[0]["ref_kind"] == "default"
+        assert records[0]["ref"] is None
+        inspect.assert_not_called()
+        assert not cache.exists()
+        assert (
+            config.read_bytes(),
+            config.with_name("vcsinstall.lock").read_bytes(),
+            installed.read_bytes(),
+        ) == before
+
+    @pytest.mark.parametrize("state", ["missing-file", "missing-lock", "repository", "selector", "backend"])
+    def test_all_selected_locks_are_required_before_source_acquisition(  # noqa: CCR001 — Lock variants.
+        self, config: Path, tmp_path: Path, client: GitClient, mocker: MockerFixture, state: str
+    ) -> None:
+        cache = tmp_path / "cache"
+        for name in ("a-valid", "z-invalid"):
+            assert invoke_add(config, cache, name, str(client.path))[0] == 0
+        lockfile = config.with_name("vcsinstall.lock")
+        locks = tomllib.loads(lockfile.read_text())
+        if state == "missing-file":
+            lockfile.unlink()
+        elif state == "missing-lock":
+            del locks["dependencies"]["z-invalid"]
+            lockfile.write_text(tomli_w.dumps(locks))
+        else:
+            declarations = tomllib.loads(config.read_text())
+            definition = declarations["dependencies"]["z-invalid"]
+            if state == "repository":
+                definition["repository"] = str(tmp_path / "other-source")
+            elif state == "selector":
+                definition["selector"] = {"kind": "branch", "value": "other"}
+            else:
+                definition["vcs"] = "filesystem"
+                del definition["selector"]
+            config.write_text(tomli_w.dumps(declarations))
+        before = (config.read_bytes(), lockfile.read_bytes() if lockfile.exists() else None)
+        acquire = mocker.patch(
+            "vcsinstall.hosting.GitHostingAdapter.acquire", side_effect=AssertionError("Unexpected fetch")
+        )
+
+        code, records, output = invoke_dependency_outdated(config, cache)
+
+        assert code == ExitCode.environment_error, output
+        record = next(
+            record
+            for record in records
+            if record["code"] == workspace_errors.DependencyLockRequired.model_fields["code"].default
+        )
+        assert record["dependency"] == ("a-valid" if state == "missing-file" else "z-invalid")
+        assert record["path"] == str(lockfile)
+        diagnostic = record["content"]
+        assert isinstance(diagnostic, str)
+        assert "install" in diagnostic
+        assert "dependency update" in diagnostic
+        acquire.assert_not_called()
+        assert (config.read_bytes(), lockfile.read_bytes() if lockfile.exists() else None) == before
+
+    def test_unknown_name_fails_before_any_source_access(
+        self, config: Path, tmp_path: Path, mocker: MockerFixture
+    ) -> None:
+        acquire = mocker.patch(
+            "vcsinstall.cli.commands.dependency.get_hosting", side_effect=AssertionError("Unexpected fetch")
+        )
+
+        code, records, output = invoke_dependency_outdated(config, tmp_path / "cache", "unknown", "unknown")
+
+        assert code == ExitCode.invalid_arguments, output
+        assert len(records) == 1
+        assert records[0]["code"] == InvalidArguments.model_fields["code"].default
+        diagnostic = records[0]["content"]
+        assert isinstance(diagnostic, str)
+        assert "unknown" in diagnostic
+        acquire.assert_not_called()
+        assert not config.with_name("vcsinstall.lock").exists()
+
+    @pytest.mark.parametrize("failure", ["refresh", "branch", "tag"])
+    def test_source_failures_do_not_use_stale_references_or_emit_partial_success(
+        self, config: Path, tmp_path: Path, client: GitClient, failure: str
+    ) -> None:
+        cache = tmp_path / "cache"
+        client.create_tag("release").unwrap()
+        for name, reference in (("a-outdated", "#tag=release"), ("z-failure", "#branch=trunk")):
+            assert invoke_add(config, cache, name, "git+" + client.path.as_uri() + reference)[0] == 0
+        client.run(["commit", "--allow-empty", "-m", "Advance source"]).unwrap()
+        client.run(["tag", "--force", "release"]).unwrap()
+        if failure == "refresh":
+            client.path.rename(tmp_path / "unavailable-source")
+        elif failure == "branch":
+            client.create_branch("replacement").unwrap()
+            client.set_symbolic_reference("HEAD", "refs/heads/replacement").unwrap()
+            client.run(["update-ref", "-d", "refs/heads/trunk"]).unwrap()
+        else:
+            client.run(["tag", "--delete", "release"]).unwrap()
+        before = (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes())
+
+        code, records, output = invoke_dependency_outdated(config, cache)
+
+        assert code == ExitCode.environment_error, output
+        assert all(record["type"] == "error" for record in records)
+        assert records[0]["dependency"] == ("z-failure" if failure == "branch" else "a-outdated")
+        assert any(record["code"] == vcs_errors.CommandFailed.model_fields["code"].default for record in records)
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+        assert not active_cache_root.is_set()
+        assert not active_workspace.is_set()
+        assert not project_config.is_set()
+
+    @pytest.mark.parametrize("protocol", ["human", "llm", "automation"])
+    def test_protocols_preserve_both_revisions_on_stdout(
+        self, config: Path, tmp_path: Path, client: GitClient, protocol: str
+    ) -> None:
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "ci", str(client.path))[0] == 0
+        locked_revision = client.resolve_commit("HEAD").unwrap()
+        client.run(["commit", "--allow-empty", "-m", "Advance source"]).unwrap()
+        current_revision = client.resolve_commit("HEAD").unwrap()
+
+        result = CliRunner().invoke(
+            application.app,
+            ["-p", protocol, "--config", str(config), "--cache-dir", str(cache), "dependency", "outdated"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert not result.stderr
+        assert locked_revision in result.stdout
+        assert current_revision in result.stdout
+        if protocol == "llm":
+            assert "--VCSINSTALL-CELL " in result.stdout
+
+    @pytest.mark.parametrize("arguments", [["--force"], ["--rev", "abcd"], ["--protocol", "automation"], ["BadName"]])
+    def test_rejects_invalid_command_shape_without_project_loading(self, arguments: list[str]) -> None:
+        result = CliRunner().invoke(
+            application.app, ["--config", "/missing/config", "dependency", "outdated", *arguments]
+        )
+
+        assert result.exit_code != 0
+        assert "No such option" in result.output or "Invalid value" in result.output
+
+    def test_missing_configuration_retains_shared_diagnostic(self, tmp_path: Path) -> None:
+        code, records, output = invoke_dependency_outdated(tmp_path / "missing.toml", tmp_path / "cache")
+
+        assert code == ExitCode.configuration_error, output
+        assert records[0]["code"] == config_errors.Unreadable.model_fields["code"].default
+        assert not (tmp_path / "cache").exists()
 
 
 @pytest.mark.usefixtures("isolated_settings")
