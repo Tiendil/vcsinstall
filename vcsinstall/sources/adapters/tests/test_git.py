@@ -144,13 +144,21 @@ class TestGitSourceAdapter:
             .is_err(InvalidArguments)
         )
 
-    @pytest.mark.parametrize("kind,value", [("revision", "ABC123"), ("unresolved", "release")])
-    def test_validate_input__accepts_forms_that_cannot_be_persisted(self, kind: str, value: str) -> None:
+    @pytest.mark.parametrize(
+        "kind,value,problem_type",
+        [
+            ("revision", "ABC123", errors.InvalidGitRevision),
+            ("unresolved", "release", errors.UnsupportedGitSelector),
+        ],
+    )
+    def test_validate_input__accepts_forms_that_cannot_be_persisted(
+        self, kind: str, value: str, problem_type: type[errors.EnvironmentError]
+    ) -> None:
         adapter = GitSourceAdapter()
         dependency = make.dependency(selector=make.selector(kind, value))
 
         assert adapter.validate_input(dependency).is_ok()
-        assert adapter.validate_dependency(dependency).is_err()
+        assert adapter.validate_dependency(dependency).is_err(problem_type)
 
     def test_copy_file__rejects_invalid_revision(self, tmp_path: Path) -> None:
         source = tmp_path / "source"
@@ -166,7 +174,7 @@ class TestGitSourceAdapter:
             result = GitSourceAdapter().copy_file(resolved, SourcePath(ProjectPathId("@/guide.txt")), stream)
 
         problem = result.unwrap_err()[0]
-        assert isinstance(problem, errors.InvalidRevision)
+        assert isinstance(problem, errors.InvalidGitRevision)
         assert not destination.read_bytes()
 
     def test_copy_file__uses_literal_paths_at_the_selected_revision(self, tmp_path: Path) -> None:
@@ -295,7 +303,7 @@ class TestGitSourceAdapter:
             .unwrap_err()[0]
         )
 
-        assert isinstance(error, errors.InvalidRevision)
+        assert isinstance(error, errors.InvalidGitRevision)
         assert error.field == "rev"
         assert error.value == revision
 
@@ -322,7 +330,7 @@ class TestGitSourceAdapter:
         )
 
         error = result.unwrap_err()[0]
-        assert isinstance(error, errors.InvalidRevision)
+        assert isinstance(error, errors.InvalidGitRevision)
         assert error.field == "revision"
         assert error.value == revision
 

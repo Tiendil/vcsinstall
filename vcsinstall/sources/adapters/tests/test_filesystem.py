@@ -23,7 +23,7 @@ class TestFilesystemSourceAdapter:
         dependency = make.dependency(vcs="filesystem", selector=make.selector("unresolved", _REVISION))
 
         assert adapter.validate_input(dependency).is_ok()
-        assert adapter.validate_dependency(dependency).is_err()
+        assert adapter.validate_dependency(dependency).is_err(errors.UnsupportedFilesystemSelector)
 
     @pytest.mark.parametrize(
         "kind,value", [("unresolved", "invalid"), ("revision", "abc123"), ("branch", "main"), ("tag", "release")]
@@ -161,7 +161,7 @@ class TestFilesystemSourceAdapter:
             source.replace(revision=SourceRevision("invalid")), SourcePath(ProjectPathId("@/other")), output
         )
 
-        assert result.is_err(errors.InvalidRevision)
+        assert result.is_err(errors.InvalidFilesystemRevision)
         assert not output.getvalue()
 
     @pytest.mark.parametrize("fields", [{}, {"selector": {"kind": "revision", "value": _REVISION}}])
@@ -175,7 +175,7 @@ class TestFilesystemSourceAdapter:
         dependency = make.dependency(vcs="filesystem", selector=make.selector(field, "main"))
         error = FilesystemSourceAdapter().validate_dependency(dependency).unwrap_err()[0]
 
-        assert isinstance(error, errors.UnsupportedSelector)
+        assert isinstance(error, errors.UnsupportedFilesystemSelector)
         assert error.field == field
 
     @pytest.mark.parametrize("revision", ["a" * 64, "sha256:" + "A" * 64, "sha256:" + "a" * 63])
@@ -186,7 +186,7 @@ class TestFilesystemSourceAdapter:
             .unwrap_err()[0]
         )
 
-        assert isinstance(error, errors.InvalidRevision)
+        assert isinstance(error, errors.InvalidFilesystemRevision)
         assert error.field == "rev"
         assert error.value == revision
 
@@ -209,7 +209,7 @@ class TestFilesystemSourceAdapter:
         )
 
         error = result.unwrap_err()[0]
-        assert isinstance(error, errors.InvalidRevision)
+        assert isinstance(error, errors.InvalidFilesystemRevision)
         assert error.field == "revision"
 
     def test_validate_revision_lock__checks_declaration(self) -> None:
@@ -217,4 +217,4 @@ class TestFilesystemSourceAdapter:
             make.dependency(vcs="filesystem", selector=make.selector("tag", "v1")), _REVISION
         )
 
-        assert isinstance(result.unwrap_err()[0], errors.UnsupportedSelector)
+        assert isinstance(result.unwrap_err()[0], errors.UnsupportedFilesystemSelector)

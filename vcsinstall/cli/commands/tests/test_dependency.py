@@ -34,7 +34,7 @@ from vcsinstall.cli.commands.tests.helpers import (
     invoke_dependency_update,
     invoke_entry_add,
 )
-from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SourceRevision, VcsId
+from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SelectorValue, SourceRevision, VcsId
 from vcsinstall.filesystem import FSClient
 from vcsinstall.filesystem import errors as filesystem_errors
 from vcsinstall.filesystem import hashes
@@ -550,30 +550,56 @@ class TestAddDependency:
             assert option in result.stdout
 
     @pytest.mark.parametrize("filename", ["custom.toml", "vcsinstall.lock"])
-    def test_adapter_diagnostics_reach_cli(self, tmp_path: Path, filename: str) -> None:
+    @pytest.mark.parametrize("protocol", ["human", "llm", "automation"])
+    @pytest.mark.parametrize(
+        "vcs,source_problem",
+        [
+            ("git", source_errors.InvalidGitReference(field="branch", value=SelectorValue("bad..branch"))),
+            ("git", source_errors.InvalidGitRevision(field="rev", value="HEAD")),
+            ("filesystem", source_errors.InvalidFilesystemRevision(field="rev", value="bad-fingerprint")),
+        ],
+    )
+    def test_adapter_diagnostics_reach_cli(
+        self,
+        tmp_path: Path,
+        filename: str,
+        protocol: str,
+        vcs: str,
+        source_problem: source_errors.InvalidGitReference | source_errors.InvalidRevision,
+    ) -> None:
         config = tmp_path / "custom.toml"
         config.write_text("version = 1\n")
+        kind = "revision" if source_problem.field == "rev" else source_problem.field
         text = (
-            'version = 1\n[dependencies.ci]\nvcs = "git"\nrepository = "unused-source"\n'
-            'selector = { kind = "branch", value = "bad..branch" }\n'
+            f'version = 1\n[dependencies.ci]\nvcs = "{vcs}"\nrepository = "unused-source"\n'
+            f'selector = {{ kind = "{kind}", value = "{source_problem.value}" }}\n'
         )
         if filename.endswith("lock"):
             text += 'revision = "' + "1" * 40 + '"\n'
         (tmp_path / filename).write_text(text)
 
         result = CliRunner().invoke(
-            application.app, ["-p", "automation", "--config", str(config), "dependency", "add", "ci", "unused-source"]
+            application.app, ["-p", protocol, "--config", str(config), "dependency", "add", "ci", "unused-source"]
         )
 
         assert result.exit_code == 2
         assert not result.stderr
+        content = json.loads(result.stdout)["content"] if protocol == "automation" else result.stdout
+        for fix in source_problem.ways_to_fix:
+            assert fix.format(error=source_problem) in content
+        assert "dependencies.ci" in content
+        assert str(tmp_path / filename) in content
+        if protocol != "automation":
+            return
         record = json.loads(result.stdout)
         assert record["code"] == workspace_errors.DependencyValidation.model_fields["code"].default
         assert record["path"] == str(tmp_path / filename)
         assert record["dependency"] == "ci"
-        assert record["source_code"] == source_errors.InvalidGitReference.model_fields["code"].default
-        assert record["source_field"] == "branch"
-        assert record["source_value"] == "bad..branch"
+        assert record["source_code"] == source_problem.code
+        assert record["source_field"] == source_problem.field
+        assert record["source_value"] == source_problem.value
+        if isinstance(source_problem, source_errors.InvalidRevision):
+            assert record["source_vcs"] == vcs
 
     @pytest.fixture
     def config(self, tmp_path: Path) -> Path:

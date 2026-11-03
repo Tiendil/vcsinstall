@@ -22,6 +22,10 @@ class AccessFailed(EnvironmentError):
 class LockTimeout(AccessFailed):
     code: str = "cache_lock_timeout"
     reason: str = "Timed out after 10 seconds waiting for cache.lock."
+    ways_to_fix: list[str] = [
+        "Wait for the vcsinstall operation using this cache to finish, then retry.",
+        "Use --cache-dir DIRECTORY to select a separate cache if the other operation must continue.",
+    ]
 
 
 class CleanupFailed(AccessFailed):

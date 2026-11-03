@@ -92,6 +92,9 @@ class DependencyValidation(EnvironmentError):
     cli_exit_code: ClassVar[ExitCode] = ExitCode.configuration_error
     code: str = "dependency_validation_failed"
     message: str = "{error.path}: dependencies.{error.dependency}: {error.reason}"
+    ways_to_fix: list[str] = [
+        "Correct dependencies.{error.dependency} in {error.path}. {error.source_guidance}",
+    ]
     path: Path
     dependency: DependencyName
     problem: pydantic.SerializeAsAny[shared_errors.EnvironmentError]
@@ -99,6 +102,10 @@ class DependencyValidation(EnvironmentError):
     @property
     def reason(self) -> str:
         return self.problem.format_message()
+
+    @property
+    def source_guidance(self) -> str:
+        return " ".join(fix.format(error=self.problem) for fix in self.problem.ways_to_fix)
 
     def as_record(self) -> dict[str, object]:
         record = super().as_record()

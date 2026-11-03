@@ -32,7 +32,7 @@ def _validate_revision(value: str, *, field: str) -> Result[None]:
     'sha256:1234' and a bare 64-character digest fail.
     """
     if re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None:
-        return Err([errors.InvalidRevision(vcs=VcsId.filesystem, field=field, value=value)])
+        return Err([errors.InvalidFilesystemRevision(field=field, value=value)])
     return Ok(None)
 
 
@@ -167,7 +167,7 @@ class FilesystemSourceAdapter:
         if selector is None:
             return Ok(None)
         if selector.kind != SelectorKind.revision:
-            return Err([errors.UnsupportedSelector(vcs=VcsId.filesystem, field=selector.kind.value)])
+            return Err([errors.UnsupportedFilesystemSelector(field=selector.kind.value)])
         return _validate_revision(selector.value, field="rev")
 
     @unwrap_to_error

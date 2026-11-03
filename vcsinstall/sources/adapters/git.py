@@ -65,7 +65,7 @@ def _validate_revision(value: str, *, field: str) -> Result[None]:
     uppercase IDs fail. This does not check whether a commit exists.
     """
     if not is_git_object_id(value):
-        return Err([errors.InvalidRevision(vcs=VcsId.git, field=field, value=value)])
+        return Err([errors.InvalidGitRevision(field=field, value=value)])
     return Ok(None)
 
 
@@ -292,7 +292,7 @@ class GitSourceAdapter:
             case SelectorKind.branch | SelectorKind.tag:
                 return _validate_reference(selector.value, branch=selector.kind == SelectorKind.branch)
             case SelectorKind.unresolved:
-                return Err([errors.UnsupportedSelector(vcs=VcsId.git, field=selector.kind.value)])
+                return Err([errors.UnsupportedGitSelector(field=selector.kind.value)])
 
     @unwrap_to_error
     def validate_revision_lock(self, dependency: Dependency, revision: SourceRevision) -> Result[None]:

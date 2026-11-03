@@ -284,6 +284,11 @@ class TestLoadWorkspace:
         assert str(error.path) in error.format_message()
         assert "dependencies.ci" in error.format_message()
         assert error.problem.format_message() in error.format_message()
+        guidance = " ".join(fix.format(error=error) for fix in error.ways_to_fix)
+        assert str(error.path) in guidance
+        assert "dependencies.ci" in guidance
+        for fix in error.problem.ways_to_fix:
+            assert fix.format(error=error.problem) in guidance
         record = error.as_record()
         for key, value in error.problem.as_record().items():
             if key not in {"type", "message"}:
@@ -341,10 +346,13 @@ class TestLoadWorkspace:
         result = load_workspace(cwd=PathInput(tmp_path))
         assert result.is_err()
 
-    def test_adapter_error_retains_shared_data_and_private_cause(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("guidance", [[], ["Check {error.path}.", "Resolve {error.reason}."]])
+    def test_adapter_error_retains_shared_data_and_private_cause(self, tmp_path: Path, guidance: list[str]) -> None:
         (tmp_path / "vcsinstall.toml").write_text("version = 1\n" + _DEPENDENCY)
         cause = PermissionError("denied")
-        problem = config_errors.Unreadable(path=tmp_path / "source", reason="denied").with_cause(cause)
+        problem = config_errors.Unreadable(
+            path=tmp_path / "source{literal}", reason="denied {access}", ways_to_fix=guidance
+        ).with_cause(cause)
         adapter = RecordingAdapter([problem])
 
         result = load_workspace(cwd=PathInput(tmp_path), adapters={**DEFAULT_ADAPTERS, VcsId.git: adapter})
@@ -352,6 +360,11 @@ class TestLoadWorkspace:
         assert isinstance(error, workspace_errors.DependencyValidation)
         assert error.problem is problem
         assert error.problem.cause is cause
+        rendered_guidance = " ".join(fix.format(error=error) for fix in error.ways_to_fix)
+        assert str(error.path) in rendered_guidance
+        assert "dependencies.ci" in rendered_guidance
+        for fix in guidance:
+            assert fix.format(error=problem) in rendered_guidance
         record = error.as_record()
         assert record["source_code"] == problem.code
         assert record["source_path"] == str(problem.path)

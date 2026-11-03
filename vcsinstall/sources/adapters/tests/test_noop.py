@@ -1,20 +1,54 @@
+import io
 from pathlib import Path
 
 import pytest
+from llm_tool_cli.paths import ProjectPathId
 
-from vcsinstall.domain import RepositoryLocator, SourceRevision, VcsId
+from vcsinstall.domain import RepositoryLocator, SourcePath, SourceRevision, VcsId
 from vcsinstall.domain.tests import make
-from vcsinstall.sources import errors
+from vcsinstall.sources import ResolvedSource, errors
 from vcsinstall.sources.adapters.noop import NoopSourceAdapter
 
 
 class TestNoopSourceAdapter:
+    @pytest.fixture
+    def source(self, tmp_path: Path) -> ResolvedSource:
+        return ResolvedSource(
+            dependency=make.dependency(vcs=VcsId.noop, repository="fixture-id"),
+            path=tmp_path,
+            revision=SourceRevision("fixture-revision"),
+        )
+
+    def test_resolve__requires_controlled_fixture(self, source: ResolvedSource) -> None:
+        result = NoopSourceAdapter().resolve(source.dependency, source.path)
+
+        error = result.unwrap_err()[0]
+        assert isinstance(error, errors.MissingNoopFixture)
+        assert error.repository == source.dependency.repository
+
+    def test_inspect__requires_controlled_fixture(self, source: ResolvedSource) -> None:
+        result = NoopSourceAdapter().inspect(source, (SourcePath(ProjectPathId("@/guide")),))
+
+        error = result.unwrap_err()[0]
+        assert isinstance(error, errors.MissingNoopFixture)
+        assert error.repository == source.dependency.repository
+
+    def test_copy_file__requires_controlled_fixture(self, source: ResolvedSource) -> None:
+        output = io.BytesIO()
+
+        result = NoopSourceAdapter().copy_file(source, SourcePath(ProjectPathId("@/guide")), output)
+
+        error = result.unwrap_err()[0]
+        assert isinstance(error, errors.MissingNoopFixture)
+        assert error.repository == source.dependency.repository
+        assert not output.getvalue()
+
     def test_validate_input__accepts_unresolved_opaque_selection(self) -> None:
         adapter = NoopSourceAdapter()
         dependency = make.dependency(vcs=VcsId.noop, selector=make.selector("unresolved", "fixture reference"))
 
         assert adapter.validate_input(dependency).is_ok()
-        assert adapter.validate_dependency(dependency).is_err()
+        assert adapter.validate_dependency(dependency).is_err(errors.UnsupportedNoopSelector)
 
     def test_normalize_repository__empty_fixture_identity_is_a_non_match(self, tmp_path: Path) -> None:
         assert NoopSourceAdapter().normalize_repository(RepositoryLocator(""), cwd=tmp_path).unwrap() is None
@@ -56,7 +90,7 @@ class TestNoopSourceAdapter:
         result = NoopSourceAdapter().validate_revision_lock(make.dependency(vcs=VcsId.noop), SourceRevision(""))
 
         error = result.unwrap_err()[0]
-        assert isinstance(error, errors.InvalidRevision)
+        assert isinstance(error, errors.InvalidNoopRevision)
         assert error.vcs == VcsId.noop
         assert error.field == "revision"
         assert error.value == ""
