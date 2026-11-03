@@ -7,7 +7,6 @@ from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.paths import PathInput
 
-from vcsinstall.cache import active_cache_root, resolve_cache_root
 from vcsinstall.cli.commands.push import push_dependency
 from vcsinstall.cli.entities import (
     BranchOption,
@@ -19,6 +18,7 @@ from vcsinstall.cli.entities import (
     TagOption,
     VcsOption,
 )
+from vcsinstall.cli.preparation import prepare_cache
 from vcsinstall.domain import Dependency, RepositoryLocator, SelectorKind, VcsId, VersionSelector, urls
 from vcsinstall.hosting import GitHostingAdapter, HostingAdapter, get_hosting
 from vcsinstall.runtime import (
@@ -142,9 +142,7 @@ def add_dependency(  # noqa: CFQ002 — Typer exposes these independent command 
         if selectors:
             request = request.replace(selector=selectors[0])
         cwd = Path.cwd()
-        cache_input = context.find_root().params.get("cache_dir")
-        cache_root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
-        context.with_resource(active_cache_root.scope(cache_root))
+        prepare_cache(context, cwd=cwd).unwrap()
         context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
         dependency = prepare_dependency(request, cwd=cwd, vcs=vcs).unwrap()
@@ -180,9 +178,7 @@ def outdated_dependencies(context: typer.Context, names: DependencyNamesArgument
     """Report dependencies whose configured source version differs from their locked revision."""
     with command_context(context) as command:
         cwd = Path.cwd()
-        cache_input = context.find_root().params.get("cache_dir")
-        cache_root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
-        context.with_resource(active_cache_root.scope(cache_root))
+        prepare_cache(context, cwd=cwd).unwrap()
         context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
         dependency_outdated(tuple(names or ())).unwrap()
@@ -193,9 +189,7 @@ def update_dependencies(context: typer.Context, names: DependencyNamesArgument =
     """Advance selected dependencies and refresh all their entries with local-change protection."""
     with command_context(context) as command:
         cwd = Path.cwd()
-        cache_input = context.find_root().params.get("cache_dir")
-        cache_root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
-        context.with_resource(active_cache_root.scope(cache_root))
+        prepare_cache(context, cwd=cwd).unwrap()
         context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
         dependency_update(tuple(names or ())).unwrap()

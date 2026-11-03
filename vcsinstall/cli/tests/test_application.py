@@ -3,14 +3,20 @@ from importlib import metadata
 from pathlib import Path
 
 import pytest
-from filelock import FileLock
+from filelock import FileLock, Timeout
+from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.config import errors as config_errors
 from llm_tool_cli.config.project import project_config
 from llm_tool_cli.core import settings
+from llm_tool_cli.core.result import Err, Ok, Result
+from llm_tool_cli.output import StreamOutputEmitter, output
 from llm_tool_cli.paths import PathInput
+from llm_tool_cli.protocol.cell_shortcuts import operation_succeeded
+from llm_tool_cli.protocol.logic_cells.base import LogicCell
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
+from vcsinstall.cache import active_cache_root
 from vcsinstall.cache.tests.helpers import held_lock
 from vcsinstall.cli import application
 from vcsinstall.cli.application import main
@@ -333,6 +339,48 @@ class TestProjectCoordination:
         assert result.exception is failure
         assert not active_workspace.is_set()
         assert not project_config.is_set()
+        path = next(project_state_root.glob("projects/*/operation.lock"))
+        with FileLock(path, timeout=0, preserve_lock_file=True):
+            pass
+
+    @pytest.mark.parametrize("fail", [False, True])
+    def test_project_resources_remain_active_through_output_delivery(
+        self, tmp_path: Path, project_state_root: Path, mocker: MockerFixture, fail: bool
+    ) -> None:
+        config = tmp_path / "vcsinstall.toml"
+        config.write_text("version = 1\n")
+        cache = tmp_path / "cache"
+
+        class InspectingEmitter(StreamOutputEmitter):
+            __slots__ = ()
+
+            def _render(self, cells: list[LogicCell]) -> str:
+                assert active_workspace.get().config_path == config
+                assert project_config.get().config_path == config
+                assert active_cache_root.get() == cache
+                path = next(project_state_root.glob("projects/*/operation.lock"))
+                with pytest.raises(Timeout), FileLock(path, timeout=0, preserve_lock_file=True):
+                    pass
+                return super()._render(cells)
+
+        def operation(*, locked: bool) -> Result[None]:
+            output.get().emit([operation_succeeded("Completed")]).unwrap()
+            return Err([InvalidArguments(reason="Operation failed")]) if fail else Ok(None)
+
+        mocker.patch("llm_tool_cli.cli.context.StreamOutputEmitter", InspectingEmitter)
+        mocker.patch("vcsinstall.cli.commands.entries.install", side_effect=operation)
+        result = CliRunner().invoke(
+            application.app, ["-p", "automation", "--config", str(config), "--cache-dir", str(cache), "install"]
+        )
+
+        assert result.exit_code == (1 if fail else 0), result.exception
+        assert [json.loads(line)["type"] for line in result.stdout.splitlines()] == [
+            "error" if fail else "operation_succeeded"
+        ]
+        assert not active_workspace.is_set()
+        assert not project_config.is_set()
+        assert not active_cache_root.is_set()
+        assert not cache.exists()
         path = next(project_state_root.glob("projects/*/operation.lock"))
         with FileLock(path, timeout=0, preserve_lock_file=True):
             pass

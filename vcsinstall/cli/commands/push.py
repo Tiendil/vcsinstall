@@ -6,7 +6,6 @@ from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.paths import PathInput, normalize_path
 
-from vcsinstall.cache import active_cache_root, resolve_cache_root
 from vcsinstall.cli.entities import (
     DependencyNameArgument,
     HostingProviderOption,
@@ -18,6 +17,7 @@ from vcsinstall.cli.entities import (
     PushOutputOption,
     PushRepositoryOption,
 )
+from vcsinstall.cli.preparation import prepare_cache
 from vcsinstall.domain import RepositoryLocator
 from vcsinstall.hosting import PushOptions, get_hosting, validate_push_options
 from vcsinstall.runtime import dependency_push
@@ -90,9 +90,7 @@ def push_dependency(  # noqa: CFQ002, CCR001 — Prepare the independent public 
             patch_file=_filesystem_path(output, cwd=cwd).unwrap() if output is not None else None,
         )
         validate_push_options(options, has_message=message is not None).unwrap()
-        cache_input = context.find_root().params.get("cache_dir")
-        root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
-        context.with_resource(active_cache_root.scope(root))
+        prepare_cache(context, cwd=cwd).unwrap()
         workspace = context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
         definition = workspace.config.dependencies.get(name)

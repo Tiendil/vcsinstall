@@ -23,7 +23,7 @@ from typer.testing import CliRunner
 
 from vcsinstall.cache import CacheRootPath, active_cache_root
 from vcsinstall.cache import errors as cache_errors
-from vcsinstall.cli import application
+from vcsinstall.cli import application, preparation
 from vcsinstall.cli.commands import dependency
 from vcsinstall.cli.commands.tests.helpers import (
     declare_entry,
@@ -353,7 +353,7 @@ class TestAddDependency:
     ) -> None:
         operation = mocker.patch.object(dependency, "dependency_add", return_value=Ok(None))
         load = mocker.spy(dependency, "open_workspace")
-        cache = mocker.spy(dependency, "resolve_cache_root")
+        cache = mocker.spy(preparation, "resolve_cache_root")
 
         result = CliRunner().invoke(
             application.app,
@@ -1596,7 +1596,7 @@ class TestListDependencies:
         config.write_text(tomli_w.dumps(declarations))
         before = {path: path.read_bytes() for path in config.parent.rglob("*") if path.is_file()}
         for name in (
-            "vcsinstall.cli.commands.dependency.resolve_cache_root",
+            "vcsinstall.cli.preparation.resolve_cache_root",
             "vcsinstall.cli.commands.dependency.get_hosting",
             "vcsinstall.cache.paths.user_cache_path",
             "vcsinstall.vcs_clients.GitClient.run",
@@ -3082,7 +3082,7 @@ class TestRemoveDependency:
 
     def test_source_content_and_cache_access_are_unused(self, config: Path, mocker: MockerFixture) -> None:
         for name in (
-            "vcsinstall.cli.commands.dependency.resolve_cache_root",
+            "vcsinstall.cli.preparation.resolve_cache_root",
             "vcsinstall.cli.commands.dependency.get_hosting",
             "vcsinstall.vcs_clients.GitClient.run",
             "vcsinstall.cache.paths.user_cache_path",

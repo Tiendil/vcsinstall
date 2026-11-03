@@ -93,7 +93,7 @@ class TestListEntries:
         config.write_text(tomli_w.dumps(declarations))
         before = {path: path.read_bytes() for path in config.parent.rglob("*") if path.is_file()}
         for name in (
-            "vcsinstall.cli.commands.entries.resolve_cache_root",
+            "vcsinstall.cli.preparation.resolve_cache_root",
             "vcsinstall.runtime.commands.get_hosting",
             "vcsinstall.cache.paths.user_cache_path",
             "vcsinstall.vcs_clients.GitClient.run",
@@ -833,7 +833,7 @@ class TestRemoveEntries:
 
     def test_cache_and_source_access_are_unused(self, config: Path, mocker: MockerFixture) -> None:
         for name in (
-            "vcsinstall.cli.commands.entries.resolve_cache_root",
+            "vcsinstall.cli.preparation.resolve_cache_root",
             "vcsinstall.runtime.commands.get_hosting",
             "vcsinstall.vcs_clients.GitClient.run",
             "vcsinstall.cache.paths.user_cache_path",

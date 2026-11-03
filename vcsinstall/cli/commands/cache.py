@@ -3,7 +3,7 @@ from pathlib import Path
 import typer
 from llm_tool_cli.cli.context import command_context
 
-from vcsinstall.cache import active_cache_root, resolve_cache_root
+from vcsinstall.cli.preparation import prepare_cache
 from vcsinstall.runtime import cache_clean
 
 app = typer.Typer(
@@ -17,7 +17,5 @@ app = typer.Typer(
 def clean(context: typer.Context) -> None:
     """Clear owned cached repositories without changing projects or original sources."""
     with command_context(context):
-        cache_input = context.find_root().params.get("cache_dir")
-        root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=Path.cwd()).unwrap()
-        context.with_resource(active_cache_root.scope(root))
+        prepare_cache(context, cwd=Path.cwd()).unwrap()
         cache_clean().unwrap()

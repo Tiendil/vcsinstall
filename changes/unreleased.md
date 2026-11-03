@@ -8,6 +8,7 @@
 
 ### Changes
 
+- Share CLI cache preparation while retaining explicit workspace activation, validation order, and resource scopes through output delivery.
 - Coordinate project commands using existing configuration, including inspection, through one exclusive operation lock in the per-user state directory, independently of repository-cache selection; wait up to 10 seconds and preserve coordination files across release and cleanup. Initialization locking remains pending a shared CLI hook.
 - Replace the internal GitHub client object with private API functions receiving the host explicitly.
 - Split GitHub recipient selection and PR publication into focused helpers while retaining native Git reuse, retry verification, and completed-effect reporting.

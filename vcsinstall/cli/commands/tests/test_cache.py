@@ -104,9 +104,7 @@ class TestClean:
     def test_rejects_arguments_and_options_before_cache_access(
         self, tmp_path: Path, mocker: MockerFixture, arguments: list[str]
     ) -> None:
-        mocker.patch(
-            "vcsinstall.cli.commands.cache.resolve_cache_root", side_effect=AssertionError("Unexpected access")
-        )
+        mocker.patch("vcsinstall.cli.preparation.resolve_cache_root", side_effect=AssertionError("Unexpected access"))
 
         result = CliRunner().invoke(app, ["--cache-dir", str(tmp_path / "cache"), "cache", "clean", *arguments])
 

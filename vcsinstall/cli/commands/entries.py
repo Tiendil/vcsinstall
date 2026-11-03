@@ -6,7 +6,6 @@ from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core.result import Err
 from llm_tool_cli.paths import PathInput, normalize_path
 
-from vcsinstall.cache import active_cache_root, resolve_cache_root
 from vcsinstall.cli.entities import (
     AllowOutdatedOption,
     DestinationArgument,
@@ -18,6 +17,7 @@ from vcsinstall.cli.entities import (
     RedefineEntryOption,
     SourceArgument,
 )
+from vcsinstall.cli.preparation import prepare_cache
 from vcsinstall.domain import VcsId
 from vcsinstall.runtime import entry_add, entry_list, entry_remove, install
 from vcsinstall.workspace import Entry, open_workspace
@@ -33,9 +33,7 @@ def add_entry(
     """Declare and install a file or directory at its dependency's locked revision."""
     with command_context(context) as command:
         cwd = Path.cwd()
-        cache_input = context.find_root().params.get("cache_dir")
-        cache_root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
-        context.with_resource(active_cache_root.scope(cache_root))
+        prepare_cache(context, cwd=cwd).unwrap()
         workspace = context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
         if source.dependency not in workspace.config.dependencies:
@@ -85,9 +83,7 @@ def install_entries(context: typer.Context, locked: LockedOption = False) -> Non
     """Install all declared entries, reusing matching dependency revisions."""
     with command_context(context) as command:
         cwd = Path.cwd()
-        cache_input = context.find_root().params.get("cache_dir")
-        cache_root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
-        context.with_resource(active_cache_root.scope(cache_root))
+        prepare_cache(context, cwd=cwd).unwrap()
         workspace = context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
         unsupported = sorted(
