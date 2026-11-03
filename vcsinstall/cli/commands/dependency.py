@@ -36,7 +36,7 @@ from vcsinstall.sources import (
     get_adapter,
     parse_repository,
 )
-from vcsinstall.workspace import load_workspace
+from vcsinstall.workspace import open_workspace
 
 app = typer.Typer(
     help="Manage named dependencies.",
@@ -145,8 +145,8 @@ def add_dependency(  # noqa: CFQ002 — Typer exposes these independent command 
         cache_input = context.find_root().params.get("cache_dir")
         cache_root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
         context.with_resource(active_cache_root.scope(cache_root))
-        workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
-        context.with_resource(workspace.scope())
+        context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
+
         dependency = prepare_dependency(request, cwd=cwd, vcs=vcs).unwrap()
         dependency_add(
             name,
@@ -161,8 +161,8 @@ def add_dependency(  # noqa: CFQ002 — Typer exposes these independent command 
 def list_dependencies(context: typer.Context) -> None:
     """List declared dependencies, locked revisions, and local entry statistics."""
     with command_context(context) as command:
-        workspace = load_workspace(cwd=PathInput(Path.cwd()), path=command.config_input).unwrap()
-        context.with_resource(workspace.scope())
+        context.with_resource(open_workspace(cwd=PathInput(Path.cwd()), path=command.config_input)).unwrap()
+
         dependency_list().unwrap()
 
 
@@ -170,8 +170,8 @@ def list_dependencies(context: typer.Context) -> None:
 def remove_dependency(context: typer.Context, name: DependencyNameArgument) -> None:
     """Remove an unused dependency declaration and its lock, preserving installed files."""
     with command_context(context) as command:
-        workspace = load_workspace(cwd=PathInput(Path.cwd()), path=command.config_input).unwrap()
-        context.with_resource(workspace.scope())
+        context.with_resource(open_workspace(cwd=PathInput(Path.cwd()), path=command.config_input)).unwrap()
+
         dependency_remove(name).unwrap()
 
 
@@ -183,8 +183,8 @@ def outdated_dependencies(context: typer.Context, names: DependencyNamesArgument
         cache_input = context.find_root().params.get("cache_dir")
         cache_root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
         context.with_resource(active_cache_root.scope(cache_root))
-        workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
-        context.with_resource(workspace.scope())
+        context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
+
         dependency_outdated(tuple(names or ())).unwrap()
 
 
@@ -196,6 +196,6 @@ def update_dependencies(context: typer.Context, names: DependencyNamesArgument =
         cache_input = context.find_root().params.get("cache_dir")
         cache_root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
         context.with_resource(active_cache_root.scope(cache_root))
-        workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
-        context.with_resource(workspace.scope())
+        context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
+
         dependency_update(tuple(names or ())).unwrap()

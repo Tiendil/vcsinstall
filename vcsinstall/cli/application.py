@@ -24,6 +24,8 @@ def initialize(
 
 register_skill_command(app, package="vcsinstall.skills", documents=SkillDocument)
 register_version_command(app, distribution="vcsinstall")
+# TODO: Add an operation-scope hook to llm_tool_cli.register_init_command so init
+# can hold project_operation through configuration creation and output.
 register_init_command(
     app,
     config_class=Config,

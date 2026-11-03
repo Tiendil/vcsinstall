@@ -44,6 +44,11 @@ Implementations MUST grow with required behavior under these responsibilities; t
 Universal file-identity values and their collection invariants MUST belong to `domain` and be reused across project and persisted content models.
 
 `workspace` MUST own configuration and lockfile state under `specs/behavior/config.md` and `specs/behavior/lockfile.md`, including loading, matching, and persistence.
+It MUST own project operation coordination, including per-user state-directory selection, project identity, acquisition, and lock-access diagnostics.
+Coordination MUST use `platformdirs` for the application state location and native `filelock` locking with persistent coordination files.
+The CLI MUST retain the workspace-owned coordination scope through command completion, acquiring it before project loading or initialization and before repository-cache access.
+Workspace loading without coordination MAY remain available to callers that supply their own operation scope.
+Initialization MUST reuse `llm_tool_cli` configuration creation, validation, project activation, and output facilities within the project coordination scope.
 Entry destination overlap and project-file exclusion rules MUST belong to `workspace.validation` and MAY be exposed as pure guards through the workspace package root.
 Configuration and lockfile models MUST be the shared representations of declarations and recorded state.
 They MUST represent declarations with missing or mismatching locks and baselines where the locking contract permits that state.

@@ -22,7 +22,7 @@ from vcsinstall.domain import RepositoryLocator
 from vcsinstall.hosting import PushOptions, get_hosting, validate_push_options
 from vcsinstall.runtime import dependency_push
 from vcsinstall.sources import SourceAdapter, get_adapter, parse_repository
-from vcsinstall.workspace import load_workspace
+from vcsinstall.workspace import open_workspace
 
 
 def _filesystem_path(value: str, *, cwd: Path) -> Result[PathInput]:
@@ -93,8 +93,8 @@ def push_dependency(  # noqa: CFQ002, CCR001 — Prepare the independent public 
         cache_input = context.find_root().params.get("cache_dir")
         root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
         context.with_resource(active_cache_root.scope(root))
-        workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
-        context.with_resource(workspace.scope())
+        workspace = context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
+
         definition = workspace.config.dependencies.get(name)
         if definition is None:
             Err([InvalidArguments(reason=f"Unknown dependency {name!r}.")]).unwrap()

@@ -430,7 +430,7 @@ class TestListEntries:
 
     @pytest.mark.parametrize("option", ["--force", "--locked", "--protocol", "--config"])
     def test_command_options_fail_before_project_loading(self, option: str, mocker: MockerFixture) -> None:
-        load = mocker.patch.object(entries, "load_workspace", side_effect=AssertionError("Unexpected loading"))
+        load = mocker.patch.object(entries, "open_workspace", side_effect=AssertionError("Unexpected loading"))
 
         result = CliRunner().invoke(app, ["list", option])
 

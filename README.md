@@ -101,6 +101,8 @@ vcsinstall --config project/custom.toml init
 
 The parent directory must already exist. Init refuses to overwrite an existing file and creates no lockfile.
 
+Project commands using existing configuration, including inspection, hold one exclusive operation lock from before loading project files through completion. Another command using the same project and user state directory waits up to 10 seconds, then reports that the project is busy. Coordination files live under the platform's user state directory (`~/.local/state/vcsinstall/projects/<project-id>/operation.lock` by default on Linux), independently of `--cache-dir`, and remain after release. Cache cleanup preserves them. This coordinates vcsinstall commands sharing that location; edits by other tools remain outside the guarantee. `init` currently runs without the project operation lock.
+
 Declare and lock a source dependency:
 
 ```bash

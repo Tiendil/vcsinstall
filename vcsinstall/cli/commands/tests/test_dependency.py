@@ -352,7 +352,7 @@ class TestAddDependency:
         self, tmp_path: Path, mocker: MockerFixture, repository: str, options: list[str]
     ) -> None:
         operation = mocker.patch.object(dependency, "dependency_add", return_value=Ok(None))
-        load = mocker.spy(dependency, "load_workspace")
+        load = mocker.spy(dependency, "open_workspace")
         cache = mocker.spy(dependency, "resolve_cache_root")
 
         result = CliRunner().invoke(
@@ -1923,7 +1923,7 @@ class TestListDependencies:
 
     @pytest.mark.parametrize("arguments", [["ci"], ["--force"], ["--outdated"], ["--protocol", "automation"]])
     def test_rejects_arguments_and_options_before_loading(self, arguments: list[str], mocker: MockerFixture) -> None:
-        load = mocker.patch.object(dependency, "load_workspace", side_effect=AssertionError("Unexpected loading"))
+        load = mocker.patch.object(dependency, "open_workspace", side_effect=AssertionError("Unexpected loading"))
 
         result = CliRunner().invoke(application.app, ["dependency", "list", *arguments])
 
@@ -1932,7 +1932,7 @@ class TestListDependencies:
 
     @pytest.mark.parametrize("help_option", ["--help", "-h"])
     def test_help_requires_no_project(self, help_option: str, mocker: MockerFixture) -> None:
-        load = mocker.patch.object(dependency, "load_workspace", side_effect=AssertionError("Unexpected loading"))
+        load = mocker.patch.object(dependency, "open_workspace", side_effect=AssertionError("Unexpected loading"))
 
         result = CliRunner().invoke(
             application.app, ["--config", "/missing/config", "dependency", "list", help_option]
@@ -3153,7 +3153,7 @@ class TestRemoveDependency:
     def test_help_requires_no_project_or_external_access(
         self, config: Path, mocker: MockerFixture, help_option: str
     ) -> None:
-        load = mocker.patch.object(dependency, "load_workspace", side_effect=AssertionError("unexpected loading"))
+        load = mocker.patch.object(dependency, "open_workspace", side_effect=AssertionError("unexpected loading"))
 
         result = CliRunner().invoke(
             application.app, ["--config", str(config / "invalid"), "dependency", "remove", help_option]

@@ -110,7 +110,7 @@ Repository locators MUST retain their declared meaning, including filesystem sou
 Lockfile serialization MUST complete before writing begins.
 Writers MAY update the lockfile directly; atomic replacement is not required.
 A write failure MAY leave partially written content and MUST report the affected path and known completed effects.
-Protection against concurrent updates to the lockfile is not required.
+Project access MUST follow Project operation locking in `specs/behavior/cli.md`.
 State consistency before and after writes MUST follow Preparation and consistency in `specs/behavior/locking.md`.
 
 Malformed or unreadable lockfiles MUST fail rather than be replaced with empty state or reported as unlocked.

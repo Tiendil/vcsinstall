@@ -9,13 +9,14 @@ from llm_tool_cli.config.project import ProjectConfig, project_config
 from llm_tool_cli.core.context import ContextValue
 from llm_tool_cli.core.entities import BaseEntity
 from llm_tool_cli.core.errors import EnvironmentErrors
-from llm_tool_cli.core.result import Ok, Result, unwrap_to_error
+from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.paths import PathInput, ProjectConfigPath, ProjectPathId, ProjectRootPath
 
 from vcsinstall.domain import Dependency, DependencyName, SourceRevision
 from vcsinstall.sources import DEFAULT_ADAPTERS, AdapterRegistry, SourceAdapter, get_adapter
 from vcsinstall.workspace import errors, validation
 from vcsinstall.workspace.config import Config, Entry
+from vcsinstall.workspace.coordination import project_operation
 from vcsinstall.workspace.lockfile import DependencyLock, InstallationBaseline, Lockfile, LockfilePath, load_lockfile
 
 
@@ -166,3 +167,22 @@ def load_workspace(
     """Load a workspace without activating it in the caller's context."""
     with load_project(Config, cwd=cwd, path=path) as loaded:
         return _prepare_workspace(loaded.unwrap(), adapters=adapters)
+
+
+@contextmanager
+def open_workspace(
+    *, cwd: PathInput, path: ProjectConfigPath | None = None, adapters: AdapterRegistry = DEFAULT_ADAPTERS
+) -> Iterator[Result[Workspace]]:
+    """Acquire project access before loading, and activate the workspace for the operation."""
+    with project_operation(cwd=cwd, path=path) as selected:
+        if selected.is_err():
+            yield Err(selected.unwrap_err())
+            return
+
+        loaded = load_workspace(cwd=cwd, path=selected.unwrap(), adapters=adapters)
+        if loaded.is_err():
+            yield loaded
+            return
+
+        with loaded.unwrap().scope():
+            yield loaded

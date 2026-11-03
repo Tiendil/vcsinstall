@@ -4,7 +4,7 @@ from typing import ClassVar
 import pydantic
 from llm_tool_cli.core import errors as shared_errors
 from llm_tool_cli.core.entities import ExitCode
-from llm_tool_cli.paths import ProjectPathId
+from llm_tool_cli.paths import ProjectPathId, ProjectRootPath
 
 from vcsinstall.core import errors as core_errors
 from vcsinstall.domain import DependencyName
@@ -16,6 +16,28 @@ class InternalError(core_errors.InternalError):
 
 class EnvironmentError(core_errors.EnvironmentError):
     """Root for expected workspace failures."""
+
+
+class ProjectLockAccessFailed(EnvironmentError):
+    code: str = "project_lock_access_failed"
+    message: str = "Cannot coordinate operations for {error.project_root}: {error.reason}"
+    ways_to_fix: list[str] = [
+        "Ensure the user state directory is usable and its project coordination paths are writable regular files."
+    ]
+    project_root: ProjectRootPath
+    path: Path | None = None
+    reason: str
+
+
+class ProjectLockTimeout(EnvironmentError):
+    code: str = "project_lock_timeout"
+    message: str = (
+        "Project {error.project_root} is busy: timed out after {error.timeout} seconds waiting for {error.path}."
+    )
+    ways_to_fix: list[str] = ["Wait for the vcsinstall operation using this project to finish, then retry."]
+    project_root: ProjectRootPath
+    path: Path
+    timeout: float
 
 
 class LockfileRequired(EnvironmentError):

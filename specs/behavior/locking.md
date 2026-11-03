@@ -274,7 +274,7 @@ These inspection operations MUST NOT change declarations, lock state, or install
 
 ## Preparation and consistency
 
-Invocation state stability MUST follow General behavior in `specs/behavior/cli.md`.
+Invocation state stability and access coordination MUST follow General behavior and Project operation locking in `specs/behavior/cli.md`.
 Content verification MUST compare the state observed for the operation with its applicable baselines and selected source content, without rechecking it solely for concurrent external changes.
 Command validation MUST finish before source fetching as required by `specs/behavior/cli.md`.
 Required content checks and source preparation MUST complete for the entire selection before project mutation.

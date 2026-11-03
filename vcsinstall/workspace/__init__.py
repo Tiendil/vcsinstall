@@ -1,6 +1,7 @@
 from vcsinstall.domain import Dependency
 from vcsinstall.workspace import errors
 from vcsinstall.workspace.config import Config, Entry
+from vcsinstall.workspace.coordination import project_operation
 from vcsinstall.workspace.entities import (
     AbsentContent,
     Content,
@@ -11,7 +12,7 @@ from vcsinstall.workspace.entities import (
     FileContent,
     ManifestFile,
 )
-from vcsinstall.workspace.loading import Workspace, active_workspace, load_workspace
+from vcsinstall.workspace.loading import Workspace, active_workspace, load_workspace, open_workspace
 from vcsinstall.workspace.lockfile import (
     AbsentBaseline,
     DependencyLock,
@@ -48,6 +49,8 @@ __all__ = [
     "active_workspace",
     "load_lockfile",
     "load_workspace",
+    "open_workspace",
+    "project_operation",
     "WorkspaceFileUpdates",
     "serialize_workspace_changes",
     "write_workspace_files",

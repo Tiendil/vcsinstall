@@ -52,9 +52,10 @@ Commands MUST NOT create commits or branches in the target repository or require
 Command execution MUST NOT require a vcsinstall-specific interactive prompt or launch a commit-message editor.
 
 During one invocation, vcsinstall MUST assume that project state, filesystem content, repositories, and other external state change only through actions initiated by that invocation.
-Concurrent external changes are outside the supported execution model and MUST NOT require repeated state checks or change-detection guards.
+Concurrent vcsinstall invocations MUST coordinate under Project operation locking below.
+Other concurrent external changes are outside the supported execution model and MUST NOT require repeated state checks or change-detection guards.
 Observed state MAY be reused until the current invocation changes it; subsequent operations MUST account for changes initiated by that invocation.
-This assumption MUST NOT bypass validation of existing state, recorded baselines, requested revision availability, or the shared cache access lock required by `specs/behavior/cache.md`.
+This assumption MUST NOT bypass validation of existing state, recorded baselines, requested revision availability, or the required project and shared cache access locks.
 
 The required commands MUST be:
 
@@ -105,6 +106,33 @@ The following interfaces MUST NOT load or create project files or require a cach
 - `skill`.
 
 `cache clean` MUST follow the project-file and client independence requirements in Cleanup in `specs/behavior/cache.md`, remaining usable outside a project and with an unusable `--config` value.
+
+## Project operation locking
+
+Commands that read or change project state, including `init` and inspection commands, MUST acquire one exclusive operation lock for the selected project before loading or creating its configuration or lockfile.
+Configuration-path discovery and resolution MAY precede acquisition without reading file contents.
+The lock MUST remain held through the complete operation and result delivery.
+The project-independent interfaces under Application identity and project files, including cache cleanup, MUST NOT resolve or access project operation locks.
+
+Coordination MUST use the platform's per-user application state directory for `vcsinstall`, independently of `--cache-dir` and repository-cache availability.
+On Linux this MUST follow `XDG_STATE_HOME`, defaulting to `~/.local/state`, with a `vcsinstall` application directory.
+The coordination file MUST be `<application-state-directory>/projects/<project-id>/operation.lock`.
+The project identifier MUST be the lowercase SHA-256 digest of the filesystem-encoded, platform-case-normalized absolute project-root path after shared project-root resolution.
+Different selected configuration filenames in the same root MUST share a lock; different project roots MUST have independent locks.
+Coordination guarantees MUST apply to invocations using the same resolved project root and application state directory.
+Editors, VCS commands, and processes using another state directory remain outside this guarantee.
+
+A command MUST wait for up to 10 seconds when the lock is held and proceed if it becomes available within that period.
+A timeout MUST fail operationally and identify the project root, coordination path, and acquisition timeout.
+State-directory resolution and lock-access failures MUST fail explicitly without silently selecting another coordination location.
+Waiting or failed acquisition MUST NOT change project configuration, lockfiles, installed content, or repository-cache data.
+Creating coordination directories and files MUST NOT create a missing project directory.
+
+Normal completion, failure, and process termination MUST release exclusive access without requiring users to delete stale coordination files.
+The coordination file and its containing directory MUST remain in place across release and cache cleanup; file existence alone MUST NOT indicate ownership.
+Coordination paths below the resolved application state directory MUST follow the shared containment and symbolic-link rules.
+Project locks MUST be acquired before any repository-cache locks needed by the operation.
+These locks MUST NOT imply rollback or atomic updates across project files and installed content.
 
 ## Global options
 

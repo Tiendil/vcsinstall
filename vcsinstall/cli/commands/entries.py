@@ -20,7 +20,7 @@ from vcsinstall.cli.entities import (
 )
 from vcsinstall.domain import VcsId
 from vcsinstall.runtime import entry_add, entry_list, entry_remove, install
-from vcsinstall.workspace import Entry, load_workspace
+from vcsinstall.workspace import Entry, open_workspace
 
 
 def add_entry(
@@ -36,8 +36,8 @@ def add_entry(
         cache_input = context.find_root().params.get("cache_dir")
         cache_root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
         context.with_resource(active_cache_root.scope(cache_root))
-        workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
-        context.with_resource(workspace.scope())
+        workspace = context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
+
         if source.dependency not in workspace.config.dependencies:
             Err([InvalidArguments(reason=f"Unknown dependency {source.dependency!r}.")]).unwrap()
         entry = Entry(
@@ -61,8 +61,8 @@ def remove_entries(
     """Remove declared entries and their content, or keep the files unmanaged."""
     with command_context(context) as command:
         cwd = Path.cwd()
-        workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
-        context.with_resource(workspace.scope())
+        workspace = context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
+
         destinations = tuple(
             normalize_path(path.strip(), workspace.project_root, cwd=cwd).unwrap() for path in entry_paths
         )
@@ -73,8 +73,8 @@ def list_entries(context: typer.Context, entry_paths: ListEntryPathsArgument = N
     """List declared entries, their locked revisions, and local changes."""
     with command_context(context) as command:
         cwd = Path.cwd()
-        workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
-        context.with_resource(workspace.scope())
+        workspace = context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
+
         destinations = tuple(
             normalize_path(path.strip(), workspace.project_root, cwd=cwd).unwrap() for path in entry_paths or ()
         )
@@ -88,8 +88,8 @@ def install_entries(context: typer.Context, locked: LockedOption = False) -> Non
         cache_input = context.find_root().params.get("cache_dir")
         cache_root = resolve_cache_root(Path(cache_input) if cache_input is not None else None, cwd=cwd).unwrap()
         context.with_resource(active_cache_root.scope(cache_root))
-        workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
-        context.with_resource(workspace.scope())
+        workspace = context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
+
         unsupported = sorted(
             name for name, dependency in workspace.config.dependencies.items() if dependency.vcs == VcsId.noop
         )

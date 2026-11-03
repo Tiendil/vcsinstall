@@ -174,7 +174,7 @@ Successful edits MUST leave valid configuration and preserve unrelated declarati
 Configuration updates MUST serialize the complete updated configuration.
 Preservation of comments, formatting, and declaration order is not required.
 Writers MAY update the configuration file directly; atomic replacement is not required.
-Protection against concurrent updates to the configuration file is not required.
+Project access MUST follow Project operation locking in `specs/behavior/cli.md`.
 The state effects of replacing or removing declarations and their failure guarantees MUST follow Operation contracts and Preparation and consistency in `specs/behavior/locking.md`.
 
 ## Starter configuration

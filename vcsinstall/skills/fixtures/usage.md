@@ -32,6 +32,14 @@ Help, version, skill, and cache cleanup commands work without project configurat
 Init creates configuration; dependency add, dependency list, dependency outdated, dependency update, dependency push, dependency remove, add, install, list, and remove require existing valid configuration.
 Dependency add resolves the selected revision, writes its declaration and lock, and creates no entry mappings.
 
+## Concurrent project operations
+
+Project commands using existing configuration, including inspection, hold one exclusive project operation lock before reading project files and through command completion. A competing invocation waits up to 10 seconds before reporting a busy-project error; retry after the other operation finishes. `init` currently runs without the project operation lock.
+
+Coordination files use the platform's user state directory, independently of `--cache-dir`. On Linux the default path is `~/.local/state/vcsinstall/projects/<project-id>/operation.lock`, with `XDG_STATE_HOME` overriding `~/.local/state`. The project identifier is derived from the resolved project-root path, so different configuration filenames in the same directory share the lock. The file remains after release and cache cleanup; its existence does not mean an operation is running. Do not remove coordination files while commands may be using them.
+
+Help, completion, version, skill, and cache cleanup do not access project operation locks. Coordination covers vcsinstall processes sharing the same project root and state directory; edits by an editor, Git, or another user environment remain outside this guarantee.
+
 ## Adding dependencies
 
 ```bash

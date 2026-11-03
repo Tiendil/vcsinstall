@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from filelock import FileLock
 from llm_tool_cli.config import errors as config_errors
 from llm_tool_cli.config.project import ProjectConfig, project_config
 from llm_tool_cli.core import errors as core_errors
@@ -15,7 +16,7 @@ from vcsinstall.sources import errors as source_errors
 from vcsinstall.sources.tests.helpers import RecordingAdapter
 from vcsinstall.workspace import active_workspace
 from vcsinstall.workspace import errors as workspace_errors
-from vcsinstall.workspace import load_workspace
+from vcsinstall.workspace import load_workspace, open_workspace
 
 _DEPENDENCY = (
     '\n[dependencies.ci]\nvcs = "git"\nrepository = "../source"\nselector = { kind = "branch", value = "main" }\n'
@@ -404,6 +405,65 @@ class TestLoadWorkspace:
             assert project_config.get().project_dir == outer
         assert not active_workspace.is_set()
         assert not project_config.is_set()
+
+
+@pytest.mark.usefixtures("isolated_settings")
+class TestOpenWorkspace:
+    @pytest.fixture(autouse=True)
+    def initialize_settings(self, isolated_settings: None) -> None:
+        settings.initialize(
+            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
+        )
+
+    def test_activates_workspace_until_scope_exit(self, tmp_path: Path, project_state_root: Path) -> None:
+        (tmp_path / "vcsinstall.toml").write_text("version = 1\n")
+        with open_workspace(cwd=PathInput(tmp_path)) as result:
+            workspace = result.unwrap()
+            assert active_workspace.get() is workspace
+            assert project_config.get().project_dir == tmp_path
+
+        assert not active_workspace.is_set()
+        assert not project_config.is_set()
+        path = next(project_state_root.glob("projects/*/operation.lock"))
+        with FileLock(path, timeout=0, preserve_lock_file=True):
+            pass
+
+    @pytest.mark.parametrize("filename", ["vcsinstall.toml", "vcsinstall.lock"])
+    def test_loading_failure_releases_lock_and_preserves_outer_scope(
+        self, tmp_path: Path, project_state_root: Path, filename: str
+    ) -> None:
+        (tmp_path / "vcsinstall.toml").write_text("version = 1\n")
+        outer = load_workspace(cwd=PathInput(tmp_path)).unwrap()
+        (tmp_path / filename).write_text("invalid[")
+        with outer.scope():
+            with open_workspace(cwd=PathInput(tmp_path)) as result:
+                assert isinstance(result.unwrap_err()[0], config_errors.InvalidToml)
+                assert active_workspace.get() is outer
+            assert active_workspace.get() is outer
+
+        path = next(project_state_root.glob("projects/*/operation.lock"))
+        with FileLock(path, timeout=0, preserve_lock_file=True):
+            pass
+
+    def test_missing_configuration_does_not_create_coordination(
+        self, tmp_path: Path, project_state_root: Path
+    ) -> None:
+        with open_workspace(cwd=PathInput(tmp_path)) as result:
+            assert isinstance(result.unwrap_err()[0], config_errors.NotFound)
+        assert not project_state_root.exists()
+
+    def test_caller_exception_restores_workspace_contexts(self, tmp_path: Path, project_state_root: Path) -> None:
+        (tmp_path / "vcsinstall.toml").write_text("version = 1\n")
+        with pytest.raises(RuntimeError, match="operation failed"):
+            with open_workspace(cwd=PathInput(tmp_path)) as result:
+                assert active_workspace.get() is result.unwrap()
+                raise RuntimeError("operation failed")
+
+        assert not active_workspace.is_set()
+        assert not project_config.is_set()
+        path = next(project_state_root.glob("projects/*/operation.lock"))
+        with FileLock(path, timeout=0, preserve_lock_file=True):
+            pass
 
 
 @pytest.mark.usefixtures("isolated_settings")

@@ -64,6 +64,7 @@ The following interfaces MUST also remain usable without resolving or accessing 
 - `dependency remove`.
 
 Loading or validating configuration and lock state MUST NOT require repository-cache access.
+Project coordination MUST remain independent of this cache under Project operation locking in `specs/behavior/cli.md`.
 Whether acquisition, source inspection, or delivery needs cached data MUST follow the applicable operation and adapter contracts; accepting `--cache-dir` MUST NOT itself make an operation cache-dependent.
 
 ## Repository identity and layout
@@ -168,6 +169,7 @@ Cleanup MUST preserve:
 - installed content.
 - project configuration.
 - lockfiles.
+- project operation coordination files under Project operation locking in `specs/behavior/cli.md`.
 - original source repositories.
 - previously published remote contributions.
 - unrelated content under the selected cache root.
