@@ -54,6 +54,7 @@ Ordinary attribute replacement SHOULD NOT use `monkeypatch` when the standard fi
 ## Adapter integration boundaries
 
 Source and hosting adapters MUST be independently replaceable by controlled test collaborators through the boundaries in `specs/architecture/modules_layout.md`.
+Tests MAY replace shared adapter-selector lookups with scoped patches at their lookup sites.
 The noop source and hosting adapters MUST follow their respective contracts in `specs/behavior/vcs/noop.md` and `specs/behavior/hosting/noop.md`.
 Tests of acquisition and delivery orchestration MAY combine a controlled source backend and separate noop hosting without native clients or network effects.
 They MAY also combine a real Git source with noop hosting, using test-prepared local repository views and the real Git client for local inspection; acquisition, refresh, and publication MUST remain simulated in that combination.

@@ -13,6 +13,16 @@ from vcsinstall.workspace import Config, DirectoryBaseline, Entry, FileBaseline,
 type CommandResult = tuple[int, list[dict[str, object]], str]
 
 
+def invoke_dependency_push(config: Path, cache: Path, *arguments: str) -> CommandResult:
+    result = CliRunner().invoke(
+        app,
+        ["-p", "automation", "--config", str(config), "--cache-dir", str(cache), "dependency", "push", *arguments],
+    )
+    if result.exception is not None and not isinstance(result.exception, SystemExit):
+        raise result.exception
+    return result.exit_code, [json.loads(line) for line in result.stdout.splitlines()], result.stdout
+
+
 def invoke_add(config: Path, cache: Path, *arguments: str) -> CommandResult:
     result = CliRunner().invoke(
         app, ["-p", "automation", "--config", str(config), "--cache-dir", str(cache), "dependency", "add", *arguments]

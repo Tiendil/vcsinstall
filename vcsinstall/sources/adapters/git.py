@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import BinaryIO
 from urllib.parse import urlsplit
 
+import pydantic
 from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.paths import ProjectPathId
@@ -123,15 +124,15 @@ def _file_info(
     relative = entry.path[len(prefix) :].lstrip(b"/") if prefix else entry.path
     try:
         identifier = ProjectPathId("@/" + relative.decode("utf-8"))
-    except UnicodeDecodeError as exc:
+        return Ok(FileInfo(path=identifier, hash=digest, executable=entry.mode == b"100755"))
+    except (UnicodeError, pydantic.ValidationError) as exc:
         return Err(
             [
                 errors.RepositoryAccess(
-                    vcs=VcsId.git, repository=repository, reason="Source names must be UTF-8."
+                    vcs=VcsId.git, repository=repository, reason=f"Source names cannot be represented: {exc}"
                 ).with_cause(exc)
             ]
         )
-    return Ok(FileInfo(path=identifier, hash=digest, executable=entry.mode == b"100755"))
 
 
 class GitSourceAdapter:
@@ -209,7 +210,9 @@ class GitSourceAdapter:
         return Ok(ResolvedSource(dependency=dependency, path=path, revision=SourceRevision(revision)))
 
     @unwrap_to_error
-    def inspect(self, source: ResolvedSource, paths: tuple[SourcePath, ...]) -> Result[dict[SourcePath, ContentTree]]:
+    def inspect(  # noqa: CCR001 — Share native blob hashes and translate invalid selected metadata at this boundary.
+        self, source: ResolvedSource, paths: tuple[SourcePath, ...]
+    ) -> Result[dict[SourcePath, ContentTree]]:
         client = GitClient(path=source.path, repository=source.dependency.repository)
         entries = client.list_tree(source.revision).unwrap()
         digests: dict[GitObjectId, ContentHash] = {}
@@ -224,7 +227,16 @@ class GitSourceAdapter:
                     entry, path, digests[entry.object_id], repository=source.dependency.repository
                 ).unwrap()
                 files.append(file)
-            trees[path] = ContentTree(kind=kind, files=tuple(files))
+            try:
+                trees[path] = ContentTree(kind=kind, files=tuple(files))
+            except pydantic.ValidationError as exc:
+                return Err(
+                    [
+                        errors.RepositoryAccess(
+                            vcs=source.dependency.vcs, repository=source.dependency.repository, reason=str(exc)
+                        ).with_cause(exc)
+                    ]
+                )
         return Ok(trees)
 
     @unwrap_to_error

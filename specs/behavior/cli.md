@@ -369,13 +369,10 @@ The command MUST accept these command-specific options:
 - `--hosting-provider PROVIDER` — Explicit hosting implementation for required acquisition and the selected delivery mode.
 - `--output PATH` / `-o PATH` — Required patch artifact file in patch mode.
 - `--message MESSAGE` / `-m MESSAGE` — Commit message for modes preparing a commit; repeated values MUST become separate paragraphs.
-- `--file PATH` / `-F PATH` — UTF-8 commit-message file for modes preparing a commit, with `-` selecting standard input.
 
 Options MUST be accepted only in the modes listed for them.
-Message options MUST be accepted in all modes except overwrite.
-`--message` and `--file` MUST be mutually exclusive.
-Relative message-file paths MUST resolve against the invocation's working directory after home expansion.
-Without either message option, modes preparing a commit MUST supply a nonempty message without launching an editor.
+`--message` MUST be accepted in all modes except overwrite.
+Without `--message`, modes preparing a commit MUST supply a nonempty default message without launching an editor.
 The resolved message MUST apply to that commit or patch metadata.
 
 #### Entry selection
@@ -432,8 +429,8 @@ The artifact path MUST NOT overlap:
 
 An existing target MUST be a regular file rather than a directory or symbolic link.
 An explicitly selected unmanaged regular file MAY be replaced.
-Artifact replacement MUST be atomically visible; preparation or replacement failure MUST preserve an existing artifact or leave an initially absent file absent.
-The artifact MUST be written only after successful validation and patch preparation.
+The artifact MUST be written directly only after validation and contribution preparation succeed.
+An output or patch-generation failure MUST fail the command and MAY leave an empty or partial output file, including truncating an existing artifact.
 An empty changed selection MUST leave the output file unchanged.
 
 #### Results

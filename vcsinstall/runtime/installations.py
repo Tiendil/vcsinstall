@@ -1,6 +1,5 @@
 """Whole-project installation using matching locks and complete local-content protection."""
 
-from collections.abc import Callable
 from contextlib import ExitStack
 from functools import partial
 
@@ -9,9 +8,9 @@ from llm_tool_cli.core.errors import EnvironmentErrors
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.output import output
 
-from vcsinstall.domain import DependencyName, VcsId
+from vcsinstall.domain import DependencyName
 from vcsinstall.filesystem import FSClient
-from vcsinstall.hosting import HostingAdapter
+from vcsinstall.hosting import get_hosting
 from vcsinstall.runtime import errors
 from vcsinstall.runtime.cells import Operation, dependency_change_cells
 from vcsinstall.runtime.commands import (
@@ -23,7 +22,7 @@ from vcsinstall.runtime.commands import (
 )
 from vcsinstall.runtime.entities import DependencyPlan, DependencyRequest
 from vcsinstall.runtime.validation import validate_no_local_content_conflicts
-from vcsinstall.sources import ResolvedSource, SourceAdapter
+from vcsinstall.sources import ResolvedSource, SourceAdapter, get_adapter
 from vcsinstall.workspace import Lockfile, Workspace, active_workspace
 from vcsinstall.workspace import errors as workspace_errors
 from vcsinstall.workspace import serialize_workspace_changes, write_workspace_files
@@ -82,16 +81,13 @@ def _installation_lockfile(workspace: Workspace, plans: list[DependencyPlan]) ->
 
 @unwrap_to_error
 def install(  # noqa: CCR001 — Keep whole-project preparation, acquisition lifetimes, and effects in one scope.
-    *,
-    source_for: Callable[[VcsId], SourceAdapter],
-    hosting_for: Callable[[VcsId], Result[HostingAdapter]],
-    locked: bool = False,
+    *, locked: bool = False
 ) -> Result[None]:
     """Install the complete declared project, preparing every dependency before project mutation."""
     workspace = active_workspace.get()
     if locked:
         workspace.validate_complete_records().unwrap()
-    sources = {name: source_for(dependency.vcs) for name, dependency in sorted(workspace.config.dependencies.items())}
+    sources = {name: get_adapter(dependency.vcs) for name, dependency in sorted(workspace.config.dependencies.items())}
     requests = [
         _prepare_installation_request(workspace, name, source=source, locked=locked)
         .map_err(partial(_installation_errors, name))
@@ -106,7 +102,7 @@ def install(  # noqa: CCR001 — Keep whole-project preparation, acquisition lif
             source = sources[name]
             resolved = None
             if request.lock is None or len(request.retained) != len(request.observed):
-                hosting = hosting_for(request.definition.vcs).map_err(partial(_installation_errors, name)).unwrap()
+                hosting = get_hosting(request.definition).map_err(partial(_installation_errors, name)).unwrap()
                 acquired = acquired_sources.enter_context(
                     hosting.acquire(
                         request.definition,

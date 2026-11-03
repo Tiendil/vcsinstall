@@ -15,16 +15,19 @@ from pytest_mock import MockerFixture
 from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SourcePath, SourceRevision, VcsId
 from vcsinstall.domain.tests import make
 from vcsinstall.filesystem import ContentTree, FSClient, hashes
+from vcsinstall.hosting import DeliveryResult, PublicationRequest, PushOptions
 from vcsinstall.runtime import dependency_update
 from vcsinstall.runtime import errors as runtime_errors
 from vcsinstall.runtime.tests.conftest import CollectingEmitter
-from vcsinstall.sources import ResolvedSource
+from vcsinstall.sources import ResolvedSource, SourceAdapter
 from vcsinstall.sources import errors as source_errors
 from vcsinstall.sources.adapters.noop import NoopSourceAdapter
 from vcsinstall.workspace import Config, DependencyLock, Entry, FileBaseline, Lockfile, LockfilePath, Workspace
 
 
 class ScopedHosting:
+    __slots__ = ("path", "active", "requests")
+
     def __init__(self, path: Path) -> None:
         self.path = path
         self.active = 0
@@ -32,6 +35,15 @@ class ScopedHosting:
 
     def probe_repository(self, repository: RepositoryLocator) -> Result[bool]:
         raise AssertionError("Updates must not probe declared repositories.")
+
+    def validate_artifact(self, dependency: Dependency, path: Path | None) -> Result[None]:
+        raise AssertionError("Updates must not validate publication artifacts.")
+
+    def validate_options(self, dependency: Dependency, options: PushOptions) -> Result[None]:
+        raise AssertionError("Updates must not validate publication options.")
+
+    def publish(self, request: PublicationRequest, *, source: SourceAdapter) -> Result[DeliveryResult]:
+        raise AssertionError("Updates must not publish changes.")
 
     @contextmanager
     def acquire(
@@ -104,6 +116,8 @@ class TestDependencyUpdate:
         source = FixtureSource()
         resolve = mocker.spy(source, "resolve")
         copy = source.copy_file
+        mocker.patch("vcsinstall.runtime.updates.get_adapter", return_value=source)
+        get_hosting = mocker.patch("vcsinstall.runtime.updates.get_hosting", return_value=Ok(hosting))
 
         def copy_with_active_scopes(resolved: ResolvedSource, path: SourcePath, stream: BinaryIO) -> Result[None]:
             assert hosting.active == 2
@@ -112,10 +126,11 @@ class TestDependencyUpdate:
 
         mocker.patch.object(source, "copy_file", side_effect=copy_with_active_scopes)
         with workspace.scope():
-            dependency_update(source_for=lambda vcs: source, hosting_for=lambda vcs: Ok(hosting)).unwrap()
+            dependency_update().unwrap()
 
         assert resolve.call_count == 2
         assert len(hosting.requests) == 2
+        assert [call.args[0] for call in get_hosting.call_args_list] == hosting.requests
         assert hosting.active == 0
         assert (workspace.project_root / "a").read_bytes() == b"new"
         assert (workspace.project_root / "z").read_bytes() == b"new"
@@ -137,6 +152,11 @@ class TestDependencyUpdate:
         problem = source_errors.RepositoryAccess(
             vcs=VcsId.noop, repository=RepositoryLocator("Fixture"), reason="unreadable source"
         ).with_cause(cause)
+        mocker.patch("vcsinstall.runtime.updates.get_adapter", return_value=source)
+        mocker.patch(
+            "vcsinstall.runtime.updates.get_hosting",
+            return_value=Err([problem]) if stage == "hosting" else Ok(hosting),
+        )
 
         @contextmanager
         def acquire(
@@ -145,7 +165,7 @@ class TestDependencyUpdate:
             yield Err([problem])
 
         if stage == "acquisition":
-            mocker.patch.object(hosting, "acquire", side_effect=acquire)
+            mocker.patch.object(type(hosting), "acquire", side_effect=acquire)
         elif stage != "hosting":
             method = {
                 "normalization": "normalize_repository",
@@ -158,10 +178,7 @@ class TestDependencyUpdate:
         before = (workspace.config_path.read_bytes(), workspace.lockfile_path.read_bytes())
 
         with workspace.scope():
-            result = dependency_update(
-                source_for=lambda vcs: source,
-                hosting_for=lambda vcs: Err([problem]) if stage == "hosting" else Ok(hosting),
-            )
+            result = dependency_update()
 
         failures = result.unwrap_err()
         assert isinstance(failures[0], runtime_errors.DependencyUpdateFailed)
@@ -181,6 +198,8 @@ class TestDependencyUpdate:
         problem = source_errors.RepositoryAccess(
             vcs=VcsId.noop, repository=RepositoryLocator("Fixture"), reason="cannot stream content"
         )
+        mocker.patch("vcsinstall.runtime.updates.get_adapter", return_value=source)
+        mocker.patch("vcsinstall.runtime.updates.get_hosting", return_value=Ok(hosting))
         copy = source.copy_file
         copied = False
 
@@ -195,7 +214,7 @@ class TestDependencyUpdate:
         before = (workspace.config_path.read_bytes(), workspace.lockfile_path.read_bytes())
 
         with workspace.scope():
-            result = dependency_update(source_for=lambda vcs: source, hosting_for=lambda vcs: Ok(hosting))
+            result = dependency_update()
 
         failures = result.unwrap_err()
         assert isinstance(failures[0], runtime_errors.DependencyUpdateFailed)
@@ -213,10 +232,12 @@ class TestDependencyUpdate:
         source = FixtureSource()
         cause = ValueError("unsupported selection")
         problem = InvalidArguments(reason="unsupported selection").with_cause(cause)
+        mocker.patch("vcsinstall.runtime.updates.get_adapter", return_value=source)
+        mocker.patch("vcsinstall.runtime.updates.get_hosting", return_value=Ok(hosting))
         mocker.patch.object(source, "validate_input", return_value=Err([problem]))
 
         with workspace.scope():
-            result = dependency_update(source_for=lambda vcs: source, hosting_for=lambda vcs: Ok(hosting))
+            result = dependency_update()
 
         failures = result.unwrap_err()
         assert exit_code_for_errors(failures) == ExitCode.invalid_arguments

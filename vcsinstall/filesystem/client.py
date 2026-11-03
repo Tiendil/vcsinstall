@@ -67,18 +67,36 @@ class FSClient:
         return Ok(None)
 
     @unwrap_to_error
-    def remove(self, path: ProjectPathId) -> Result[None]:
-        """Remove one file or complete directory tree, leaving its parents intact."""
+    def remove(self, path: ProjectPathId, *, preserve_root: bool = False) -> Result[None]:
+        """Remove a file or complete tree, optionally retaining the selected directory.
+
+        With preserve_root=True, '@/docs' is emptied while the directory itself
+        remains. Files are removed directly regardless of preserve_root.
+        """
         self._require_writable(self.root / path.removeprefix("@/")).unwrap()
         target = self.resolve_path(path).unwrap()
         try:
             if target.is_dir():
-                shutil.rmtree(target)
+                self._remove_dir(target, preserve_root=preserve_root)
             else:
-                target.unlink(missing_ok=True)
+                self._remove_file(target)
         except OSError as exc:
             return Err([errors.AccessFailed(path=target, reason=str(exc)).with_cause(exc)])
         return Ok(None)
+
+    def _remove_file(self, path: Path) -> None:
+        """Unlink a contained file or child symlink without following its target."""
+        path.unlink(missing_ok=True)
+
+    def _remove_dir(self, path: Path, *, preserve_root: bool = False) -> None:
+        """Remove children recursively, then remove this directory unless it is preserved."""
+        for child in path.iterdir():
+            if stat.S_ISDIR(child.lstat().st_mode):
+                self._remove_dir(child)
+            else:
+                self._remove_file(child)
+        if not preserve_root:
+            path.rmdir()
 
     @unwrap_to_error
     def inspect_kind(self, path: ProjectPathId = ProjectPathId("@/")) -> Result[ContentKind]:

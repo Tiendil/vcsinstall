@@ -1,6 +1,5 @@
 """Preparation and application of updates spanning independently locked dependencies."""
 
-from collections.abc import Callable
 from contextlib import ExitStack
 from functools import partial
 
@@ -9,9 +8,9 @@ from llm_tool_cli.core.errors import EnvironmentErrors
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.output import output
 
-from vcsinstall.domain import DependencyName, VcsId
+from vcsinstall.domain import DependencyName
 from vcsinstall.filesystem import FSClient
-from vcsinstall.hosting import HostingAdapter
+from vcsinstall.hosting import get_hosting
 from vcsinstall.runtime import errors
 from vcsinstall.runtime.cells import Operation, dependency_change_cells
 from vcsinstall.runtime.commands import (
@@ -21,7 +20,7 @@ from vcsinstall.runtime.commands import (
     _prepare_dependency_request,
 )
 from vcsinstall.runtime.entities import DependencyPlan, DependencyRequest
-from vcsinstall.sources import SourceAdapter
+from vcsinstall.sources import SourceAdapter, get_adapter
 from vcsinstall.workspace import (
     Workspace,
     active_workspace,
@@ -51,12 +50,7 @@ def _prepare_update_request(
 
 
 @unwrap_to_error
-def dependency_update(
-    names: tuple[DependencyName, ...] = (),
-    *,
-    source_for: Callable[[VcsId], SourceAdapter],
-    hosting_for: Callable[[VcsId], Result[HostingAdapter]],
-) -> Result[None]:
+def dependency_update(names: tuple[DependencyName, ...] = ()) -> Result[None]:
     """Refresh all selected dependencies, preparing every entry before any project write."""
     workspace = active_workspace.get()
     selected = sorted(set(names) if names else workspace.config.dependencies)
@@ -66,7 +60,7 @@ def dependency_update(
     if not selected:
         return Ok(None)
 
-    sources = {name: source_for(workspace.config.dependencies[name].vcs) for name in selected}
+    sources = {name: get_adapter(workspace.config.dependencies[name].vcs) for name in selected}
     requests = {
         name: (
             _prepare_update_request(workspace, name, source=sources[name])
@@ -80,7 +74,7 @@ def dependency_update(
     with ExitStack() as acquired_sources:
         for name, request in requests.items():
             definition = request.definition
-            hosting = hosting_for(definition.vcs).map_err(partial(_update_errors, name)).unwrap()
+            hosting = get_hosting(definition).map_err(partial(_update_errors, name)).unwrap()
             acquired = acquired_sources.enter_context(hosting.acquire(definition))
             path = acquired.map_err(partial(_update_errors, name)).unwrap()
             source = sources[name]

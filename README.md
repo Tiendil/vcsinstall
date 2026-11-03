@@ -2,7 +2,7 @@
 
 `vcsinstall` is being developed to install files into a target repository from source repositories, record their origins in a lockfile, and push local changes back to their source.
 
-**Development status:** `init` creates project configuration, `dependency add` declares and locks Git and filesystem dependencies, `dependency list` reports dependencies and local entry statistics, `dependency outdated` checks source revisions, `dependency update` refreshes dependencies and their entries, `dependency remove` removes unused dependencies, `add` installs file and directory entries at their locked revisions, `install` reproduces the complete declared project, `list` reports entries and their local changes, `remove` removes entries with local-change protection or retains their files as unmanaged content, and `cache clean` clears shared repository data. Help, version output, and built-in usage documentation are available. Push back is planned.
+**Development status:** Dependency declaration, locking, installation, inspection, updates, removal, and cache cleanup are implemented. `dependency push` delivers local changes through Git branches, direct branch updates, patches, GitHub pull requests, or filesystem overwrite. Help, version output, and built-in usage documentation are available.
 
 ## Example
 
@@ -30,13 +30,10 @@ Available today:
 - **Entry inspection** — list all or selected entry roots with their owning dependency, locked revision, and local status without source or cache access.
 - **Entry removal** — remove selected entries and verified content, explicitly discard local changes with `--force`, or retain files with `--keep-files`.
 - **Cache cleanup** — clear owned shared repository data while preserving project files, original sources, and unrelated cache contents.
+- **Contributions** — publish complete selected entry trees through explicit delivery modes while retaining installation baselines.
 - **Source detection** — recognize Git repositories before ordinary directories, probe unqualified remote URLs, and honor explicit backend choices.
 - **Output protocols** — human output, framed output for coding agents, and JSON Lines for programs.
 - **Python entry point** — the same commands through `vcsinstall` and `python -m vcsinstall`.
-
-Planned:
-
-- **Push back** — transfer local changes to installed files back to their source repository.
 
 ## Rationale
 
@@ -196,6 +193,20 @@ vcsinstall dependency update ci formatting
 ```
 
 Update refreshes every entry of the selected dependencies and also locks dependencies without entries. It preserves configuration, restores missing files, and reflects upstream additions and deletions. Existing local files must collectively match their prior baseline or the selected source; conflicts anywhere in the selection stop preparation before files or locks change. Entries already matching the source stay untouched. Git dependencies with omitted selectors retain their recorded default branch, and revision pins remain pinned. Results report prior and selected revisions, with `updated` or `unchanged` outcomes.
+
+Publish local changes from one dependency:
+
+```bash
+vcsinstall dependency push ci --mode branch -m "Clarify shared specifications"
+vcsinstall dependency push ci @/specs/shared --mode patch -o ./shared-fix.patch
+vcsinstall dependency push ci --mode pr --branch contribute/shared-specs
+vcsinstall dependency push ci --mode direct --branch main
+vcsinstall dependency push local-guides --mode overwrite
+```
+
+Without entry paths, push selects changed entries of the named dependency. Explicit paths select exact entry roots; directory selections include new files and deletions. Branches, PRs, and patches use the locked source revision. Direct mode checks the current destination against each entry's baseline or proposed content and rejects conflicts. Overwrite explicitly replaces selected filesystem source content. Push preserves configuration, lockfile bytes, and local installations; a later update acknowledges matching upstream content.
+
+GitHub PR delivery uses the configured `gh` account and creates or reuses an eligible fork when necessary. Native Git modes need only Git. Use `--push-repository` to choose another recipient for branch, direct, or PR delivery. See `vcsinstall skill usage` and the [CLI contract](specs/behavior/cli.md) for options and retry guarantees.
 
 ## Specifications
 

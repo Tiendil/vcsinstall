@@ -7,7 +7,8 @@ from llm_tool_cli.protocol.output_cells.base import MetaValue, OutputCell
 
 from vcsinstall.cache import CacheRootPath
 from vcsinstall.domain import Dependency, DependencyName, SourcePath, SourceRevision
-from vcsinstall.runtime.entities import DependencyPlan, LocalStatus
+from vcsinstall.hosting import DeliveryMode, DeliveryResult
+from vcsinstall.runtime.entities import DependencyPlan, LocalStatus, PushPlan
 from vcsinstall.sources import ResolvedSource
 from vcsinstall.workspace import Entry
 
@@ -20,6 +21,8 @@ class Outcome(StrEnum):
     installed = "installed"
     removed = "removed"
     cleaned = "cleaned"
+    pushed = "pushed"
+    exported = "exported"
 
 
 class RefKind(StrEnum):
@@ -35,6 +38,7 @@ class Operation(StrEnum):
     dependency_outdated = "dependency outdated"
     dependency_remove = "dependency remove"
     dependency_update = "dependency update"
+    dependency_push = "dependency push"
     add = "add"
     remove = "remove"
     install = "install"
@@ -149,6 +153,50 @@ class InstallationCell(DependencyCell):
             "installation",
             **meta,
         )
+
+
+class PushCell(InstallationCell):
+    operation: Operation = Operation.dependency_push
+    mode: DeliveryMode
+    delivery: DeliveryResult | None = None
+
+    def _render(self, cell_type: type[OutputCell]) -> OutputCell:  # noqa: CCR001 — Project optional effects.
+        installation = super()._render(cell_type)
+        delivery = self.delivery
+        return cell_type.build_meta(
+            "installation",
+            **installation.meta,
+            mode=self.mode,
+            push_repository=delivery.repository if delivery else None,
+            branch=delivery.branch if delivery else None,
+            push_revision=delivery.revision if delivery else None,
+            hosting_provider=delivery.provider if delivery else None,
+            base_branch=delivery.base_branch if delivery else None,
+            review_url=delivery.review_url if delivery else None,
+            patch_file=str(delivery.patch_file) if delivery and delivery.patch_file else None,
+        )
+
+
+def push_cells(plan: PushPlan, delivery: DeliveryResult | None) -> list[LogicCell]:
+    """Project prepared push entries, attaching delivery effects only to changed content."""
+    return [
+        PushCell(
+            dependency=plan.name,
+            definition=plan.definition,
+            revision=plan.revision,
+            destination=entry.contribution.destination,
+            source_path=entry.contribution.source_path,
+            status=entry.status,
+            outcome=(
+                Outcome.unchanged
+                if not entry.changed
+                else Outcome.exported if plan.options.mode == DeliveryMode.patch else Outcome.pushed
+            ),
+            mode=plan.options.mode,
+            delivery=delivery if entry.changed else None,
+        )
+        for entry in plan.entries
+    ]
 
 
 def entry_add_cell(entry: Entry, resolved: ResolvedSource, *, unchanged: bool) -> LogicCell:

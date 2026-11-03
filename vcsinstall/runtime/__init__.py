@@ -11,6 +11,7 @@ from vcsinstall.runtime.commands import (
     entry_remove,
 )
 from vcsinstall.runtime.installations import install
+from vcsinstall.runtime.publications import dependency_push
 from vcsinstall.runtime.updates import dependency_update
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "dependency_outdated",
     "dependency_remove",
     "dependency_update",
+    "dependency_push",
     "entry_add",
     "entry_list",
     "entry_remove",

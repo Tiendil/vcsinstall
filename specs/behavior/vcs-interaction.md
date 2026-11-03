@@ -133,22 +133,23 @@ A source hosted on GitHub MUST retain backend `git`; hosting selection MUST NOT 
 Hosting selection MUST NOT create another source entity or change repository-cache identity or lock matching.
 The CLI's `dependency push --hosting-provider` option MUST select the hosting implementation for that invocation, including any required acquisition; an explicit value MUST override inference.
 
-Acquisition without explicit hosting selection MUST use `git` for Git sources and `filesystem` for filesystem sources.
-Acquiring a Git repository MUST NOT require inference of its hosting service or service API authentication.
+Hosting selection MUST use the same source-identity and explicit-override rules for acquisition, refresh, and every delivery mode.
+Without an explicit value, a Git source unambiguously recognized as GitHub through its source host or native-client configuration MUST select `github`; other Git sources MUST select `git`.
+Filesystem sources MUST select `filesystem`.
+The selected implementation MUST check whether it supports the requested delivery mode; selection MUST NOT change providers to accommodate that mode.
+
+Hosting recognition MAY inspect read-only local repository metadata and native-client configuration, but MUST NOT acquire repositories, contact service APIs, or require service authentication.
+Unavailable or ambiguous optional recognition MUST retain native Git access rather than block it.
 Acquisition and refresh MUST NOT require a delivery mode or publication permission.
 
-Without an explicit value, Git branch, direct, and patch delivery MUST select `git` regardless of the source's hosting service.
-Filesystem overwrite delivery MUST select `filesystem`.
-PR delivery MUST select a compatible service-specific implementation from an unambiguous recognized source host or native-client configuration.
-
-Unknown implementations and unsupported hosting/source/mode combinations MUST fail under the CLI's invalid-argument contract before payload reads or source access.
+Unknown implementations and unsupported hosting/source/mode combinations MUST fail under the CLI's invalid-argument contract before payload reads, repository acquisition, or source-content inspection.
 Where service identification is required, unresolved or ambiguous identity MUST fail with guidance to select or configure hosting before external mutation.
 Custom GitHub hosts and SSH aliases MUST be resolved unambiguously rather than routed to an unrelated default API host; a Git locator MUST NOT alone imply GitHub.
 
 Each hosting implementation MUST define its compatible source kinds and acquisition guarantees.
 Its delivery contract MUST define supported modes, destination rules, and external effects.
 Native acquisition and delivery MUST remain usable without service-specific clients or API authentication.
-Service authentication and account discovery failures MUST remain explicit operational failures rather than trigger interactive login or another account selection.
+Operations requiring service authentication or account discovery MUST report their failures explicitly rather than trigger interactive login or another account selection.
 Additional implementations MUST define acquisition and refresh behavior, supported delivery, and applicable review or fork capabilities before being exposed.
 
 ## Native client execution

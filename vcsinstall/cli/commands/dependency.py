@@ -8,6 +8,7 @@ from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.paths import PathInput
 
 from vcsinstall.cache import active_cache_root, resolve_cache_root
+from vcsinstall.cli.commands.push import push_dependency
 from vcsinstall.cli.entities import (
     BranchOption,
     DependencyNameArgument,
@@ -42,6 +43,7 @@ app = typer.Typer(
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
+app.command("push")(push_dependency)
 
 
 @unwrap_to_error
@@ -150,7 +152,7 @@ def add_dependency(  # noqa: CFQ002 — Typer exposes these independent command 
             name,
             dependency,
             source=get_adapter(dependency.vcs),
-            hosting=get_hosting(dependency.vcs).unwrap(),
+            hosting=get_hosting(dependency).unwrap(),
             redefine=redefine,
         ).unwrap()
 
@@ -183,7 +185,7 @@ def outdated_dependencies(context: typer.Context, names: DependencyNamesArgument
         context.with_resource(active_cache_root.scope(cache_root))
         workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
         context.with_resource(workspace.scope())
-        dependency_outdated(tuple(names or ()), source_for=get_adapter, hosting_for=get_hosting).unwrap()
+        dependency_outdated(tuple(names or ())).unwrap()
 
 
 @app.command("update")
@@ -196,4 +198,4 @@ def update_dependencies(context: typer.Context, names: DependencyNamesArgument =
         context.with_resource(active_cache_root.scope(cache_root))
         workspace = load_workspace(cwd=PathInput(cwd), path=command.config_input).unwrap()
         context.with_resource(workspace.scope())
-        dependency_update(tuple(names or ()), source_for=get_adapter, hosting_for=get_hosting).unwrap()
+        dependency_update(tuple(names or ())).unwrap()

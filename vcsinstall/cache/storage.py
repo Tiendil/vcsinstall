@@ -14,6 +14,8 @@ from vcsinstall.cache import errors
 from vcsinstall.cache.entities import CacheRootPath
 from vcsinstall.domain import Dependency
 
+LOCK_TIMEOUT_SECONDS = 10
+
 
 @unwrap_to_error
 def _acquire_lock(  # noqa: CCR001 — Creation, absent cleanup roots, and lock failures share one access boundary.
@@ -31,7 +33,9 @@ def _acquire_lock(  # noqa: CCR001 — Creation, absent cleanup roots, and lock 
                 return Err([errors.AccessFailed(path=root, reason="Cache root must be a directory.")])
 
         path = resolve_inside_project(root / "cache.lock", ProjectRootPath(root)).unwrap()
-        lock = FileLock(path, timeout=10, preserve_lock_file=True, fallback_to_soft=False, is_singleton=True)
+        lock = FileLock(
+            path, timeout=LOCK_TIMEOUT_SECONDS, preserve_lock_file=True, fallback_to_soft=False, is_singleton=True
+        )
         lock.acquire()
     except Timeout as exc:
         return Err([errors.LockTimeout(path=root).with_cause(exc)])

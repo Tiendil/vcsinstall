@@ -9,20 +9,20 @@ from llm_tool_cli.output import output
 from llm_tool_cli.paths import ProjectPathId, project_path_parts
 from llm_tool_cli.protocol.logic_cells.base import LogicCell
 
+from vcsinstall.core.paths import join_path
 from vcsinstall.domain import (
     ContentKind,
     Dependency,
     DependencyName,
     SourcePath,
     SourceRevision,
-    VcsId,
 )
 from vcsinstall.filesystem import (
     ContentTree,
     FSClient,
     hashes,
 )
-from vcsinstall.hosting import HostingAdapter
+from vcsinstall.hosting import HostingAdapter, get_hosting
 from vcsinstall.runtime import errors
 from vcsinstall.runtime.cells import (
     DependencyCell,
@@ -85,11 +85,6 @@ def _baseline(
             files=tuple(ManifestFile(path=path, hash=digest) for path, digest in file_hashes.items()),
         )
     return AbsentBaseline(dependency=name, source_path=ProjectPathId(entry.source_path), destination=destination)
-
-
-def _join_path(root: ProjectPathId, relative: ProjectPathId) -> ProjectPathId:
-    suffix = relative.removeprefix("@/")
-    return ProjectPathId(root.rstrip("/") + "/" + suffix) if suffix else root
 
 
 @unwrap_to_error
@@ -236,8 +231,8 @@ def _apply_entry_change(
     if plan.observed.kind != ContentKind.absent:
         filesystem.remove(destination).unwrap()
     for file in plan.source.files:
-        target = _join_path(destination, file.path)
-        source_path = SourcePath(_join_path(ProjectPathId(plan.entry.source_path), file.path))
+        target = join_path(destination, file.path)
+        source_path = SourcePath(join_path(ProjectPathId(plan.entry.source_path), file.path))
         filesystem.write_stream(target, partial(copy_file, source_path), executable=file.executable).unwrap()
     return Ok(None)
 
@@ -564,23 +559,17 @@ def _dependency_current_revision(
     locked: DependencyLock,
     *,
     source: SourceAdapter,
-    hosting_for: Callable[[VcsId], Result[HostingAdapter]],
 ) -> Result[SourceRevision]:
     definition = Dependency.model_validate(locked.model_dump(exclude={"revision"}))
     source.validate_input(definition).unwrap()
-    hosting = hosting_for(definition.vcs).unwrap()
+    hosting = get_hosting(definition).unwrap()
     with hosting.acquire(definition) as acquired:
         resolved = source.resolve(definition, acquired.unwrap()).unwrap()
         return Ok(resolved.revision)
 
 
 @unwrap_to_error
-def dependency_outdated(
-    names: tuple[DependencyName, ...] = (),
-    *,
-    source_for: Callable[[VcsId], SourceAdapter],
-    hosting_for: Callable[[VcsId], Result[HostingAdapter]],
-) -> Result[None]:
+def dependency_outdated(names: tuple[DependencyName, ...] = ()) -> Result[None]:
     """Compare selected matching dependency locks with current source revisions without project writes."""
     workspace = active_workspace.get()
     selected = sorted(set(names) if names else workspace.config.dependencies)
@@ -588,7 +577,7 @@ def dependency_outdated(
     if unknown:
         return Err([InvalidArguments(reason=f"Unknown dependency {name!r}.") for name in unknown])
 
-    sources = {name: source_for(workspace.config.dependencies[name].vcs) for name in selected}
+    sources = {name: get_adapter(workspace.config.dependencies[name].vcs) for name in selected}
     locks = {
         name: (
             _prepare_dependency_lock(workspace, name, source=sources[name])
@@ -601,7 +590,7 @@ def dependency_outdated(
     cells: list[LogicCell] = []
     for name, locked in locks.items():
         current_revision = (
-            _dependency_current_revision(locked, source=sources[name], hosting_for=hosting_for)
+            _dependency_current_revision(locked, source=sources[name])
             .map_err(lambda problems: [errors.DependencyCheckFailed(dependency=name), *problems])
             .unwrap()
         )
@@ -671,11 +660,9 @@ def dependency_remove(  # noqa: CCR001 — Keep removal validation, prior-lock r
 
 
 @unwrap_to_error
-def entry_add(  # noqa: CFQ002 — One entry and independent adapters with explicit operation permissions.
+def entry_add(
     entry: Entry,
     *,
-    source: SourceAdapter,
-    hosting: HostingAdapter,
     redefine: bool = False,
     allow_outdated: bool = False,
 ) -> Result[None]:
@@ -691,9 +678,13 @@ def entry_add(  # noqa: CFQ002 — One entry and independent adapters with expli
         previous = workspace.require_entry_baseline(declared).unwrap()
     elif workspace.lockfile is not None:
         previous = workspace.lockfile.baseline_for_destination(entry.destination)
+
+    source = get_adapter(workspace.config.dependencies[entry.dependency].vcs)
     locked = _prepare_dependency_lock(workspace, entry.dependency, source=source).unwrap()
     dependency = Dependency.model_validate(locked.model_dump(exclude={"revision"}))
     source.validate_input(dependency).unwrap()
+    hosting = get_hosting(dependency).unwrap()
+
     with hosting.acquire(dependency, revision=locked.revision) as acquired:
         path = acquired.unwrap()
         current = source.resolve(dependency, path).unwrap()

@@ -39,7 +39,7 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/architecture/python.md` — General Python coding and documentation conventions.
 - `./specs/architecture/tests.md` — Requirements for project tests.
 - `./specs/behavior/cache.md` — The shared repository cache contract.
-- `./specs/behavior/cli.md` — The public command-line interface and command behavior contract.
+- `./specs/behavior/cli.md` — CLI syntax, option semantics, command behavior, and patch output failure handling.
 - `./specs/behavior/config.md` — The project declaration format and configuration contract.
 - `./specs/behavior/files-and-directories.md` — The entry destination ownership and file-tree management contract.
 - `./specs/behavior/locking.md` — The dependency state and operation lifecycle contract.

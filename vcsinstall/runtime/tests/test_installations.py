@@ -23,9 +23,10 @@ from vcsinstall.domain import (
 )
 from vcsinstall.domain.tests import make
 from vcsinstall.filesystem import ContentTree, FSClient, hashes
+from vcsinstall.hosting import DeliveryResult, PublicationRequest, PushOptions
 from vcsinstall.runtime import errors, install
 from vcsinstall.runtime.tests.conftest import CollectingEmitter
-from vcsinstall.sources import ResolvedSource
+from vcsinstall.sources import ResolvedSource, SourceAdapter
 from vcsinstall.sources import errors as source_errors
 from vcsinstall.sources.adapters.noop import NoopSourceAdapter
 from vcsinstall.workspace import Config, DependencyLock, Entry, FileBaseline, Lockfile, LockfilePath, Workspace
@@ -41,6 +42,15 @@ class ControlledHosting:
 
     def probe_repository(self, repository: RepositoryLocator) -> Result[bool]:
         raise AssertionError("Installation must not probe declared repositories.")
+
+    def validate_artifact(self, dependency: Dependency, path: Path | None) -> Result[None]:
+        raise AssertionError("Installation must not validate publication artifacts.")
+
+    def validate_options(self, dependency: Dependency, options: PushOptions) -> Result[None]:
+        raise AssertionError("Installation must not validate publication options.")
+
+    def publish(self, request: PublicationRequest, *, source: SourceAdapter) -> Result[DeliveryResult]:
+        raise AssertionError("Installation must not publish changes.")
 
     @contextmanager
     def acquire(
@@ -116,6 +126,8 @@ class TestInstall:
         resolve = mocker.spy(source, "resolve")
         inspect = mocker.spy(source, "inspect")
         copy = source.copy_file
+        mocker.patch("vcsinstall.runtime.installations.get_adapter", return_value=source)
+        get_hosting = mocker.patch("vcsinstall.runtime.installations.get_hosting", return_value=Ok(hosting))
 
         def copy_with_active_scopes(resolved: ResolvedSource, path: SourcePath, stream: BinaryIO) -> Result[None]:
             assert hosting.active == 2
@@ -123,11 +135,12 @@ class TestInstall:
 
         mocker.patch.object(source, "copy_file", side_effect=copy_with_active_scopes)
         with workspace.scope():
-            install(source_for=lambda vcs: source, hosting_for=lambda vcs: Ok(hosting)).unwrap()
+            install().unwrap()
 
         assert resolve.call_count == 2
         assert inspect.call_count == 2
         assert hosting.requests == [(definition, None, True) for definition in workspace.config.dependencies.values()]
+        assert [call.args[0] for call in get_hosting.call_args_list] == [request[0] for request in hosting.requests]
         assert hosting.active == 0
         assert (workspace.project_root / "a").read_bytes() == b"new"
         assert (workspace.project_root / "z").read_bytes() == b"new"
@@ -165,9 +178,11 @@ class TestInstall:
         (hosting.path / "guide").write_bytes(b"old")
         source = ControlledSource()
         resolve = mocker.spy(source, "resolve")
+        mocker.patch("vcsinstall.runtime.installations.get_adapter", return_value=source)
+        mocker.patch("vcsinstall.runtime.installations.get_hosting", return_value=Ok(hosting))
 
         with workspace.scope():
-            install(source_for=lambda vcs: source, hosting_for=lambda vcs: Ok(hosting), locked=locked).unwrap()
+            install(locked=locked).unwrap()
 
         resolve.assert_not_called()
         assert hosting.requests == [(definition, SourceRevision("old"), False) for definition in definitions.values()]
@@ -190,6 +205,11 @@ class TestInstall:
         problem = source_errors.RepositoryAccess(
             vcs=VcsId.noop, repository=RepositoryLocator("Fixture"), reason="unreadable source"
         ).with_cause(cause)
+        mocker.patch("vcsinstall.runtime.installations.get_adapter", return_value=source)
+        mocker.patch(
+            "vcsinstall.runtime.installations.get_hosting",
+            return_value=Err([problem]) if stage == "hosting" else Ok(hosting),
+        )
 
         @contextmanager
         def acquire(
@@ -211,10 +231,7 @@ class TestInstall:
         before = workspace.config_path.read_bytes(), workspace.lockfile_path.read_bytes()
 
         with workspace.scope():
-            result = install(
-                source_for=lambda vcs: source,
-                hosting_for=lambda vcs: Err([problem]) if stage == "hosting" else Ok(hosting),
-            )
+            result = install()
 
         failures = result.unwrap_err()
         assert isinstance(failures[0], errors.DependencyInstallationFailed)
@@ -234,6 +251,8 @@ class TestInstall:
         problem = source_errors.RepositoryAccess(
             vcs=VcsId.noop, repository=RepositoryLocator("Fixture"), reason="stream failed"
         )
+        mocker.patch("vcsinstall.runtime.installations.get_adapter", return_value=source)
+        mocker.patch("vcsinstall.runtime.installations.get_hosting", return_value=Ok(hosting))
         copy = source.copy_file
         copied = False
 
@@ -248,7 +267,7 @@ class TestInstall:
         before = workspace.config_path.read_bytes(), workspace.lockfile_path.read_bytes()
 
         with workspace.scope():
-            result = install(source_for=lambda vcs: source, hosting_for=lambda vcs: Ok(hosting))
+            result = install()
 
         failures = result.unwrap_err()
         assert isinstance(failures[0], errors.DependencyInstallationFailed)
@@ -266,10 +285,12 @@ class TestInstall:
         source = ControlledSource()
         cause = ValueError("unsupported selection")
         problem = InvalidArguments(reason="unsupported selection").with_cause(cause)
+        mocker.patch("vcsinstall.runtime.installations.get_adapter", return_value=source)
+        mocker.patch("vcsinstall.runtime.installations.get_hosting", return_value=Ok(hosting))
         mocker.patch.object(source, "validate_input", return_value=Err([problem]))
 
         with workspace.scope():
-            result = install(source_for=lambda vcs: source, hosting_for=lambda vcs: Ok(hosting))
+            result = install()
 
         failures = result.unwrap_err()
         assert exit_code_for_errors(failures) == ExitCode.invalid_arguments

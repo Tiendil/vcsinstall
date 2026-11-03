@@ -19,9 +19,7 @@ from vcsinstall.cli.entities import (
     SourceArgument,
 )
 from vcsinstall.domain import VcsId
-from vcsinstall.hosting import get_hosting
 from vcsinstall.runtime import entry_add, entry_list, entry_remove, install
-from vcsinstall.sources import get_adapter
 from vcsinstall.workspace import Entry, load_workspace
 
 
@@ -47,11 +45,8 @@ def add_entry(
             source_path=source.source_path,
             destination=normalize_path(destination.strip(), workspace.project_root, cwd=cwd).unwrap(),
         )
-        dependency = workspace.config.dependencies[source.dependency]
         entry_add(
             entry,
-            source=get_adapter(dependency.vcs),
-            hosting=get_hosting(dependency.vcs).unwrap(),
             redefine=redefine,
             allow_outdated=allow_outdated,
         ).unwrap()
@@ -107,4 +102,4 @@ def install_entries(context: typer.Context, locked: LockedOption = False) -> Non
                     for name in unsupported
                 ]
             ).unwrap()
-        install(source_for=get_adapter, hosting_for=get_hosting, locked=locked).unwrap()
+        install(locked=locked).unwrap()

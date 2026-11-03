@@ -1,3 +1,5 @@
+from typing import Self
+
 import pydantic
 from llm_tool_cli.core.entities import BaseEntity
 from llm_tool_cli.paths import ProjectPathId, is_project_path_id
@@ -31,6 +33,33 @@ class ContentTree(BaseEntity):
 
     kind: ContentKind
     files: tuple[FileInfo, ...] = ()
+
+    @pydantic.model_validator(mode="after")
+    def _validate_files(self) -> Self:  # noqa: CCR001 — Validate root kinds and paths together.
+        """Reject duplicate or obstructed modeled file paths and impossible root kinds.
+
+        A directory containing '@/a' and '@/a/b', or names collapsing to one path
+        after stripping, fails. A file contains exactly one root-position record.
+        """
+        paths = {file.path for file in self.files}
+        if len(paths) != len(self.files):
+            raise ValueError("Inspected file paths must be unique after normalization.")
+        if self.kind == ContentKind.file:
+            if paths != {"@/"}:
+                raise ValueError("An inspected file must have exactly one root-position file record.")
+        elif self.kind == ContentKind.absent:
+            if paths:
+                raise ValueError("Absent content cannot contain files.")
+        elif "@/" in paths or any(
+            any(
+                ProjectPathId(path[:index]) in paths
+                for index, character in enumerate(path)
+                if index > 1 and character == "/"
+            )
+            for path in paths
+        ):
+            raise ValueError("Directory file paths cannot contain a root file or obstruct each other.")
+        return self
 
     @property
     def file_hashes(self) -> dict[ProjectPathId, ContentHash]:

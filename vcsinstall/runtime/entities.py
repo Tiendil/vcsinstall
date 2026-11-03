@@ -6,6 +6,7 @@ from llm_tool_cli.paths import ProjectPathId
 
 from vcsinstall.domain import Dependency, DependencyName, SourceRevision
 from vcsinstall.filesystem import ContentTree
+from vcsinstall.hosting import Contribution, PublicationRequest, PushOptions
 from vcsinstall.sources import ResolvedSource
 from vcsinstall.workspace import DependencyLock, Entry, InstallationBaseline
 
@@ -50,3 +51,25 @@ class DependencyRequest(BaseEntity):
     lock: DependencyLock | None = None
     observed: dict[ProjectPathId, ContentTree] = pydantic.Field(default_factory=dict)
     retained: list[EntryPlan] = pydantic.Field(default_factory=list)
+
+
+class PushEntry(BaseEntity):
+    """A complete inspected contribution and its status against the installation baseline."""
+
+    contribution: Contribution
+    status: LocalStatus
+
+    @property
+    def changed(self) -> bool:
+        return self.status != LocalStatus.unmodified
+
+
+class PushPlan(BaseEntity):
+    """Prepared push results and an optional publication, without clients or project mutations."""
+
+    name: DependencyName
+    definition: Dependency
+    revision: SourceRevision
+    options: PushOptions
+    entries: tuple[PushEntry, ...]
+    request: PublicationRequest | None = None

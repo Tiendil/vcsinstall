@@ -128,8 +128,10 @@ Adapters and runtime MUST follow the invocation state stability assumption in Ge
 Their allowed effects MUST follow Backend selection and capabilities and Native client execution in that specification; filesystem source semantics MUST follow `specs/behavior/vcs/filesystem.md`.
 The default source-adapter registry MUST cover every recognized source backend.
 Replacement registries supplied at input or loading boundaries MUST preserve that complete coverage so selecting a recognized backend always supplies an adapter.
-Single-dependency runtime operations requiring repository access MUST require independently supplied source and hosting adapters.
-Production callers MUST select the source adapter using the prepared dependency's backend and obtain default hosting through the hosting module without embedding that selection in runtime operations.
+Runtime operations MAY accept independently supplied source and hosting adapters.
+Production callers supplying adapters MUST select the source adapter using the prepared dependency's backend and obtain default hosting through the hosting module.
+Runtime operations adding entries or spanning multiple dependencies MUST use the shared source and hosting selection facilities directly rather than require caller-supplied adapters or selection callbacks.
+Backend and hosting selection policies MUST remain in their owning modules rather than be duplicated in runtime operations.
 Hosting selection MUST NOT acquire repositories or perform cache filesystem access.
 
 The cache module MUST own an invocation-scoped binding for the normalized cache root, using `llm_tool_cli`'s shared context facilities.
@@ -157,6 +159,7 @@ GitHub hosting MUST compose Git hosting with GitHub-specific repository and revi
 Filesystem hosting MUST provide access to the declared source directory and apply authorized source writes through the lower-level filesystem adapter; it MUST remain distinct from that adapter and the filesystem source adapter.
 Noop hosting MUST simulate acquisition, refresh, and outgoing workflows independently of the selected source adapter.
 These implementations MUST share the hosting-adapter boundary rather than introduce another publication-adapter layer.
+Hosting selection MUST belong to one hosting-owned boundary shared by acquisition and outgoing workflows, with delivery compatibility checked by the selected adapter.
 
 Reusable local repository-inspection capabilities MAY be exposed by `sources` for hosting implementations.
 `vcs_clients` MUST own native VCS command execution and reusable object and reference inspection, including parsing native command output.

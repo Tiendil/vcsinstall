@@ -301,15 +301,63 @@ class TestFSClient:
         assert (writer.root / "sibling").read_bytes() == b"keep"
 
     @pytest.mark.parametrize("directory", [False, True])
-    def test_remove__readonly_prevents_effects(self, client: FSClient, directory: bool) -> None:
+    @pytest.mark.parametrize("preserve_root", [False, True])
+    def test_remove__readonly_prevents_effects(self, client: FSClient, directory: bool, preserve_root: bool) -> None:
         target = client.root / "target"
         if directory:
             target.mkdir()
             target = target / "file"
         target.write_bytes(b"keep")
 
-        assert client.remove(ProjectPathId("@/target")).is_err(errors.ReadOnly)
+        assert client.remove(ProjectPathId("@/target"), preserve_root=preserve_root).is_err(errors.ReadOnly)
         assert target.read_bytes() == b"keep"
+
+    @pytest.mark.parametrize("selected", ["@/", "@/target"])
+    def test_remove__preserves_only_selected_directory(self, writer: FSClient, selected: str) -> None:
+        target = writer.root if selected == "@/" else writer.root / "target"
+        (target / "nested/deeper").mkdir(parents=True)
+        (target / "empty").mkdir()
+        (target / "nested/deeper/.hidden").write_bytes(b"remove")
+        (target / "file").write_bytes(b"remove")
+        original = target.stat()
+
+        writer.remove(ProjectPathId(selected), preserve_root=True).unwrap()
+
+        assert target.is_dir() and not tuple(target.iterdir())
+        assert target.stat().st_ino == original.st_ino
+        assert target.stat().st_mode == original.st_mode
+
+    @pytest.mark.parametrize("exists", [False, True])
+    def test_remove__preserve_root_still_removes_files_without_creating_missing_targets(
+        self, writer: FSClient, exists: bool
+    ) -> None:
+        target = writer.root / "target"
+        if exists:
+            target.write_bytes(b"remove")
+
+        writer.remove(ProjectPathId("@/target"), preserve_root=True).unwrap()
+
+        assert not target.exists()
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX symbolic links")
+    @pytest.mark.parametrize("preserve_root", [False, True])
+    def test_remove__unlinks_descendant_symlinks_without_touching_their_targets(
+        self, writer: FSClient, tmp_path: Path, preserve_root: bool
+    ) -> None:
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "keep").write_bytes(b"keep")
+        target = writer.root / "target"
+        (target / "nested").mkdir(parents=True)
+        (target / "nested/link").symlink_to(outside, target_is_directory=True)
+        (target / "dangling").symlink_to(tmp_path / "missing")
+
+        writer.remove(ProjectPathId("@/target"), preserve_root=preserve_root).unwrap()
+
+        assert (outside / "keep").read_bytes() == b"keep"
+        assert target.exists() == preserve_root
+        if preserve_root:
+            assert not tuple(target.iterdir())
 
     @pytest.mark.skipif(os.name != "posix", reason="POSIX symbolic links")
     def test_remove__rejects_symlink_root(self, writer: FSClient) -> None:
@@ -329,7 +377,7 @@ class TestFSClient:
         else:
             target.write_bytes(b"keep")
         cause = OSError("cannot remove")
-        mocker.patch("shutil.rmtree" if directory else "pathlib.Path.unlink", side_effect=cause)
+        mocker.patch("pathlib.Path.rmdir" if directory else "pathlib.Path.unlink", side_effect=cause)
 
         problem = writer.remove(ProjectPathId("@/target")).unwrap_err()[0]
 
@@ -337,6 +385,25 @@ class TestFSClient:
         assert problem.path == target
         assert problem.cause is cause
         assert target.exists()
+
+    @pytest.mark.parametrize("preserve_root", [False, True])
+    @pytest.mark.parametrize("failure", ["iteration", "child_removal"])
+    def test_remove__retains_recursive_failure(
+        self, writer: FSClient, mocker: MockerFixture, preserve_root: bool, failure: str
+    ) -> None:
+        target = writer.root / "target"
+        (target / "nested").mkdir(parents=True)
+        (target / "nested/file").write_bytes(b"keep")
+        cause = PermissionError("Cannot remove selected contents")
+        mocker.patch("pathlib.Path.iterdir" if failure == "iteration" else "pathlib.Path.unlink", side_effect=cause)
+
+        result = writer.remove(ProjectPathId("@/target"), preserve_root=preserve_root)
+
+        assert result.is_err(errors.AccessFailed)
+        problem = result.unwrap_err()[0]
+        assert isinstance(problem, errors.AccessFailed)
+        assert problem.path == target and problem.cause is cause
+        assert (target / "nested/file").read_bytes() == b"keep"
 
     @pytest.mark.parametrize("operation", ["write_stream", "remove"])
     def test_mutations__reject_paths_outside_root(

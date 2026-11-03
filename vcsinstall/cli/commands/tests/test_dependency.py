@@ -38,7 +38,7 @@ from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, Sou
 from vcsinstall.filesystem import FSClient
 from vcsinstall.filesystem import errors as filesystem_errors
 from vcsinstall.filesystem import hashes
-from vcsinstall.hosting import HostingAdapter
+from vcsinstall.hosting import DeliveryResult, HostingAdapter, PublicationRequest, PushOptions
 from vcsinstall.runtime import errors as runtime_errors
 from vcsinstall.sources import DEFAULT_ADAPTERS, SourceAdapter
 from vcsinstall.sources import errors as source_errors
@@ -53,6 +53,8 @@ from vcsinstall.workspace import errors as workspace_errors
 
 
 class ProbingHosting:
+    __slots__ = ("result", "probes")
+
     def __init__(self, result: Result[bool] | None = None) -> None:
         self.result = result if result is not None else Ok(True)
         self.probes: list[RepositoryLocator] = []
@@ -60,6 +62,15 @@ class ProbingHosting:
     def probe_repository(self, repository: RepositoryLocator) -> Result[bool]:
         self.probes.append(repository)
         return self.result
+
+    def validate_artifact(self, dependency: Dependency, path: Path | None) -> Result[None]:
+        raise AssertionError("Input preparation must not validate publication artifacts.")
+
+    def validate_options(self, dependency: Dependency, options: PushOptions) -> Result[None]:
+        raise AssertionError("Input preparation must not validate publication options.")
+
+    def publish(self, request: PublicationRequest, *, source: SourceAdapter) -> Result[DeliveryResult]:
+        raise AssertionError("Input preparation must not publish changes.")
 
     def acquire(
         self, dependency: Dependency, *, revision: SourceRevision | None = None, refresh: bool = True
@@ -2165,7 +2176,7 @@ class TestOutdatedDependencies:
         self, config: Path, tmp_path: Path, mocker: MockerFixture
     ) -> None:
         acquire = mocker.patch(
-            "vcsinstall.cli.commands.dependency.get_hosting", side_effect=AssertionError("Unexpected fetch")
+            "vcsinstall.runtime.commands.get_hosting", side_effect=AssertionError("Unexpected fetch")
         )
 
         code, records, output = invoke_dependency_outdated(config, tmp_path / "cache", "unknown", "unknown")

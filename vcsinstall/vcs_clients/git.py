@@ -2,12 +2,14 @@ import hashlib
 import os
 import re
 import subprocess  # noqa: S404 — Native Git is invoked without a shell and with arguments separated.
+import uuid
 from enum import StrEnum
 from pathlib import Path
 from typing import BinaryIO, NewType
 
 from llm_tool_cli.core.entities import BaseEntity
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
+from llm_tool_cli.paths import resolve_project_root
 
 from vcsinstall.domain import ContentHash, RepositoryLocator, VcsId
 from vcsinstall.vcs_clients import errors
@@ -49,6 +51,12 @@ class GitTreeEntry(BaseEntity):
     path: bytes
 
 
+class GitCommit(BaseEntity):
+    tree: GitObjectId
+    parents: tuple[GitObjectId, ...]
+    message: bytes
+
+
 def _git_command(arguments: list[str], path: Path | None) -> list[str]:
     command = ["git", "-c", "core.hooksPath=/dev/null", "-c", "protocol.ext.allow=never"]
     if path is not None:
@@ -76,6 +84,7 @@ def _run_git(
     path: Path | None = None,
     stdout: BinaryIO | None = None,
     timeout: float | None = None,
+    input: bytes | None = None,
 ) -> Result[bytes]:
     try:
         result = subprocess.run(  # noqa: S603 — Git arguments are passed as data without a shell.
@@ -85,6 +94,7 @@ def _run_git(
             env=_git_environment(),
             check=False,
             timeout=timeout,
+            input=input,
         )  # noqa: S603
     except subprocess.TimeoutExpired as exc:
         return Err(
@@ -121,9 +131,11 @@ class GitClient:
         self.path = path
         self.repository = repository
 
-    def run(self, arguments: list[str]) -> Result[bytes]:
+    def run(
+        self, arguments: list[str], *, input: bytes | None = None, stdout: BinaryIO | None = None
+    ) -> Result[bytes]:
         """Run a native command within this repository."""
-        return _run_git(arguments, repository=self.repository, path=self.path)
+        return _run_git(arguments, repository=self.repository, path=self.path, input=input, stdout=stdout)
 
     @staticmethod
     def probe_remote(repository: RepositoryLocator, *, timeout: float = 5.0) -> Result[bool]:
@@ -344,3 +356,169 @@ class GitClient:
             path=self.path,
             stdout=destination,
         ).map(lambda _: None)
+
+    @unwrap_to_error
+    def remote_branch(self, repository: RepositoryLocator, branch: str) -> Result[GitObjectId | None]:
+        """Inspect one literal branch in the explicit recipient, independently of cached refs."""
+        reference = f"refs/heads/{branch}".encode("utf-8")
+        listing = self.run(["ls-remote", "--refs", "--", repository, reference.decode("utf-8")]).unwrap()
+        identifiers = [line.split(b"\t")[0] for line in listing.splitlines() if line.endswith(b"\t" + reference)]
+        return Ok(GitObjectId(identifiers[0].decode("ascii")) if len(identifiers) == 1 else None)
+
+    def fetch_branch(self, repository: RepositoryLocator, branch: str) -> Result[None]:
+        """Retrieve complete branch history without replacing source reference observations."""
+        return self.run(["fetch", "--no-tags", "--no-write-fetch-head", "--", repository, f"refs/heads/{branch}"]).map(
+            lambda _: None
+        )
+
+    def store_file(self, path: Path) -> Result[GitObjectId]:
+        """Stream a previously inspected local file into a blob without Git filters."""
+        return self.run(["hash-object", "-w", "--no-filters", "--", str(path)]).map(
+            lambda value: GitObjectId(value.decode("ascii").strip())
+        )
+
+    @unwrap_to_error
+    def write_tree(self, entries: tuple[GitTreeEntry, ...]) -> Result[GitObjectId]:
+        """Build native trees from literal path bytes, preserving modes and unselected objects."""
+        direct: dict[bytes, GitTreeEntry] = {}
+        children: dict[bytes, list[GitTreeEntry]] = {}
+        for entry in entries:
+            name, separator, remainder = entry.path.partition(b"/")
+            if separator:
+                children.setdefault(name, []).append(entry.replace(path=remainder))
+            else:
+                direct[name] = entry
+        for name, descendants in children.items():
+            direct[name] = GitTreeEntry(
+                mode=b"040000",
+                kind=GitObjectKind.tree,
+                object_id=self.write_tree(tuple(descendants)).unwrap(),
+                path=name,
+            )
+        records = b"".join(
+            entry.mode
+            + b" "
+            + entry.kind.encode("ascii")
+            + b" "
+            + entry.object_id.encode("ascii")
+            + b"\t"
+            + name
+            + b"\0"
+            for name, entry in sorted(direct.items())
+        )
+        return self.run(["mktree", "-z", "--missing"], input=records).map(
+            lambda value: GitObjectId(value.decode("ascii").strip())
+        )
+
+    @unwrap_to_error
+    def commit_tree(self, tree: GitObjectId, parent: GitObjectId, message: str) -> Result[GitObjectId]:
+        """Create one commit with native identity and signing configuration, without touching refs."""
+        signing = self.run(["config", "--type=bool", "--get", "commit.gpgsign"])
+        arguments = ["commit-tree", tree, "-p", parent, "-F", "-"]
+        if signing.is_ok() and signing.unwrap().strip() == b"true":
+            arguments.append("-S")
+        elif signing.is_err() and any(
+            not isinstance(problem, errors.CommandFailed) or problem.returncode != 1
+            for problem in signing.unwrap_err()
+        ):
+            return Err(signing.unwrap_err())
+        payload = message.encode("utf-8")
+        if not payload.endswith(b"\n"):
+            payload += b"\n"
+        return self.run(arguments, input=payload).map(lambda value: GitObjectId(value.decode("ascii").strip()))
+
+    @unwrap_to_error
+    def inspect_commit(self, revision: GitObjectId) -> Result[GitCommit]:
+        value = self.run(["cat-file", "commit", revision]).unwrap()
+        headers, _, message = value.partition(b"\n\n")
+        return Ok(
+            GitCommit(
+                tree=GitObjectId(
+                    next(line[5:] for line in headers.splitlines() if line.startswith(b"tree ")).decode("ascii")
+                ),
+                parents=tuple(
+                    GitObjectId(line[7:].decode("ascii"))
+                    for line in headers.splitlines()
+                    if line.startswith(b"parent ")
+                ),
+                message=message,
+            )
+        )
+
+    def is_ancestor(self, ancestor: GitObjectId, descendant: GitObjectId) -> Result[bool]:
+        """Check ancestry using available complete history; a normal non-ancestor returns False.
+
+        For example, A is an ancestor of its child B, while sibling commits are not ancestors.
+        Missing objects remain native-client failures.
+        """
+        result = self.run(["merge-base", "--is-ancestor", ancestor, descendant])
+        if result.is_ok():
+            return Ok(True)
+        problems = result.unwrap_err()
+        if all(isinstance(problem, errors.CommandFailed) and problem.returncode == 1 for problem in problems):
+            return Ok(False)
+        return Err(problems)
+
+    def push_branch(
+        self, repository: RepositoryLocator, branch: str, revision: GitObjectId, *, expected: GitObjectId | None
+    ) -> Result[None]:
+        """Publish exactly one ref to one explicit URL with a conditional expected recipient state."""
+        remote = "vcsinstall-" + uuid.uuid4().hex
+        reference = f"refs/heads/{branch}"
+        return self.run(
+            [
+                "-c",
+                f"remote.{remote}.url={repository}",
+                "-c",
+                f"remote.{remote}.pushurl={repository}",
+                "-c",
+                f"remote.{remote}.mirror=false",
+                "push",
+                "--porcelain",
+                "--no-mirror",
+                "--no-follow-tags",
+                "--recurse-submodules=no",
+                f"--force-with-lease={reference}:{expected or ''}",
+                "--",
+                remote,
+                f"{revision}:{reference}",
+            ]
+        ).map(lambda _: None)
+
+    def format_patch(self, revision: GitObjectId, base: GitObjectId, output: BinaryIO) -> Result[None]:
+        return self.run(
+            [
+                "format-patch",
+                "--stdout",
+                "--binary",
+                "--full-index",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-renames",
+                f"--base={base}",
+                "-1",
+                revision,
+                "--",
+            ],
+            stdout=output,
+        ).map(lambda _: None)
+
+    @unwrap_to_error
+    def common_directory(self) -> Result[Path | None]:
+        """Find an enclosing Git repository, including linked worktrees, without mutating it."""
+        try:
+            if not any((parent / ".git").exists() for parent in (self.path, *self.path.parents)) and not (
+                (self.path / "HEAD").is_file() and (self.path / "objects").is_dir()
+            ):
+                return Ok(None)
+        except OSError as exc:
+            return Err(
+                [errors.CommandFailed(vcs=VcsId.git, repository=self.repository, reason=str(exc)).with_cause(exc)]
+            )
+        directory = self.run(["rev-parse", "--path-format=absolute", "--git-common-dir"]).unwrap()
+        return Ok(resolve_project_root(Path(os.fsdecode(directory.rstrip(b"\n")))).unwrap())
+
+    @unwrap_to_error
+    def checked_out_branches(self) -> Result[tuple[str, ...]]:
+        listing = self.run(["worktree", "list", "--porcelain", "-z"]).unwrap()
+        return Ok(tuple(os.fsdecode(field[7:]) for field in listing.split(b"\0") if field.startswith(b"branch ")))

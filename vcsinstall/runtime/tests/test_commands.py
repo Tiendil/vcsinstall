@@ -18,7 +18,7 @@ from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, Sou
 from vcsinstall.domain.tests import make
 from vcsinstall.filesystem import FSClient
 from vcsinstall.filesystem import errors as filesystem_errors
-from vcsinstall.hosting import GitHostingAdapter
+from vcsinstall.hosting import DeliveryResult, GitHostingAdapter, PublicationRequest, PushOptions
 from vcsinstall.runtime import (
     dependency_add,
     dependency_list,
@@ -31,7 +31,7 @@ from vcsinstall.runtime import (
 from vcsinstall.runtime import errors as runtime_errors
 from vcsinstall.runtime.commands import _prepare_dependency_lock
 from vcsinstall.runtime.tests.conftest import CollectingEmitter
-from vcsinstall.sources import ResolvedSource
+from vcsinstall.sources import ResolvedSource, SourceAdapter
 from vcsinstall.sources import errors as source_errors
 from vcsinstall.sources import get_adapter
 from vcsinstall.sources.adapters.noop import NoopSourceAdapter
@@ -42,6 +42,8 @@ from vcsinstall.workspace import load_workspace
 
 
 class ControlledHosting:
+    __slots__ = ("path", "requests", "revisions")
+
     def __init__(self, path: Path) -> None:
         self.path = path
         self.requests: list[Dependency] = []
@@ -49,6 +51,15 @@ class ControlledHosting:
 
     def probe_repository(self, repository: RepositoryLocator) -> Result[bool]:
         raise AssertionError("Runtime must not probe repository input.")
+
+    def validate_artifact(self, dependency: Dependency, path: Path | None) -> Result[None]:
+        raise AssertionError("Acquisition must not validate publication artifacts.")
+
+    def validate_options(self, dependency: Dependency, options: PushOptions) -> Result[None]:
+        raise AssertionError("Acquisition must not validate publication options.")
+
+    def publish(self, request: PublicationRequest, *, source: SourceAdapter) -> Result[DeliveryResult]:
+        raise AssertionError("Acquisition must not publish changes.")
 
     @contextmanager
     def acquire(
@@ -154,7 +165,7 @@ class TestEntryAdd:
         )
 
     def test_proposed_destination_is_checked_before_acquisition(
-        self, tmp_path: Path, emitter: CollectingEmitter
+        self, tmp_path: Path, emitter: CollectingEmitter, mocker: MockerFixture
     ) -> None:
         config = tmp_path / "vcsinstall.toml"
         definition = 'version = 1\n[dependencies.ci]\nvcs = "noop"\nrepository = "Fixture"\n'
@@ -162,14 +173,20 @@ class TestEntryAdd:
         (tmp_path / "vcsinstall.lock").write_text(definition + 'revision = "controlled revision"\n')
         (tmp_path / "link").symlink_to(tmp_path, target_is_directory=True)
         workspace = load_workspace(cwd=PathInput(tmp_path)).unwrap()
-        hosting = ControlledHosting(tmp_path / "fixture")
+        get_source = mocker.patch(
+            "vcsinstall.runtime.commands.get_adapter", side_effect=AssertionError("Invalid destination must be local")
+        )
+        get_hosting = mocker.patch(
+            "vcsinstall.runtime.commands.get_hosting", side_effect=AssertionError("Invalid destination must be local")
+        )
         entry = Entry.model_validate({"dependency": "ci", "source_path": "@/guide", "destination": "@/link/installed"})
 
         with workspace.scope():
-            result = entry_add(entry, source=ControlledSource(), hosting=hosting)
+            result = entry_add(entry)
 
         assert result.is_err(path_errors.InvalidProjectPath)
-        assert not hosting.requests
+        get_source.assert_not_called()
+        get_hosting.assert_not_called()
         assert not emitter.cells
         assert config.read_text() == definition
 
@@ -188,6 +205,8 @@ class TestEntryAdd:
         workspace = load_workspace(cwd=PathInput(tmp_path)).unwrap()
         hosting = ControlledHosting(tmp_path / "fixture")
         source = ControlledSource()
+        get_source = mocker.patch("vcsinstall.runtime.commands.get_adapter", return_value=source)
+        get_hosting = mocker.patch("vcsinstall.runtime.commands.get_hosting", return_value=Ok(hosting))
         tree = ContentTree(
             kind=ContentKind.file, files=(FileInfo(path=ProjectPathId("@/"), hash=hashes.hash_file(b"selected")),)
         )
@@ -201,29 +220,61 @@ class TestEntryAdd:
         entry = Entry.model_validate({"dependency": "ci", "source_path": "@/guide", "destination": "@/installed"})
 
         with workspace.scope():
-            entry_add(entry, source=source, hosting=hosting).unwrap()
+            entry_add(entry).unwrap()
 
         assert hosting.requests == [make.dependency(vcs="noop", repository="Fixture")]
+        get_source.assert_called_once_with(VcsId.noop)
+        get_hosting.assert_called_once_with(hosting.requests[0])
         assert hosting.revisions == [SourceRevision("controlled revision")]
         assert inspect.call_args.args[0].revision == "controlled revision"
         assert (tmp_path / "installed").read_bytes() == b"selected"
         assert len(emitter.cells) == 1
         assert emitter.cells[0].render_automation()[0].meta["operation"] == "add"
 
-    def test_missing_lock_precedes_source_acquisition(self, tmp_path: Path, emitter: CollectingEmitter) -> None:
+    def test_missing_lock_precedes_source_acquisition(
+        self, tmp_path: Path, emitter: CollectingEmitter, mocker: MockerFixture
+    ) -> None:
         config = tmp_path / "vcsinstall.toml"
         config.write_text('version = 1\n[dependencies.ci]\nvcs = "noop"\nrepository = "Fixture"\n')
         workspace = load_workspace(cwd=PathInput(tmp_path)).unwrap()
-        hosting = ControlledHosting(tmp_path / "fixture")
+        mocker.patch("vcsinstall.runtime.commands.get_adapter", return_value=ControlledSource())
+        get_hosting = mocker.patch(
+            "vcsinstall.runtime.commands.get_hosting",
+            side_effect=AssertionError("Missing lock must not select hosting"),
+        )
         entry = Entry.model_validate({"dependency": "ci", "source_path": "@/guide", "destination": "@/installed"})
 
         with workspace.scope():
-            result = entry_add(entry, source=ControlledSource(), hosting=hosting)
+            result = entry_add(entry)
 
         assert result.is_err(workspace_errors.DependencyLockRequired)
-        assert not hosting.requests
+        get_hosting.assert_not_called()
         assert not emitter.cells
         assert not (tmp_path / "vcsinstall.lock").exists()
+
+    def test_hosting_selection_failure_preserves_error_and_project_state(
+        self, tmp_path: Path, emitter: CollectingEmitter, mocker: MockerFixture
+    ) -> None:
+        config = tmp_path / "vcsinstall.toml"
+        config.write_text('version = 1\n[dependencies.ci]\nvcs = "noop"\nrepository = "Fixture"\n')
+        lockfile = tmp_path / "vcsinstall.lock"
+        lockfile.write_text(config.read_text() + 'revision = "controlled revision"\n')
+        workspace = load_workspace(cwd=PathInput(tmp_path)).unwrap()
+        cause = ValueError("Unsupported hosting")
+        problem = InvalidArguments(reason="No compatible hosting provider.").with_cause(cause)
+        mocker.patch("vcsinstall.runtime.commands.get_adapter", return_value=ControlledSource())
+        mocker.patch("vcsinstall.runtime.commands.get_hosting", return_value=Err([problem]))
+        entry = Entry.model_validate({"dependency": "ci", "source_path": "@/guide", "destination": "@/installed"})
+        before = config.read_bytes(), lockfile.read_bytes()
+
+        with workspace.scope():
+            result = entry_add(entry)
+
+        assert result.unwrap_err() == [problem]
+        assert result.unwrap_err()[0].cause is cause
+        assert (config.read_bytes(), lockfile.read_bytes()) == before
+        assert not (tmp_path / "installed").exists()
+        assert not emitter.cells
 
 
 @pytest.mark.usefixtures("isolated_settings")
@@ -501,12 +552,12 @@ class TestDependencyOutdated:
         inspect = mocker.spy(source, "inspect")
         copy = mocker.spy(source, "copy_file")
         before = workspace.model_dump()
+        mocker.patch("vcsinstall.runtime.commands.get_adapter", return_value=source)
+        get_hosting = mocker.patch("vcsinstall.runtime.commands.get_hosting", return_value=Ok(hosting))
 
         with workspace.scope():
             dependency_outdated(
                 (DependencyName("z-last"), DependencyName("a-first"), DependencyName("z-last")),
-                source_for=lambda vcs: source,
-                hosting_for=lambda vcs: Ok(hosting),
             ).unwrap()
 
         records = [cell.render_automation()[0].meta for cell in emitter.cells]
@@ -514,6 +565,7 @@ class TestDependencyOutdated:
         assert all(record["revision"] == "previous revision" for record in records)
         assert all(record["current_revision"] == "controlled revision" for record in records)
         assert hosting.requests == [workspace.config.dependencies[DependencyName("a-first")]] * 2
+        assert [call.args[0] for call in get_hosting.call_args_list] == hosting.requests
         assert hosting.revisions == [None, None]
         assert resolve.call_count == 2
         assert all(call.args[1] == hosting.path for call in resolve.call_args_list)
@@ -533,6 +585,11 @@ class TestDependencyOutdated:
             vcs=VcsId.noop, repository=RepositoryLocator("Fixture"), reason="Permission denied"
         ).with_cause(original)
         problems: EnvironmentErrors = [problem, path_errors.PathResolutionFailed(path="Fixture", reason="unavailable")]
+        mocker.patch("vcsinstall.runtime.commands.get_adapter", return_value=source)
+        mocker.patch(
+            "vcsinstall.runtime.commands.get_hosting",
+            return_value=Err(problems) if stage == "hosting" else Ok(hosting),
+        )
 
         @contextmanager
         def acquire(
@@ -545,16 +602,12 @@ class TestDependencyOutdated:
         elif stage == "validation":
             mocker.patch.object(source, "validate_input", return_value=Err(problems))
         elif stage == "acquisition":
-            mocker.patch.object(hosting, "acquire", side_effect=acquire)
+            mocker.patch.object(type(hosting), "acquire", side_effect=acquire)
         elif stage == "resolution":
             mocker.patch.object(source, "resolve", return_value=Err(problems))
 
         with workspace.scope():
-            result = dependency_outdated(
-                (DependencyName("a-first"),),
-                source_for=lambda vcs: source,
-                hosting_for=lambda vcs: Err(problems) if stage == "hosting" else Ok(hosting),
-            )
+            result = dependency_outdated((DependencyName("a-first"),))
 
         failures = result.unwrap_err()
         assert isinstance(failures[0], runtime_errors.DependencyCheckFailed)
@@ -566,17 +619,19 @@ class TestDependencyOutdated:
     def test_unknown_names_are_rejected_before_adapters_are_selected(
         self, workspace: Workspace, emitter: CollectingEmitter, mocker: MockerFixture
     ) -> None:
-        source_for = mocker.Mock(side_effect=AssertionError("Unexpected source selection"))
-        hosting_for = mocker.Mock(side_effect=AssertionError("Unexpected hosting selection"))
+        get_source = mocker.patch(
+            "vcsinstall.runtime.commands.get_adapter", side_effect=AssertionError("Unexpected source selection")
+        )
+        get_hosting = mocker.patch(
+            "vcsinstall.runtime.commands.get_hosting", side_effect=AssertionError("Unexpected hosting selection")
+        )
 
         with workspace.scope():
-            result = dependency_outdated(
-                (DependencyName("a-first"), DependencyName("unknown")), source_for=source_for, hosting_for=hosting_for
-            )
+            result = dependency_outdated((DependencyName("a-first"), DependencyName("unknown")))
 
         assert result.is_err(InvalidArguments)
-        source_for.assert_not_called()
-        hosting_for.assert_not_called()
+        get_source.assert_not_called()
+        get_hosting.assert_not_called()
         assert not emitter.cells
 
 

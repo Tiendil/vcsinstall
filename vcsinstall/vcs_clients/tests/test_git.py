@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from llm_tool_cli.core.result import Ok
+from llm_tool_cli.paths import errors as path_errors
 from pytest_mock import MockerFixture
 
 from vcsinstall.domain import RepositoryLocator, VcsId
@@ -16,6 +17,22 @@ class TestGitClient:
     @pytest.fixture
     def client(self, tmp_path: Path) -> GitClient:
         return create_repository(tmp_path / "source")
+
+    def test_common_directory__retains_metadata_access_failure(self, client: GitClient, mocker: MockerFixture) -> None:
+        cause = PermissionError("Cannot inspect source metadata")
+        mocker.patch("vcsinstall.vcs_clients.git.Path.exists", side_effect=cause)
+        result = client.common_directory()
+        assert result.is_err(errors.CommandFailed)
+        assert result.unwrap_err()[0].cause is cause
+
+    def test_common_directory__retains_shared_resolution_failure(
+        self, client: GitClient, mocker: MockerFixture
+    ) -> None:
+        cause = RuntimeError("Cannot resolve source administration")
+        mocker.patch("vcsinstall.vcs_clients.git.Path.resolve", side_effect=cause)
+        result = client.common_directory()
+        assert result.is_err(path_errors.PathResolutionFailed)
+        assert result.unwrap_err()[0].cause is cause
 
     @pytest.mark.parametrize("layout", ["worktree", "bare", "linked"])
     def test_is_repository__recognizes_exact_native_roots(

@@ -94,7 +94,7 @@ class TestListEntries:
         before = {path: path.read_bytes() for path in config.parent.rglob("*") if path.is_file()}
         for name in (
             "vcsinstall.cli.commands.entries.resolve_cache_root",
-            "vcsinstall.cli.commands.entries.get_hosting",
+            "vcsinstall.runtime.commands.get_hosting",
             "vcsinstall.cache.paths.user_cache_path",
             "vcsinstall.vcs_clients.GitClient.run",
             "vcsinstall.sources.adapters.git.GitSourceAdapter.resolve",
@@ -834,7 +834,7 @@ class TestRemoveEntries:
     def test_cache_and_source_access_are_unused(self, config: Path, mocker: MockerFixture) -> None:
         for name in (
             "vcsinstall.cli.commands.entries.resolve_cache_root",
-            "vcsinstall.cli.commands.entries.get_hosting",
+            "vcsinstall.runtime.commands.get_hosting",
             "vcsinstall.vcs_clients.GitClient.run",
             "vcsinstall.cache.paths.user_cache_path",
         ):
@@ -1548,7 +1548,7 @@ class TestInstallEntries:
         before = config.read_bytes(), lockfile.read_bytes()
         original = (config.parent / "z-guide.txt").stat()
         mocker.patch(
-            "vcsinstall.cli.commands.entries.get_hosting", side_effect=AssertionError("unexpected acquisition")
+            "vcsinstall.runtime.installations.get_hosting", side_effect=AssertionError("unexpected acquisition")
         )
         mocker.patch.object(GitClient, "run", side_effect=AssertionError("unexpected Git access"))
 
@@ -1659,7 +1659,7 @@ class TestInstallEntries:
             lockfile.write_text(tomli_w.dumps(recorded))
         before = config.read_bytes(), lockfile.read_bytes() if lockfile.exists() else None
         mocker.patch(
-            "vcsinstall.cli.commands.entries.get_hosting", side_effect=AssertionError("unexpected acquisition")
+            "vcsinstall.runtime.installations.get_hosting", side_effect=AssertionError("unexpected acquisition")
         )
 
         code, records, output = invoke_install(config, tmp_path / "unused-cache", "--locked")

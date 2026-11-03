@@ -6,6 +6,7 @@ import typer
 from llm_tool_cli.core.entities import BaseEntity
 
 from vcsinstall.domain import DependencyName, RepositoryLocator, SelectorValue, SourcePath, VcsId
+from vcsinstall.hosting import DeliveryMode, HostingProvider
 
 
 def _parse_dependency_name(value: str) -> DependencyName:
@@ -175,4 +176,34 @@ ForceRemovalOption = Annotated[
 LockedOption = Annotated[
     bool,
     typer.Option("--locked", help="Require a complete matching lockfile and leave its bytes unchanged."),
+]
+
+PushModeOption = Annotated[DeliveryMode, typer.Option("--mode", help="Required delivery outcome.")]
+PushEntryPathsArgument = Annotated[
+    list[str] | None,
+    typer.Argument(
+        metavar="ENTRY_PATH...", help="Exact declared entry roots; omit to publish changed entries of NAME."
+    ),
+]
+PushBranchOption = Annotated[
+    SelectorValue | None,
+    typer.Option(
+        "--branch", parser=_parse_selector_value, help="Contribution branch, or existing direct destination branch."
+    ),
+]
+PushRepositoryOption = Annotated[
+    str | None, typer.Option("--push-repository", help="Invocation-local publication recipient.")
+]
+PushBaseOption = Annotated[
+    SelectorValue | None,
+    typer.Option("--base", parser=_parse_selector_value, help="PR target branch in the source repository."),
+]
+HostingProviderOption = Annotated[
+    HostingProvider | None, typer.Option("--hosting-provider", help="Select the hosting implementation.")
+]
+PushOutputOption = Annotated[
+    str | None, typer.Option("--output", "-o", help="Complete patch artifact path; required for patch mode.")
+]
+MessageOption = Annotated[
+    list[str] | None, typer.Option("--message", "-m", help="Commit message; repeat for separate paragraphs.")
 ]
