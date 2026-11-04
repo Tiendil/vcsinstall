@@ -8,6 +8,7 @@ from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core import settings
 from llm_tool_cli.core.errors import EnvironmentErrors
 from llm_tool_cli.core.result import Err, Ok, Result
+from llm_tool_cli.output.tests.helpers import CollectingEmitter
 from llm_tool_cli.paths import PathInput, ProjectConfigPath, ProjectPathId
 from llm_tool_cli.paths import errors as path_errors
 from pytest_mock import MockerFixture
@@ -30,7 +31,6 @@ from vcsinstall.runtime import (
 )
 from vcsinstall.runtime import errors as runtime_errors
 from vcsinstall.runtime.commands import _prepare_dependency_lock
-from vcsinstall.runtime.tests.conftest import CollectingEmitter
 from vcsinstall.sources import ResolvedSource, SourceAdapter
 from vcsinstall.sources import errors as source_errors
 from vcsinstall.sources import get_adapter

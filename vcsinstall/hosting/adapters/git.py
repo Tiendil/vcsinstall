@@ -11,13 +11,13 @@ from llm_tool_cli.paths import (
     ProjectPathId,
     ProjectRootPath,
     ResolvedProjectPath,
+    join_path,
     project_path_id_from_resolved,
     resolve_inside_project,
     resolve_project_root,
 )
 
 from vcsinstall.cache import CacheRootPath, RepoCache
-from vcsinstall.core.paths import join_path
 from vcsinstall.domain import (
     ContentKind,
     Dependency,

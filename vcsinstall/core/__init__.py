@@ -1,3 +1,3 @@
-from vcsinstall.core import errors, paths
+from vcsinstall.core import errors
 
-__all__ = ["errors", "paths"]
+__all__ = ["errors"]

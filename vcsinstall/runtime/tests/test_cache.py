@@ -1,12 +1,12 @@
 from pathlib import Path
 
 from llm_tool_cli.core.result import Err
+from llm_tool_cli.output.tests.helpers import CollectingEmitter
 from pytest_mock import MockerFixture
 
 from vcsinstall.cache import CacheRootPath, active_cache_root, errors
 from vcsinstall.cache.tests.helpers import cached_repository
 from vcsinstall.runtime import cache_clean
-from vcsinstall.runtime.tests.conftest import CollectingEmitter
 
 
 class TestCacheClean:

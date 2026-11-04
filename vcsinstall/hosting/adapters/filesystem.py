@@ -5,9 +5,8 @@ from pathlib import Path
 
 from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
-from llm_tool_cli.paths import ResolvedProjectPath, project_path_id_from_resolved, resolve_project_root
+from llm_tool_cli.paths import ResolvedProjectPath, join_path, project_path_id_from_resolved, resolve_project_root
 
-from vcsinstall.core.paths import join_path
 from vcsinstall.domain import ContentKind, Dependency, RepositoryLocator, SourceRevision
 from vcsinstall.filesystem import FSClient
 from vcsinstall.hosting import errors as publication_errors

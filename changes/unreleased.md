@@ -9,14 +9,15 @@
 ### Changes
 
 - Share CLI cache preparation while retaining explicit workspace activation, validation order, and resource scopes through output delivery.
-- Coordinate project commands using existing configuration, including inspection, through one exclusive operation lock in the per-user state directory, independently of repository-cache selection; wait up to 10 seconds and preserve coordination files across release and cleanup. Initialization locking remains pending a shared CLI hook.
+- Coordinate project commands, including initialization and inspection, through one exclusive operation lock in the per-user state directory, independently of repository-cache selection; wait up to 10 seconds and preserve coordination files across release and cleanup.
+- Use the sibling shared-library checkout for initialization resource scopes and lexical path helpers, and reuse its collecting test emitter.
 - Replace the internal GitHub client object with private API functions receiving the host explicitly.
 - Split GitHub recipient selection and PR publication into focused helpers while retaining native Git reuse, retry verification, and completed-effect reporting.
 - Reuse shared path resolution, kind inspection, and direct FSClient streaming for patch exports; remove artifact staging and atomic replacement guarantees.
 - Distinguish artifact path input from resolved publication paths through preparation, writing, and delivery results.
 - Accept push message text through repeated `--message` / `-m` options; remove message-file and stdin input.
 - Let native Git report NUL bytes in push commit messages instead of rejecting them in CLI input validation.
-- Share typed canonical path joining and containment through `vcsinstall.core.paths`, preserving native Git path bytes separately.
+- Reuse typed canonical path joining and containment from `llm_tool_cli.paths`, preserving native Git path bytes separately.
 - Separate dependency push preparation, publication, and result projection while reusing contribution data and shared validation helpers.
 - Simplify entry addition, update, outdated, and install runtime operations to use shared adapter selectors directly, with scoped patches in tests.
 - Use one hosting adapter interface and provider selector for acquisition and publication, selecting recognized GitHub sources consistently across operations while preserving native Git access without service authentication.

@@ -9,6 +9,7 @@ from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core.entities import ExitCode
 from llm_tool_cli.core.errors import exit_code_for_errors
 from llm_tool_cli.core.result import Err, Ok, Result
+from llm_tool_cli.output.tests.helpers import CollectingEmitter
 from llm_tool_cli.paths import ProjectConfigPath, ProjectRootPath
 from pytest_mock import MockerFixture
 
@@ -25,7 +26,6 @@ from vcsinstall.domain.tests import make
 from vcsinstall.filesystem import ContentTree, FSClient, hashes
 from vcsinstall.hosting import DeliveryResult, PublicationRequest, PushOptions
 from vcsinstall.runtime import errors, install
-from vcsinstall.runtime.tests.conftest import CollectingEmitter
 from vcsinstall.sources import ResolvedSource, SourceAdapter
 from vcsinstall.sources import errors as source_errors
 from vcsinstall.sources.adapters.noop import NoopSourceAdapter

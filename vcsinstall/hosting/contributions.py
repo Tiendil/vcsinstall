@@ -2,9 +2,8 @@
 
 from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core.result import Err, Ok, Result
-from llm_tool_cli.paths import ProjectPathId
+from llm_tool_cli.paths import ProjectPathId, contains_path, join_path
 
-from vcsinstall.core.paths import contains_path, join_path
 from vcsinstall.domain import ContentHash, ContentKind, SourcePath
 from vcsinstall.hosting.entities import Contribution, DeliveryMode, PushOptions
 

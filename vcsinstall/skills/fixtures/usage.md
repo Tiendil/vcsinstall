@@ -34,7 +34,7 @@ Dependency add resolves the selected revision, writes its declaration and lock, 
 
 ## Concurrent project operations
 
-Project commands using existing configuration, including inspection, hold one exclusive project operation lock before reading project files and through command completion. A competing invocation waits up to 10 seconds before reporting a busy-project error; retry after the other operation finishes. `init` currently runs without the project operation lock.
+Project commands, including initialization and inspection, hold one exclusive project operation lock before reading or creating project files and through command completion. A competing invocation waits up to 10 seconds before reporting a busy-project error; retry after the other operation finishes.
 
 Coordination files use the platform's user state directory, independently of `--cache-dir`. On Linux the default path is `~/.local/state/vcsinstall/projects/<project-id>/operation.lock`, with `XDG_STATE_HOME` overriding `~/.local/state`. The project identifier is derived from the resolved project-root path, so different configuration filenames in the same directory share the lock. The file remains after release and cache cleanup; its existence does not mean an operation is running. Do not remove coordination files while commands may be using them.
 

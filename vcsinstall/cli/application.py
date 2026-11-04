@@ -8,7 +8,7 @@ from llm_tool_cli.core import settings
 from vcsinstall.cli.commands import cache, dependency, entries
 from vcsinstall.cli.entities import CacheDirOption
 from vcsinstall.skills import SkillDocument
-from vcsinstall.workspace import Config
+from vcsinstall.workspace import Config, project_operation
 
 app = create_app(help="Install files into your repository from other repositories.")
 
@@ -24,14 +24,13 @@ def initialize(
 
 register_skill_command(app, package="vcsinstall.skills", documents=SkillDocument)
 register_version_command(app, distribution="vcsinstall")
-# TODO: Add an operation-scope hook to llm_tool_cli.register_init_command so init
-# can hold project_operation through configuration creation and output.
 register_init_command(
     app,
     config_class=Config,
     package="vcsinstall.workspace",
     template="base_config.toml",
     help="Create starter project configuration.",
+    operation_scope=lambda cwd, path: project_operation(cwd=cwd, path=path, initialize=True),
 )
 app.add_typer(cache.app, name="cache")
 app.add_typer(dependency.app, name="dependency")

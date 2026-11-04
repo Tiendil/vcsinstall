@@ -6,10 +6,9 @@ from typing import BinaryIO
 from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.output import output
-from llm_tool_cli.paths import ProjectPathId, project_path_parts
+from llm_tool_cli.paths import ProjectPathId, join_path, project_path_parts
 from llm_tool_cli.protocol.logic_cells.base import LogicCell
 
-from vcsinstall.core.paths import join_path
 from vcsinstall.domain import (
     ContentKind,
     Dependency,

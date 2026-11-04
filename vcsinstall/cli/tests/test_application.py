@@ -203,13 +203,7 @@ class TestProjectCoordination:
     @pytest.mark.parametrize(
         "arguments",
         [
-            pytest.param(
-                ["init"],
-                marks=pytest.mark.xfail(
-                    strict=True,
-                    reason="llm_tool_cli.register_init_command needs an operation-scope hook",
-                ),
-            ),
+            ["init"],
             ["list"],
             ["install"],
             ["add", "ci@/file", "@/installed"],
@@ -256,6 +250,39 @@ class TestProjectCoordination:
         assert not cache.exists()
         assert not active_workspace.is_set()
         assert not project_config.is_set()
+
+    @pytest.mark.parametrize("exists", [False, True])
+    def test_init_holds_project_lock_through_output_delivery(
+        self, tmp_path: Path, project_state_root: Path, mocker: MockerFixture, exists: bool
+    ) -> None:
+        config = tmp_path / "vcsinstall.toml"
+        if exists:
+            config.write_text("version = 1\n")
+
+        class InspectingEmitter(StreamOutputEmitter):
+            __slots__ = ()
+
+            def _render(self, cells: list[LogicCell]) -> str:
+                assert config.is_file()
+                assert not active_workspace.is_set()
+                if not exists:
+                    assert project_config.get().config_path == config
+                path = next(project_state_root.glob("projects/*/operation.lock"))
+                with pytest.raises(Timeout), FileLock(path, timeout=0, preserve_lock_file=True):
+                    pass
+                return super()._render(cells)
+
+        mocker.patch("llm_tool_cli.cli.context.StreamOutputEmitter", InspectingEmitter)
+        result = CliRunner().invoke(application.app, ["-p", "automation", "--config", str(config), "init"])
+
+        assert result.exit_code == (2 if exists else 0), result.exception
+        assert json.loads(result.stdout)["type"] == ("error" if exists else "operation_succeeded")
+        assert not result.stderr
+        assert not project_config.is_set()
+        assert not active_workspace.is_set()
+        path = next(project_state_root.glob("projects/*/operation.lock"))
+        with FileLock(path, timeout=0, preserve_lock_file=True):
+            pass
 
     @pytest.mark.parametrize("protocol", ["human", "llm", "automation"])
     def test_state_access_failure_uses_shared_error_protocol(
