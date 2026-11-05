@@ -77,20 +77,22 @@ Requires Python `>=3.12,<4.0`. Install the development version from a local chec
 With uv:
 
 ```bash
-uv tool install --with ../llm-tool-cli .
+uv tool install .
 ```
 
 With pip, inside an active Python virtual environment:
 
 ```bash
-python -m pip install ../llm-tool-cli .
+python -m pip install .
 ```
 
-This branch requires the sibling `../llm-tool-cli` checkout on `feature/vcsinstall-unification`. For container development, follow [Development](#development).
+For container development, follow [Development](#development).
 
 ## Configuration
 
 The available help, version, skill, and cache cleanup commands work without project configuration. The shared `--config` option is accepted, but these commands do not load a project configuration file.
+
+Command setup selects the cache path from `--cache-dir` or the platform default. Selecting this path does not create cache directories or acquire cache locks; commands access cache storage only when needed.
 
 Create a starter [configuration](specs/behavior/config.md) in the current directory:
 
@@ -101,7 +103,7 @@ vcsinstall --config project/custom.toml init
 
 The parent directory must already exist. Init refuses to overwrite an existing file and creates no lockfile.
 
-Project commands, including initialization and inspection, hold one exclusive operation lock from before loading or creating project files through completion. Another command using the same project and user state directory waits up to 10 seconds, then reports that the project is busy. Coordination files live under the platform's user state directory (`~/.local/state/vcsinstall/projects/<project-id>/operation.lock` by default on Linux), independently of `--cache-dir`, and remain after release. Cache cleanup preserves them. This coordinates vcsinstall commands sharing that location; edits by other tools remain outside the guarantee.
+Project commands, including initialization and inspection, hold one exclusive operation lock from before loading or creating project files through completion. Another command using the same project and user state directory waits up to 10 seconds, then reports a lock timeout. Coordination files live under the platform's user state directory, independently of `--cache-dir`, and remain after release; their existence does not mean a lock is held. These files coordinate processes and are separate from the project's dependency lockfile. Cache cleanup preserves them. This coordinates vcsinstall commands sharing that location; edits by other tools remain outside the guarantee. See the [project coordination contract](specs/behavior/cli.md#project-operation-locking) for location and failure details.
 
 Declare and lock a source dependency:
 
@@ -250,9 +252,9 @@ Keep task-local temporary files under the ignored `.session/` directory, followi
 
 ### Shared CLI library
 
-[llm-tool-cli](https://github.com/Tiendil/llm-tool-cli) provides the reusable CLI foundations used by Vcsinstall, Donna, and Depmesh. This branch uses the sibling `../llm-tool-cli` checkout with `feature/vcsinstall-unification` selected, until its initialization scope and path helpers are released.
+[llm-tool-cli](https://github.com/Tiendil/llm-tool-cli) provides the reusable CLI foundations used by Vcsinstall, Donna, and Depmesh. The project uses the released library version pinned in [pyproject.toml](pyproject.toml).
 
-The local source, build context, and read-only mount are enabled in [pyproject.toml](pyproject.toml), [docker-compose.yml](docker-compose.yml), and [docker/Dockerfile](docker/Dockerfile). After changing the dependency setup, update the lockfile and rebuild the development image together:
+To develop against the sibling `../llm-tool-cli` checkout, uncomment its source in [pyproject.toml](pyproject.toml), build context and read-only mount in [docker-compose.yml](docker-compose.yml), and `COPY` in [docker/Dockerfile](docker/Dockerfile). After changing the dependency setup, update the lockfile and rebuild the development image together:
 
 ```bash
 ./bin/dev.sh uv lock
