@@ -3,11 +3,11 @@
 from pathlib import Path
 
 from llm_tool_cli.cli.errors import InvalidArguments
+from llm_tool_cli.config.runtime import runtime_config
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.output import output
 from llm_tool_cli.paths import PathInput, ProjectPathId, ResolvedProjectPath, resolve_project_root
 
-from vcsinstall.cache import active_cache_root
 from vcsinstall.domain import ContentKind, Dependency, DependencyName
 from vcsinstall.filesystem import FSClient
 from vcsinstall.filesystem import errors as filesystem_errors
@@ -50,7 +50,7 @@ def _prepare_patch_path(path: PathInput | None, workspace: Workspace) -> Result[
             [filesystem_errors.AccessFailed(path=parent / path.name, reason="Artifact target must be a regular file.")]
         )
     resolved = filesystem.resolve_path(identifier).unwrap()
-    reserved = (*_protected_paths(workspace).unwrap(), active_cache_root.get())
+    reserved = (*_protected_paths(workspace).unwrap(), runtime_config.get().cache_dir)
     if any(
         resolved == other or resolved.is_relative_to(other) or other.is_relative_to(resolved) for other in reserved
     ):

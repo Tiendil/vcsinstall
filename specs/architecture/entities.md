@@ -165,7 +165,7 @@ Normalized or validated ids/paths SHOULD use semantic types from their owning mo
 ## Command results
 
 Logic cells MUST be the primary successful runtime-to-CLI interface.
-Command-facing runtime operations MUST assemble complete result payloads and MAY submit cells to the scoped emitter provided by `llm_tool_cli`, returning `Result[None]` when no other result is useful.
+Command-facing runtime operations MUST assemble complete result payloads and MAY submit cells to the scoped emitter provided by `llm_tool_cli`.
 Reusable computations MAY return typed values, including cells and ordered collections; internal model, workspace, and adapter operations MAY retain ordinary entities.
 Cells MAY hold typed projection data, but the CLI MUST NOT inspect it or assemble domain payloads.
 

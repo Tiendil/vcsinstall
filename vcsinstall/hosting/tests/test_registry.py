@@ -2,10 +2,12 @@ from pathlib import Path
 
 import pytest
 from llm_tool_cli.cli.errors import InvalidArguments
+from llm_tool_cli.config.runtime import RuntimeConfig, runtime_config
 from llm_tool_cli.core.result import Err, Ok
+from llm_tool_cli.paths import CacheRootPath
+from llm_tool_cli.protocol import Protocol
 from pytest_mock import MockerFixture
 
-from vcsinstall.cache import CacheRootPath, active_cache_root
 from vcsinstall.core import errors as core_errors
 from vcsinstall.domain.tests import make
 from vcsinstall.hosting import (
@@ -29,9 +31,9 @@ class TestGetHosting:
         second_root = CacheRootPath(tmp_path / "second")
         dependency = make.dependency()
 
-        with active_cache_root.scope(first_root):
+        with runtime_config.scope(RuntimeConfig(protocol=Protocol.human, cache_dir=first_root)):
             first = get_hosting(dependency, provider).unwrap()
-            with active_cache_root.scope(second_root):
+            with runtime_config.scope(RuntimeConfig(protocol=Protocol.human, cache_dir=second_root)):
                 second = get_hosting(dependency, provider).unwrap()
             restored = get_hosting(dependency, provider).unwrap()
 
@@ -52,13 +54,13 @@ class TestGetHosting:
 
     @pytest.mark.parametrize("provider", [None, HostingProvider.filesystem])
     def test_filesystem_does_not_require_a_cache_scope(self, provider: HostingProvider | None) -> None:
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
 
         assert isinstance(get_hosting(make.dependency(vcs="filesystem"), provider).unwrap(), FilesystemHostingAdapter)
 
     @pytest.mark.parametrize("provider", [None, *HostingProvider])
     def test_noop_requires_an_explicit_controlled_adapter(self, provider: HostingProvider | None) -> None:
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
 
         assert get_hosting(make.dependency(vcs="noop"), provider).is_err(InvalidArguments)
 
@@ -67,7 +69,7 @@ class TestGetHosting:
         self, tmp_path: Path, repository: str, mocker: MockerFixture
     ) -> None:
         client = mocker.patch.object(github, "_run", side_effect=AssertionError("No service-client access is needed"))
-        with active_cache_root.scope(CacheRootPath(tmp_path / "cache")):
+        with runtime_config.scope(RuntimeConfig(protocol=Protocol.human, cache_dir=CacheRootPath(tmp_path / "cache"))):
             hosting = get_hosting(make.dependency(repository=repository)).unwrap()
 
         assert isinstance(hosting, GitHubHostingAdapter)
@@ -80,7 +82,7 @@ class TestGetHosting:
         mocker.patch(
             "vcsinstall.hosting.registry.infer_github", side_effect=AssertionError("Override bypasses inference")
         )
-        with active_cache_root.scope(CacheRootPath(tmp_path / "cache")):
+        with runtime_config.scope(RuntimeConfig(protocol=Protocol.human, cache_dir=CacheRootPath(tmp_path / "cache"))):
             hosting = get_hosting(make.dependency(repository="https://github.com/team/shared.git"), provider).unwrap()
 
         assert isinstance(hosting, GitHostingAdapter if provider == HostingProvider.git else GitHubHostingAdapter)
@@ -97,7 +99,7 @@ class TestGetHosting:
         self, vcs: str, provider: HostingProvider, mocker: MockerFixture
     ) -> None:
         mocker.patch.object(github, "_run", side_effect=AssertionError("Incompatible selection needs no service"))
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
 
         assert get_hosting(make.dependency(vcs=vcs), provider).is_err(InvalidArguments)
 
@@ -120,7 +122,7 @@ class TestGetHosting:
             source.set_config("remote.two.url", "https://github.com/team/two.git").unwrap()
             repository = str(source.path)
 
-        with active_cache_root.scope(CacheRootPath(tmp_path / "cache")):
+        with runtime_config.scope(RuntimeConfig(protocol=Protocol.human, cache_dir=CacheRootPath(tmp_path / "cache"))):
             hosting = get_hosting(make.dependency(repository=repository)).unwrap()
 
         assert isinstance(hosting, GitHostingAdapter)
@@ -129,7 +131,7 @@ class TestGetHosting:
         source = create_repository(tmp_path / "source")
         source.set_config("remote.origin.url", str(source.path)).unwrap()
 
-        with active_cache_root.scope(CacheRootPath(tmp_path / "cache")):
+        with runtime_config.scope(RuntimeConfig(protocol=Protocol.human, cache_dir=CacheRootPath(tmp_path / "cache"))):
             hosting = get_hosting(make.dependency(repository=str(source.path))).unwrap()
 
         assert isinstance(hosting, GitHostingAdapter)

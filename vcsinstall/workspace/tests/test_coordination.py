@@ -4,21 +4,22 @@ import pytest
 from filelock import FileLock, Timeout
 from llm_tool_cli.config import errors as config_errors
 from llm_tool_cli.core import settings
+from llm_tool_cli.core.entities import ToolName
+from llm_tool_cli.file_locks import errors as lock_errors
+from llm_tool_cli.file_locks.tests.helpers import held_lock
 from llm_tool_cli.paths import PathInput, ProjectConfigPath
 from llm_tool_cli.paths import errors as path_errors
+from llm_tool_cli.tool_state import errors as state_errors
 from pytest_mock import MockerFixture
 
-from vcsinstall.cache.tests.helpers import held_lock
-from vcsinstall.workspace import errors, project_operation
+from vcsinstall.workspace import project_operation
 
 
 @pytest.mark.usefixtures("isolated_settings")
 class TestProjectOperation:
     @pytest.fixture(autouse=True)
     def initialize_settings(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     def test_selects_without_loading_and_keeps_coordination_file(
         self, tmp_path: Path, project_state_root: Path
@@ -53,8 +54,7 @@ class TestProjectOperation:
         with held_lock(path):
             with project_operation(cwd=PathInput(alias), path=ProjectConfigPath(Path("other.toml"))) as blocked:
                 problem = blocked.unwrap_err()[0]
-                assert isinstance(problem, errors.ProjectLockTimeout)
-                assert problem.project_root == root
+                assert isinstance(problem, lock_errors.Timeout)
                 assert problem.path == path
                 assert problem.timeout == 1
                 assert isinstance(problem.cause, Timeout)
@@ -117,27 +117,28 @@ class TestProjectOperation:
     def test_state_resolution_failure_has_no_fallback(
         self, tmp_path: Path, project_state_root: Path, mocker: MockerFixture, failure: Exception
     ) -> None:
-        mocker.patch("vcsinstall.workspace.coordination.user_state_path", side_effect=failure)
+        mocker.patch("llm_tool_cli.tool_state.directory.user_state_path", side_effect=failure)
         with project_operation(cwd=PathInput(tmp_path), initialize=True) as selected:
             problem = selected.unwrap_err()[0]
-            assert isinstance(problem, errors.ProjectLockAccessFailed)
-            assert problem.project_root == tmp_path
+            assert isinstance(problem, state_errors.StateDirectoryUnavailable)
+            assert problem.tool_name == "vcsinstall"
             assert problem.path is None
             assert problem.cause is failure
         assert not project_state_root.exists()
 
     def test_relative_state_location_is_rejected(self, tmp_path: Path, mocker: MockerFixture) -> None:
-        mocker.patch("vcsinstall.workspace.coordination.user_state_path", return_value=Path("relative-state"))
+        mocker.patch("llm_tool_cli.tool_state.directory.user_state_path", return_value=Path("relative-state"))
         with project_operation(cwd=PathInput(tmp_path), initialize=True) as selected:
             problem = selected.unwrap_err()[0]
-            assert isinstance(problem, errors.ProjectLockAccessFailed)
+            assert isinstance(problem, state_errors.StateDirectoryUnavailable)
+            assert problem.tool_name == "vcsinstall"
             assert problem.path == Path("relative-state")
 
     def test_unusable_state_directory_is_preserved(self, tmp_path: Path, project_state_root: Path) -> None:
         project_state_root.write_text("unrelated file")
         with project_operation(cwd=PathInput(tmp_path), initialize=True) as selected:
             problem = selected.unwrap_err()[0]
-            assert isinstance(problem, errors.ProjectLockAccessFailed)
+            assert isinstance(problem, lock_errors.AccessFailed)
             assert isinstance(problem.cause, OSError)
         assert project_state_root.read_text() == "unrelated file"
         assert not (tmp_path / "vcsinstall.toml").exists()
@@ -157,29 +158,29 @@ class TestProjectOperation:
         path.mkdir()
         with project_operation(cwd=PathInput(tmp_path), initialize=True) as selected:
             problem = selected.unwrap_err()[0]
-            assert isinstance(problem, errors.ProjectLockAccessFailed)
+            assert isinstance(problem, lock_errors.AccessFailed)
             assert problem.path == path
         assert path.is_dir()
 
     def test_native_lock_access_failure_is_returned(self, tmp_path: Path, mocker: MockerFixture) -> None:
         failure = PermissionError("access denied")
-        mocker.patch("vcsinstall.workspace.coordination.FileLock", side_effect=failure)
+        mocker.patch("llm_tool_cli.file_locks.files.FileLock", side_effect=failure)
         with project_operation(cwd=PathInput(tmp_path), initialize=True) as selected:
             problem = selected.unwrap_err()[0]
-            assert isinstance(problem, errors.ProjectLockAccessFailed)
+            assert isinstance(problem, lock_errors.AccessFailed)
             assert problem.cause is failure
             assert problem.path is not None
 
     def test_unexpected_lock_exception_remains_internal(self, tmp_path: Path, mocker: MockerFixture) -> None:
         failure = RuntimeError("unexpected lock failure")
-        mocker.patch("vcsinstall.workspace.coordination.FileLock", side_effect=failure)
+        mocker.patch("llm_tool_cli.file_locks.files.FileLock", side_effect=failure)
         with pytest.raises(RuntimeError) as caught:
             with project_operation(cwd=PathInput(tmp_path), initialize=True):
                 pytest.fail("Unexpected lock failures must not be returned as environment errors")
         assert caught.value is failure
 
     def test_unconfigured_application_remains_an_internal_error(self, tmp_path: Path) -> None:
-        with settings.static_config.scope(settings.StaticConfig(tool_label=settings.ToolLabel("VCSINSTALL"))):
+        with settings.static_config.scope(settings.StaticConfig(tool_name=ToolName("vcsinstall"))):
             with pytest.raises(config_errors.ConfigFilenameNotSet):
                 with project_operation(cwd=PathInput(tmp_path)):
                     pytest.fail("An unconfigured application must not start an operation")

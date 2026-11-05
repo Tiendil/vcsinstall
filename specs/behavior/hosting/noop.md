@@ -71,7 +71,7 @@ A delivery selection without locally changed content MUST retain the common no-r
 ## Simulated acquisition and refresh
 
 Remote recognition requests MAY be simulated with controlled match, non-match, or operational-failure results under Repository detection in `specs/behavior/vcs-interaction.md`, without performing real network access or native-client operations.
-Acquisition MUST expose a controlled view compatible with the selected source backend for the requested repository identity, following the acquisition-result contract in Adapter and cache boundaries in `specs/architecture/modules_layout.md`.
+Acquisition MUST expose a controlled view compatible with the selected source backend for the requested repository identity under Repository acquisition and refresh in `specs/behavior/vcs-interaction.md`.
 Refresh MUST expose the fixture's current reference observations and availability under Repository acquisition and refresh in `specs/behavior/vcs-interaction.md`.
 Fixtures MUST be able to model moved or deleted references, changed advertised defaults, unavailable old revisions, and failed refresh independently of project locks.
 A failed refresh MUST NOT return stale observations as current.

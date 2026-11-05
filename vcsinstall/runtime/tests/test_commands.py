@@ -6,15 +6,15 @@ from typing import BinaryIO
 import pytest
 from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core import settings
+from llm_tool_cli.core.entities import ToolName
 from llm_tool_cli.core.errors import EnvironmentErrors
 from llm_tool_cli.core.result import Err, Ok, Result
 from llm_tool_cli.output.tests.helpers import CollectingEmitter
-from llm_tool_cli.paths import PathInput, ProjectConfigPath, ProjectPathId
+from llm_tool_cli.paths import CacheRootPath, PathInput, ProjectConfigPath, ProjectPathId
 from llm_tool_cli.paths import errors as path_errors
+from llm_tool_cli.tool_cache import errors as cache_errors
 from pytest_mock import MockerFixture
 
-from vcsinstall.cache import CacheRootPath
-from vcsinstall.cache import errors as cache_errors
 from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SourcePath, SourceRevision, VcsId
 from vcsinstall.domain.tests import make
 from vcsinstall.filesystem import FSClient
@@ -140,9 +140,7 @@ class TestEntryRemove:
         destinations: tuple[ProjectPathId, ...],
         isolated_settings: None,
     ) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
         config = tmp_path / "vcsinstall.toml"
         config.write_text("version = 1\n")
         workspace = load_workspace(cwd=PathInput(tmp_path)).unwrap()
@@ -160,9 +158,7 @@ class TestEntryRemove:
 class TestEntryAdd:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     def test_proposed_destination_is_checked_before_acquisition(
         self, tmp_path: Path, emitter: CollectingEmitter, mocker: MockerFixture
@@ -281,9 +277,7 @@ class TestEntryAdd:
 class TestDependencyAdd:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.mark.parametrize("selected", [False, True])
     def test_only_selected_destinations_are_resolved_before_acquisition(
@@ -491,9 +485,7 @@ class TestDependencyAdd:
 class TestDependencyRemove:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.mark.parametrize("locked", [False, True])
     def test_preserves_normalization_errors_without_mutation_or_output(
@@ -638,9 +630,7 @@ class TestDependencyOutdated:
 class TestEntryList:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.fixture
     def workspace(self, tmp_path: Path) -> Workspace:
@@ -699,9 +689,7 @@ class TestEntryList:
 class TestDependencyList:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.mark.parametrize("locked", [False, True])
     def test_preserves_repository_normalization_failures(

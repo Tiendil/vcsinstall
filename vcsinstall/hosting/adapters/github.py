@@ -12,9 +12,8 @@ from uuid import uuid4
 import pydantic
 from llm_tool_cli.core.entities import BaseEntity
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
-from llm_tool_cli.paths import ResolvedProjectPath
+from llm_tool_cli.paths import CacheRootPath, ResolvedProjectPath
 
-from vcsinstall.cache import CacheRootPath
 from vcsinstall.domain import Dependency, RepositoryLocator, SelectorValue, SourceRevision
 from vcsinstall.hosting import errors
 from vcsinstall.hosting.adapters.git import (

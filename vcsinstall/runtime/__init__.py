@@ -1,6 +1,5 @@
 """Command-independent operation coordination."""
 
-from vcsinstall.runtime.cache import cache_clean
 from vcsinstall.runtime.commands import (
     dependency_add,
     dependency_list,
@@ -15,7 +14,6 @@ from vcsinstall.runtime.publications import dependency_push
 from vcsinstall.runtime.updates import dependency_update
 
 __all__ = [
-    "cache_clean",
     "dependency_add",
     "dependency_list",
     "dependency_outdated",

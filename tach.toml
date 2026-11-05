@@ -15,7 +15,7 @@ exclude = [
     "**/__pycache__/",
 ]
 
-layers = ["meta-tests", "cli", "runtime", "support", "workspace", "hosting", "sources", "vcs_clients", "cache", "filesystem", "domain", "core"]
+layers = ["meta-tests", "cli", "runtime", "support", "workspace", "hosting", "sources", "vcs_clients", "filesystem", "domain", "core"]
 
 [[modules]]
 path = "vcsinstall"
@@ -34,7 +34,7 @@ layer = "cli"
 
 [[modules]]
 path = "vcsinstall.cli"
-depends_on = ["vcsinstall.domain", "vcsinstall.skills", "vcsinstall.runtime", "vcsinstall.workspace", "vcsinstall.cache", "vcsinstall.sources", "vcsinstall.hosting"]
+depends_on = ["vcsinstall.core", "vcsinstall.domain", "vcsinstall.skills", "vcsinstall.runtime", "vcsinstall.workspace", "vcsinstall.sources", "vcsinstall.hosting"]
 layer = "cli"
 
 [[modules]]
@@ -44,12 +44,12 @@ layer = "support"
 
 [[modules]]
 path = "vcsinstall.runtime"
-depends_on = ["vcsinstall.core", "vcsinstall.domain", "vcsinstall.workspace", "vcsinstall.filesystem", "vcsinstall.sources", "vcsinstall.hosting", "vcsinstall.cache"]
+depends_on = ["vcsinstall.core", "vcsinstall.domain", "vcsinstall.workspace", "vcsinstall.filesystem", "vcsinstall.sources", "vcsinstall.hosting"]
 layer = "runtime"
 
 [[modules]]
 path = "vcsinstall.sources"
-depends_on = ["vcsinstall.core", "vcsinstall.domain", "vcsinstall.filesystem", "vcsinstall.cache", "vcsinstall.vcs_clients"]
+depends_on = ["vcsinstall.core", "vcsinstall.domain", "vcsinstall.filesystem", "vcsinstall.vcs_clients"]
 layer = "sources"
 
 [[modules]]
@@ -68,13 +68,8 @@ depends_on = ["vcsinstall.core", "vcsinstall.domain"]
 layer = "filesystem"
 
 [[modules]]
-path = "vcsinstall.cache"
-depends_on = ["vcsinstall.core", "vcsinstall.domain"]
-layer = "cache"
-
-[[modules]]
 path = "vcsinstall.hosting"
-depends_on = ["vcsinstall.core", "vcsinstall.domain", "vcsinstall.sources", "vcsinstall.vcs_clients", "vcsinstall.filesystem", "vcsinstall.cache"]
+depends_on = ["vcsinstall.core", "vcsinstall.domain", "vcsinstall.sources", "vcsinstall.vcs_clients", "vcsinstall.filesystem"]
 layer = "hosting"
 
 [[modules]]

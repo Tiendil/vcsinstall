@@ -12,18 +12,19 @@ import tomli_w
 from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.config import errors as config_errors
 from llm_tool_cli.config.project import project_config
+from llm_tool_cli.config.runtime import RuntimeConfig, runtime_config
 from llm_tool_cli.core import errors as core_errors
 from llm_tool_cli.core import settings
-from llm_tool_cli.core.entities import ExitCode
+from llm_tool_cli.core.entities import ExitCode, ToolName
 from llm_tool_cli.core.result import Err, Ok, Result
-from llm_tool_cli.paths import ProjectPathId
+from llm_tool_cli.paths import CacheRootPath, ProjectPathId
+from llm_tool_cli.protocol import Protocol
 from llm_tool_cli.protocol.tests.helpers import cell_payloads
+from llm_tool_cli.tool_cache import errors as cache_errors
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
-from vcsinstall.cache import CacheRootPath, active_cache_root
-from vcsinstall.cache import errors as cache_errors
-from vcsinstall.cli import application, preparation
+from vcsinstall.cli import application
 from vcsinstall.cli.commands import dependency
 from vcsinstall.cli.commands.tests.helpers import (
     declare_entry,
@@ -189,13 +190,11 @@ class TestPrepareDependency:
 class TestAddDependency:
     @pytest.fixture(autouse=True)
     def initialize_settings(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     def test_dependency_add_locks_filesystem_source(self, tmp_path: Path, mocker: MockerFixture) -> None:
         cache = tmp_path / "cache"
-        discover = mocker.patch("vcsinstall.cache.paths.user_cache_path", return_value=cache)
+        discover = mocker.patch("llm_tool_cli.tool_cache.paths.user_cache_path", return_value=cache)
         target = tmp_path / "custom.toml"
         target.write_text("version = 1\n")
         lock = tmp_path / "vcsinstall.lock"
@@ -220,7 +219,7 @@ class TestAddDependency:
             assert record["content"] is None
             assert not project_config.is_set()
             assert not active_workspace.is_set()
-            assert not active_cache_root.is_set()
+            assert not runtime_config.is_set()
         config = tomllib.loads(target.read_text())
         locked = tomllib.loads(lock.read_text())
         assert config["dependencies"]["ci"] == {"vcs": "filesystem", "repository": str(source)}
@@ -250,14 +249,15 @@ class TestAddDependency:
             hosting: HostingAdapter,
             redefine: bool,
         ) -> Result[None]:
-            observed.append(active_cache_root.get())
+            observed.append(runtime_config.get().cache_dir)
             if fail:
                 raise RuntimeError("operation failed")
             return Ok(None)
 
         mocker.patch.object(dependency, "dependency_add", side_effect=operation)
 
-        with active_cache_root.scope(outer):
+        outer_settings = RuntimeConfig(protocol=Protocol.llm, cache_dir=outer)
+        with runtime_config.scope(outer_settings):
             result = CliRunner().invoke(
                 application.app,
                 [
@@ -275,8 +275,8 @@ class TestAddDependency:
             )
 
             assert observed == [expected]
-            assert active_cache_root.get() == outer
-        assert not active_cache_root.is_set()
+            assert runtime_config.get() == outer_settings
+        assert not runtime_config.is_set()
         assert not expected.exists()
         if fail:
             assert isinstance(result.exception, RuntimeError)
@@ -353,7 +353,9 @@ class TestAddDependency:
     ) -> None:
         operation = mocker.patch.object(dependency, "dependency_add", return_value=Ok(None))
         load = mocker.spy(dependency, "open_workspace")
-        cache = mocker.spy(preparation, "resolve_cache_root")
+        cache = mocker.patch(
+            "llm_tool_cli.tool_cache.ToolCache.entry", side_effect=AssertionError("Unexpected cache access")
+        )
 
         result = CliRunner().invoke(
             application.app,
@@ -424,7 +426,7 @@ class TestAddDependency:
         source = tmp_path / "source"
         source.mkdir()
         repository = source.as_uri() if filesystem else str(source)
-        mocker.patch("vcsinstall.cache.paths.user_cache_path", side_effect=OSError("unavailable"))
+        mocker.patch("llm_tool_cli.tool_cache.paths.user_cache_path", side_effect=OSError("unavailable"))
         mocker.patch("pathlib.Path.home", side_effect=RuntimeError("unavailable"))
 
         result = CliRunner().invoke(
@@ -435,7 +437,8 @@ class TestAddDependency:
         assert result.exit_code == 3, result.output
         record = json.loads(result.stdout)
         assert record["code"] == cache_errors.AccessFailed.model_fields["code"].default
-        assert "--cache-dir" in record["content"]
+        for guidance in cache_errors.AccessFailed.model_fields["ways_to_fix"].default:
+            assert guidance in record["content"]
         assert config.read_text() == "version = 1\n"
         assert not config.with_name("vcsinstall.lock").exists()
         assert not project_config.is_set()
@@ -1541,9 +1544,7 @@ class TestAddDependency:
 class TestListDependencies:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.fixture
     def config(self, tmp_path: Path) -> Path:
@@ -1596,9 +1597,8 @@ class TestListDependencies:
         config.write_text(tomli_w.dumps(declarations))
         before = {path: path.read_bytes() for path in config.parent.rglob("*") if path.is_file()}
         for name in (
-            "vcsinstall.cli.preparation.resolve_cache_root",
+            "llm_tool_cli.tool_cache.ToolCache.entry",
             "vcsinstall.cli.commands.dependency.get_hosting",
-            "vcsinstall.cache.paths.user_cache_path",
             "vcsinstall.vcs_clients.GitClient.run",
             "vcsinstall.sources.adapters.git.GitSourceAdapter.resolve",
             "vcsinstall.sources.adapters.git.GitSourceAdapter.inspect",
@@ -1646,7 +1646,7 @@ class TestListDependencies:
             assert cell_payloads([json.loads(line) for line in result.stdout.splitlines()]) == expected_records
             assert not project_config.is_set()
             assert not active_workspace.is_set()
-            assert not active_cache_root.is_set()
+            assert not runtime_config.is_set()
         assert {path: path.read_bytes() for path in config.parent.rglob("*") if path.is_file()} == before
 
     @pytest.mark.parametrize(
@@ -1959,9 +1959,7 @@ class TestListDependencies:
 class TestOutdatedDependencies:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.fixture
     def config(self, tmp_path: Path) -> Path:
@@ -2015,7 +2013,7 @@ class TestOutdatedDependencies:
             assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
             assert not project_config.is_set()
             assert not active_workspace.is_set()
-            assert not active_cache_root.is_set()
+            assert not runtime_config.is_set()
 
     @pytest.mark.parametrize("names", [[], ["z-last", "a-first", "z-last"]])
     def test_selects_all_or_unique_named_dependencies_in_name_order(
@@ -2243,7 +2241,7 @@ class TestOutdatedDependencies:
         assert records[0]["dependency"] == ("z-failure" if failure == "branch" else "a-outdated")
         assert any(record["code"] == vcs_errors.CommandFailed.model_fields["code"].default for record in records)
         assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
         assert not active_workspace.is_set()
         assert not project_config.is_set()
 
@@ -2290,9 +2288,7 @@ class TestOutdatedDependencies:
 class TestUpdateDependencies:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.fixture
     def config(self, tmp_path: Path) -> Path:
@@ -2341,7 +2337,7 @@ class TestUpdateDependencies:
         assert config.read_bytes() == before
         assert not project_config.is_set()
         assert not active_workspace.is_set()
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
 
     @pytest.mark.parametrize("object_format", ["sha1", "sha256"])
     @pytest.mark.parametrize("selector", ["branch", "tag", "annotated", "revision"])
@@ -2621,7 +2617,7 @@ class TestUpdateDependencies:
         assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
         assert [(config.parent / name).read_bytes() for name in clients] == files
         assert not active_workspace.is_set()
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
 
     @pytest.mark.parametrize("operation", ["update", "redefine"])
     def test_unchanged_revision_rejects_inconsistent_baseline_content(
@@ -2810,9 +2806,7 @@ class TestUpdateDependencies:
 class TestRemoveDependency:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.fixture
     def config(self, tmp_path: Path) -> Path:
@@ -2876,7 +2870,7 @@ class TestRemoveDependency:
         assert (config.parent / "unmanaged").read_bytes() == b"local content"
         assert not project_config.is_set()
         assert not active_workspace.is_set()
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
 
     @pytest.mark.parametrize("state", ["absent", "empty", "missing_dependency"])
     def test_missing_lock_state_allows_removal_without_creating_or_rewriting_a_lock(
@@ -3082,10 +3076,9 @@ class TestRemoveDependency:
 
     def test_source_content_and_cache_access_are_unused(self, config: Path, mocker: MockerFixture) -> None:
         for name in (
-            "vcsinstall.cli.preparation.resolve_cache_root",
+            "llm_tool_cli.tool_cache.ToolCache.entry",
             "vcsinstall.cli.commands.dependency.get_hosting",
             "vcsinstall.vcs_clients.GitClient.run",
-            "vcsinstall.cache.paths.user_cache_path",
             "vcsinstall.filesystem.FSClient.inspect_tree",
             "vcsinstall.filesystem.FSClient.remove",
         ):

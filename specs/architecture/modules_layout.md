@@ -30,7 +30,6 @@ All vcsinstall code MUST belong under `vcsinstall/`.
 - `vcs_clients` — Invocation of native VCS clients and interpretation of their command results.
 - `sources` — The source adapter and backend implementations for repository semantics, revision resolution, and content extraction from available repository views.
 - `hosting` — The hosting adapter and implementations for repository acquisition, refresh, change delivery, and hosted reviews.
-- `cache` — Disposable repository storage and coordinated cache access.
 - `runtime` — Command-independent operation policies and coordination.
 - `cli` — Command parsing, application setup, and shared command registration.
 - `skills` — Document definitions and packaged Markdown.
@@ -44,21 +43,19 @@ Implementations MUST grow with required behavior under these responsibilities; t
 Universal file-identity values and their collection invariants MUST belong to `domain` and be reused across project and persisted content models.
 
 `workspace` MUST own configuration and lockfile state under `specs/behavior/config.md` and `specs/behavior/lockfile.md`, including loading, matching, and persistence.
-It MUST own project operation coordination, including per-user state-directory selection, project identity, acquisition, and lock-access diagnostics.
-Coordination MUST use `platformdirs` for the application state location and native `filelock` locking with persistent coordination files.
+It MUST own selection of the project configuration for operation coordination and the operation's lock timeout policy.
+State-directory selection and project coordination MUST use `llm_tool_cli.tool_state`.
+Shared coordination diagnostics MUST follow the propagation contract in Tool state directories in `specs/architecture/modules_layout.md` in `llm-tool-cli`.
 The CLI MUST retain the workspace-owned coordination scope through command completion, acquiring it before project loading or initialization and before repository-cache access.
 Workspace loading without coordination MAY remain available to callers that supply their own operation scope.
 Initialization MUST reuse `llm_tool_cli` configuration creation, validation, project activation, and output facilities within the project coordination scope.
-Entry destination overlap and project-file exclusion rules MUST belong to `workspace.validation` and MAY be exposed as pure guards through the workspace package root.
+Entry destination overlap and project-file exclusion rules MUST belong to `workspace`.
 Configuration and lockfile models MUST be the shared representations of declarations and recorded state.
 They MUST represent declarations with missing or mismatching locks and baselines where the locking contract permits that state.
-Reusable checks of relationships between those models MUST belong to `workspace` and be exposed through specific validation methods on the loaded workspace.
-Their implementations SHOULD be grouped in `workspace.validation` and remain implementation details for callers outside `workspace`.
-These checks MUST operate on the loaded models, using the project root where required, without requiring a separate project-state representation solely for validation.
-They MUST compare validated canonical entry destinations directly without normalizing them again.
+Reusable checks of relationships between declarations and recorded state MUST belong to `workspace` and remain independent of operation-specific policies.
 They MUST NOT acquire repositories, inspect installed file contents, mutate project files, or emit output.
 Matching MUST use source-owned repository and effective-selector rules without branching on backend names; source-owned rules MUST determine whether an omitted selector can reuse a recorded selection.
-Rendering configuration and lockfile bytes MUST be a pure transformation of validated data, without filesystem access or path revalidation.
+Configuration and lockfile serialization MUST remain separate from filesystem access.
 Loading and authorized writes MUST own the applicable filesystem checks.
 It MUST own persisted content record representations and directory-specific manifest constraints while reusing shared file-identity values.
 It MUST preserve the distinction between declarations and recorded installation baselines without duplicating operation policies.
@@ -67,9 +64,9 @@ Workspace loading MUST apply source-owned, effect-free validation of backend-spe
 Backend validation and retained-default interpretation MUST NOT require repository acquisition, cache access, or native-client execution.
 
 `runtime` MUST coordinate each complete requested use case, including read-only operations and selections spanning multiple dependencies or entries.
-It MUST own pure rules protecting local content and authorizing operation state changes under `specs/behavior/locking.md`, grouped in `runtime.validation` where shared by operations.
+It MUST own pure rules protecting local content and authorizing operation state changes under `specs/behavior/locking.md`.
 These guards MUST evaluate supplied facts without filesystem access, native-client execution, persistence, backend-name branches, or backend-specific selector rules.
-It MUST choose and invoke workspace validation methods for the guarantees required by that operation and its selection, before dependent source acquisition or project mutation.
+It MUST apply workspace consistency rules to the operation's selection before dependent source acquisition or project mutation.
 Missing, mismatching, or obsolete records MUST be rejected or reconciled according to the operation contract rather than through a universal consistency check during workspace loading.
 It MUST consume dependency declarations with an already selected backend and normalized repository locator, independently of invocation directories and CLI backend options.
 It MUST supply observed facts to its validation guards and coordinate external effects and persistence through their owning boundaries under the operation's behavior contract.
@@ -77,7 +74,6 @@ It MUST determine the revision and freshness requirements of the requested opera
 It MUST delegate backend-specific input validation and selector interpretation to source adapters rather than branch on backend identifiers or selector kinds.
 Project mutation and contribution effects MUST retain their separate consistency and failure guarantees.
 The operation layer MUST own the sequence of inspection, whole-selection validation, filesystem effects, and persistence.
-It MUST use its validation guards and workspace rules to decide permitted changes and determine file copies and removals from inspected data before or during execution after validation succeeds.
 Partial-operation diagnostics and installation-state reporting MUST belong to this layer rather than filesystem primitives.
 Only capabilities needed by the requested operation MUST be invoked; hosting and cache access MUST remain optional where their behavior contracts permit.
 Runtime operations MAY be grouped into implementation submodules by coherent use cases without creating a top-level package for each CLI command.
@@ -91,20 +87,17 @@ Command results MUST follow `specs/architecture/entities.md`; shared utility com
 
 The filesystem adapter MUST own local filesystem access without taking ownership of dependency selection or installation-baseline policy.
 The ordinary filesystem source backend MUST belong to `sources`, using filesystem facilities under its source contract; local filesystem access and source-version semantics MUST remain distinct responsibilities.
-Reusable filesystem inspection and execution primitives MUST be exposed through a root-bound `FSClient` in `filesystem`, using shared path normalization and containment facilities.
+Reusable filesystem inspection and effects MUST belong to `filesystem`, using shared path normalization and containment facilities.
 Filesystem primitives MUST NOT own baseline comparisons, file-ownership policy, operation change plans, or the sequencing of validation and effects across a command's selection.
-Each client MUST accept a normalized root and default to read-only access through its `readonly` flag.
-Read-only clients MAY inspect content, but MUST reject mutation before any filesystem effect.
-Clients inspecting external source repositories MUST use read-only access; authorized destination writes MUST explicitly use writable access.
-Streaming file-copy APIs MUST require the source to have been inspected as a regular file for the operation, without repeating source-kind inspection while copying.
-Callers MUST account for changes initiated by the current invocation before reusing that inspection.
-Operation paths MUST be interpreted relative to the explicitly selected client root, and filesystem effects MUST enforce that root's containment and read-only constraints.
+Filesystem access MUST use an explicitly selected normalized root and default to read-only access.
+Read-only access MUST reject mutation before any filesystem effect; authorized destination writes MUST explicitly enable mutation.
+External source inspection MUST remain read-only.
+Operation paths and filesystem effects MUST enforce the selected root's containment and access constraints.
 Shared filesystem data models and pure hashing functions MUST remain separate from client I/O.
-Source and local filesystem inspections MUST share one file-focused content-tree representation containing the inspected root kind and regular-file metadata.
-Inspection scope MUST be determined by the requested operation; structural directory positions MUST NOT require a separate content model or directory collection.
+Source and local filesystem inspections MUST share a common content model under `specs/architecture/entities.md`, with inspection scope determined by the requested operation.
 Reusable content-identity computations MUST remain pure and independent of project loading and external clients so local inspection and source preparation can use the same rules.
 File selection, entry destination ownership, and identity semantics MUST follow `specs/behavior/files-and-directories.md` at the respective operation, persistence, and adapter boundaries.
-Runtime operations MUST validate the complete selected entry trees before effects and coordinate whole-entry replacement; filesystem primitives MUST only execute the authorized removal and streaming writes.
+Runtime operations MUST validate the complete selected entry trees before effects and coordinate whole-entry replacement; filesystem primitives MUST only execute authorized filesystem changes.
 
 Source adapters MUST own repository and version semantics, revision resolution, and content extraction from available repository views under `specs/behavior/vcs-interaction.md`.
 They MUST provide effect-free input validation separately from persisted declaration and lock validation.
@@ -112,37 +105,30 @@ Input validation MUST accept supported forms requiring resolution, including abb
 Operations MUST complete source input validation before repository acquisition and pass validated input to resolution.
 They MUST own backend-specific locator recognition and normalization and read-only local repository probes.
 Adapter probes MUST recognize their own backend prefixes and native notation; common dispatch MUST NOT perform a separate syntax-based backend-selection pass.
-Normalization MUST return a successful optional locator, with no value for format rejection; probes MUST return a successful false result for rejected values and other non-matches.
-Both boundaries MUST retain operational errors through shared results, and format-exception handling MUST remain local to the parsing operation that can produce it under `specs/architecture/errors.md`.
-Repository URL parsing MUST accept the locator alone and return plain typed repository and version intent without receiving CLI option values or selecting a backend.
+Locator normalization and probes MUST distinguish non-matches from operational failures under Repository detection in `specs/behavior/vcs-interaction.md`.
+Repository URL parsing MUST remain independent of CLI option handling and backend selection.
 It MUST retain shared source-version syntax without taking ownership of native backend locator semantics.
 An explicit backend option MUST select its adapter without automatic probes or a separate locator/backend consistency check.
 Automatic detection MUST have an explicit order with specialized backends before filesystem.
 Parsed source requests MUST retain the repository locator and one optional version selector independently of backend selection, using the shared selector representation under `specs/architecture/entities.md` for typed and unresolved input alike.
 The CLI input boundary MUST construct the dependency declaration from the completed source request after backend selection and locator normalization.
-Resolution MUST accept that declaration and the acquired local repository path, resolve any unresolved selector kind within the declaration, and return plain source data binding the effective dependency declaration, repository path, and selected immutable revision.
-Backend-specific reference metadata MUST remain in the backend's native repository representation.
-Interpretation of an omitted selector MUST belong to the applicable source adapter rather than shared source-data fields.
-Source adapters MUST separate metadata inspection from streaming content copying and receive the bound resolved source data for both.
-Operations using an existing lock MAY bind the recorded dependency and revision to an acquired path directly, without resolving the current selector again.
+Source resolution MUST bind the effective dependency definition to an immutable revision in the acquired repository view.
+Backend-specific reference interpretation, including omitted selectors, MUST remain owned by the applicable source adapter.
+Source adapters MUST separate metadata inspection from content copying while preserving the selected repository and revision across both.
 Production source adapters MUST NOT retain invocation-specific state between calls.
 Inspection results and operation data entities retained between phases MUST contain plain typed data rather than clients, adapters, callbacks, or native file references.
-Native file-reference handling MUST remain within the backend and its native client.
-Shared file metadata MUST NOT encode backend-specific references as a common string identifier.
-Adapters and runtime MUST follow the invocation state stability assumption in General behavior in `specs/behavior/cli.md` rather than add concurrent-change guards or copy-time rehashing solely to detect external changes.
-Their allowed effects MUST follow Backend selection and capabilities and Native client execution in that specification; filesystem source semantics MUST follow `specs/behavior/vcs/filesystem.md`.
+Native file-reference handling MUST remain within the backend and its native client rather than leak into shared file metadata.
+Adapters and runtime MUST follow the invocation state stability assumption in General behavior in `specs/behavior/cli.md`.
+Source-adapter effects MUST follow Backend selection and capabilities and Native client execution in `specs/behavior/vcs-interaction.md`; filesystem source semantics MUST follow `specs/behavior/vcs/filesystem.md`.
 The default source-adapter registry MUST cover every recognized source backend.
 Replacement registries supplied at input or loading boundaries MUST preserve that complete coverage so selecting a recognized backend always supplies an adapter.
-Runtime operations MAY accept independently supplied source and hosting adapters.
-Production callers supplying adapters MUST select the source adapter using the prepared dependency's backend and obtain default hosting through the hosting module.
-Runtime operations adding entries or spanning multiple dependencies MUST use the shared source and hosting selection facilities directly rather than require caller-supplied adapters or selection callbacks.
+Source and hosting adapters MUST remain independently replaceable through their public boundaries.
 Backend and hosting selection policies MUST remain in their owning modules rather than be duplicated in runtime operations.
 Hosting selection MUST NOT acquire repositories or perform cache filesystem access.
 
-The cache module MUST own an invocation-scoped binding for the normalized cache root, using `llm_tool_cli`'s shared context facilities.
-The CLI MUST resolve the root and activate its scope before invoking operations that may use the cache, restoring any previous binding when the invocation ends, including failure paths.
-This binding MUST remain independent of workspace activation so project-independent cache operations can use it.
-Cache-backed hosting MUST obtain its normalized root from this binding when constructed; each repository cache instance MUST retain its explicitly bound root.
+`hosting` MUST own repository-cache policy and use the effective cache location from `llm_tool_cli`'s shared runtime settings.
+Shared command setup MUST select that location independently of workspace activation and retain complete runtime settings through execution and output, restoring the caller's settings when the invocation ends.
+Cache-backed hosting MUST use the invocation's selected cache root consistently throughout acquisition and use.
 
 Hosting adapters MUST own repository acquisition, refresh, and complete outgoing workflows under `specs/behavior/vcs-interaction.md`, including:
 
@@ -156,9 +142,9 @@ Hosting adapters MUST own repository acquisition, refresh, and complete outgoing
 - hosted repository identification, permissions, and fork management where required.
 - creation or lookup of review requests where required.
 
-Acquisition MUST expose a context manager yielding a shared result containing the requested repository's normalized local path; repository identity MUST remain supplied by the requesting operation rather than be echoed in a separate acquisition-result entity.
-Cache-backed hosting MUST own repository-cache construction and locking through that acquisition scope, retaining exclusive access until all source consumers in the scope finish, including failure paths.
-Operations MUST keep resolution, inspection, and copying inside the hosting acquisition scope without implementing backend-specific cache or hosting branches.
+Hosting MUST own the lifetime of acquired repository access and its coordination with cache storage.
+Cache-backed access MUST remain exclusive until all source consumers finish, including failure paths.
+Operations MUST use acquired repository views without implementing backend-specific cache or hosting branches.
 Git hosting MUST own native Git clone/fetch, remote-reference discovery, commit preparation, branch and direct delivery, and patch generation.
 GitHub hosting MUST compose Git hosting with GitHub-specific repository and review capabilities.
 Filesystem hosting MUST provide access to the declared source directory and apply authorized source writes through the lower-level filesystem adapter; it MUST remain distinct from that adapter and the filesystem source adapter.
@@ -168,17 +154,20 @@ Hosting selection MUST belong to one hosting-owned boundary shared by acquisitio
 
 Reusable local repository-inspection capabilities MAY be exposed by `sources` for hosting implementations.
 `vcs_clients` MUST own native VCS command execution and reusable object and reference inspection, including parsing native command output.
-Clients MAY retain local repository paths and repository locators for repeated operations.
 Native inspection MUST retain object identities, file modes, and path bytes so adapters can apply their behavior contracts to selected content.
 Source adapters MUST retain selector inference and content-selection policy, and hosting adapters MUST retain acquisition, refresh, and publication decisions.
 Shared client operations and cached objects MUST preserve these ownership boundaries.
 
 Adapter boundary data and failures MUST follow `specs/architecture/entities.md` and `specs/architecture/errors.md`.
 Source and hosting adapters MUST NOT load or persist the target project's declarations or baselines, assemble CLI result payloads, or perform terminal output.
-External I/O MUST remain with its owning adapter, VCS client, cache, or persistence boundary.
+External I/O MUST remain with its owning adapter, VCS client, shared cache, or persistence boundary.
 
-`cache` MUST own reusable storage and access coordination under `specs/behavior/cache.md`.
-Source and hosting adapters MAY use it according to their behavior contracts; cache management MUST NOT take ownership of requested versions, installation baselines, or durable contribution history.
+`hosting` MUST own repository-specific cache identity, storage organization, and access policy under `specs/behavior/cache.md`.
+It MUST use `llm_tool_cli` for generic cache storage, ownership validation, coordinated access, and cleanup.
+The CLI MUST own the `cache` command group and use shared cache-clean registration from `llm_tool_cli.cli.commands`.
+Shared registration MUST own cleanup execution and result projection; vcsinstall MUST supply its repository-cache policy using the shared runtime location.
+Source inspection MUST consume acquired repository views without owning cache preparation.
+Cache management MUST NOT take ownership of requested versions, installation baselines, or durable contribution history.
 Source and publication repository identities MUST remain distinct when prepared source objects are published elsewhere.
 
 ## External integrations
@@ -198,9 +187,11 @@ Native-client failures and effects MUST follow `specs/behavior/vcs-interaction.m
 
 `core` MUST own vcsinstall's project-wide technical foundations while reusing the infrastructure supplied by `llm_tool_cli`.
 Project error-base extensions MUST follow `specs/architecture/errors.md`.
+Cache-root selection MUST use shared command setup; state-directory discovery and project locking MUST use the separate shared state facilities.
+Cache-root selection and project locks MUST receive the canonical tool name from shared static settings rather than a separate storage identity.
 
 vcsinstall MUST use application construction and shared skill/version command registration from `llm_tool_cli`, supplying its document definitions and distribution identity `vcsinstall`.
-Static application settings MUST be initialized before command-line parsing, using the tool label `VCSINSTALL`.
+Static application settings MUST be initialized before command-line parsing with the canonical tool name defined in `specs/architecture/naming.md`.
 Static settings MUST supply the default project configuration filename from `specs/behavior/config.md` before parsing.
 
 The following MUST remain owned by `llm_tool_cli` rather than local wrappers:
@@ -234,12 +225,11 @@ Test placement, naming, and utility responsibilities MUST follow Test module lay
 - All modules except `core` MAY use universal values and pure logic from `domain`; `domain` MAY depend only on `core` within vcsinstall.
 - Within vcsinstall, `filesystem` MAY depend only on `core` and `domain`.
 - `workspace` MAY depend on `filesystem` for local persistence.
-- `cache` MAY depend on `filesystem` for its local storage.
 - Within vcsinstall, `vcs_clients` MAY depend only on `core` and `domain`.
-- `sources` MAY depend on `filesystem`, `cache`, and `vcs_clients`; it MUST NOT depend on `hosting`.
-- `hosting` MAY use public local repository-inspection capabilities from `sources`, and public filesystem, cache, and VCS client capabilities.
-- Workspace, adapter, and cache modules MUST NOT depend on `runtime` or `cli`, and adapters and cache MUST remain independent of `workspace`.
-- `runtime` MAY compose workspace, adapters, and cache through their public boundaries while keeping shared operation guards within runtime.
+- `sources` MAY depend on `filesystem` and `vcs_clients`; it MUST NOT depend on `hosting`.
+- `hosting` MAY use public local repository-inspection capabilities from `sources`, and public filesystem and VCS client capabilities.
+- Workspace and adapter modules MUST NOT depend on `runtime` or `cli`, and adapters MUST remain independent of `workspace`.
+- `runtime` MAY compose workspace and adapters through their public boundaries while keeping shared operation guards within runtime.
 - `cli` MAY use those public boundaries for application setup and `skills` for documentation while leaving operation coordination to runtime.
 - `skills` MUST remain independent of other vcsinstall modules except `core` and `domain`.
 

@@ -173,9 +173,7 @@ Only a separately authorized hosting workflow MAY publish changes to a recipient
 Acquisition MUST make repository data and version metadata available for source resolution and extraction under the requested operation's revision and freshness requirements in `specs/behavior/locking.md`.
 Acquired repository data MUST correspond to the declared backend and normalized repository locator; data for a different identity MUST NOT satisfy the request.
 Configurations where an acquired repository location and an installation destination overlap are outside the supported use cases.
-Acquisition results and resolved source data MUST follow Adapter and cache boundaries in `specs/architecture/modules_layout.md`.
-Backend-specific metadata MUST remain available in the backend's native repository representation rather than impose backend-specific fields on shared source data.
-Where applicable, that metadata MUST distinguish observed branch and tag targets from the source's advertised default branch.
+Available version metadata MUST distinguish observed branch and tag targets from the source's advertised default branch where applicable.
 Acquisition or refresh MUST NOT itself choose a new installation revision or change project declarations, lock state, or installed content.
 
 Valid available data MAY be reused when it satisfies the operation's requirements.

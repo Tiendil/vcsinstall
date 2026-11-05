@@ -5,7 +5,6 @@ from llm_tool_cli.protocol.logic_cells.base import LogicCell
 from llm_tool_cli.protocol.logic_cells.uniform import UniformCell
 from llm_tool_cli.protocol.output_cells.base import MetaValue, OutputCell
 
-from vcsinstall.cache import CacheRootPath
 from vcsinstall.domain import Dependency, DependencyName, SourcePath, SourceRevision
 from vcsinstall.hosting import DeliveryMode, DeliveryResult
 from vcsinstall.runtime.entities import DependencyPlan, LocalStatus, PushPlan
@@ -20,7 +19,6 @@ class Outcome(StrEnum):
     unchanged = "unchanged"
     installed = "installed"
     removed = "removed"
-    cleaned = "cleaned"
     pushed = "pushed"
     exported = "exported"
 
@@ -43,21 +41,6 @@ class Operation(StrEnum):
     remove = "remove"
     install = "install"
     list = "list"
-    clean = "clean"
-
-
-class CacheCell(UniformCell):
-    cache_dir: CacheRootPath
-    outcome: Outcome
-
-    def _render(self, cell_type: type[OutputCell]) -> OutputCell:
-        return cell_type.build_meta(
-            "cache",
-            type="cache",
-            operation=Operation.clean,
-            cache_dir=str(self.cache_dir),
-            outcome=self.outcome,
-        )
 
 
 class RemovalCell(UniformCell):

@@ -7,7 +7,9 @@ import pytest
 import tomli_w
 from llm_tool_cli.config import errors as config_errors
 from llm_tool_cli.config.project import project_config
+from llm_tool_cli.config.runtime import runtime_config
 from llm_tool_cli.core import settings
+from llm_tool_cli.core.entities import ToolName
 from llm_tool_cli.core.result import Err, Result
 from llm_tool_cli.paths import ProjectPathId
 from llm_tool_cli.paths import errors as path_errors
@@ -15,7 +17,6 @@ from llm_tool_cli.protocol.tests.helpers import cell_payloads
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
-from vcsinstall.cache import active_cache_root
 from vcsinstall.cli.application import app
 from vcsinstall.cli.commands import entries
 from vcsinstall.cli.commands.tests.helpers import (
@@ -40,9 +41,7 @@ from vcsinstall.workspace import errors as workspace_errors
 class TestListEntries:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.fixture
     def config(self, tmp_path: Path) -> Path:
@@ -93,9 +92,8 @@ class TestListEntries:
         config.write_text(tomli_w.dumps(declarations))
         before = {path: path.read_bytes() for path in config.parent.rglob("*") if path.is_file()}
         for name in (
-            "vcsinstall.cli.preparation.resolve_cache_root",
+            "llm_tool_cli.tool_cache.ToolCache.entry",
             "vcsinstall.runtime.commands.get_hosting",
-            "vcsinstall.cache.paths.user_cache_path",
             "vcsinstall.vcs_clients.GitClient.run",
             "vcsinstall.sources.adapters.git.GitSourceAdapter.resolve",
             "vcsinstall.sources.adapters.git.GitSourceAdapter.inspect",
@@ -128,7 +126,7 @@ class TestListEntries:
             assert result.exit_code == 0, result.output
             assert not result.stderr
             assert cell_payloads([json.loads(line) for line in result.stdout.splitlines()]) == expected_records
-            assert not project_config.is_set() and not active_workspace.is_set() and not active_cache_root.is_set()
+            assert not project_config.is_set() and not active_workspace.is_set() and not runtime_config.is_set()
         assert {path: path.read_bytes() for path in config.parent.rglob("*") if path.is_file()} == before
 
     def test_normalizes_selection_from_invocation_directory_and_inspects_each_entry_once(
@@ -442,9 +440,7 @@ class TestListEntries:
 class TestRemoveEntries:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.fixture
     def config(self, tmp_path: Path) -> Path:
@@ -505,7 +501,7 @@ class TestRemoveEntries:
         assert locked["entries"] == [recorded["entries"][2]]
         assert not project_config.is_set()
         assert not active_workspace.is_set()
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
 
     def test_selection_spans_dependencies_and_preserves_locks_after_last_entry(self, config: Path) -> None:
         lockfile = config.with_name("vcsinstall.lock")
@@ -833,10 +829,9 @@ class TestRemoveEntries:
 
     def test_cache_and_source_access_are_unused(self, config: Path, mocker: MockerFixture) -> None:
         for name in (
-            "vcsinstall.cli.preparation.resolve_cache_root",
+            "llm_tool_cli.tool_cache.ToolCache.entry",
             "vcsinstall.runtime.commands.get_hosting",
             "vcsinstall.vcs_clients.GitClient.run",
-            "vcsinstall.cache.paths.user_cache_path",
         ):
             mocker.patch(name, side_effect=AssertionError("unexpected source or cache access"))
         result = CliRunner().invoke(
@@ -938,9 +933,7 @@ class TestRemoveEntries:
 class TestAddEntry:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.fixture
     def config(self, tmp_path: Path) -> Path:
@@ -1021,7 +1014,7 @@ class TestAddEntry:
             assert baseline[0]["files"] == []
         assert not project_config.is_set()
         assert not active_workspace.is_set()
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
         assert (tmp_path / "cache").exists() == (vcs == "git")
 
     @pytest.mark.parametrize("form", ["identifier", "relative", "absolute"])
@@ -1463,16 +1456,14 @@ class TestAddEntry:
         ]
         assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
         assert not active_workspace.is_set()
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
 
 
 @pytest.mark.usefixtures("isolated_settings")
 class TestInstallEntries:
     @pytest.fixture(autouse=True)
     def initialize(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.fixture
     def client(self, tmp_path: Path) -> GitClient:
@@ -1535,7 +1526,7 @@ class TestInstallEntries:
         directory = next(entry for entry in locked["entries"] if entry["kind"] == "directory")
         assert [file["path"] for file in directory["files"]] == ["@/a", "@/nested/b"]
         assert not active_workspace.is_set()
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
         assert not project_config.is_set()
 
     @pytest.mark.parametrize("locked", [False, True])
@@ -1853,7 +1844,7 @@ class TestInstallEntries:
         if protocol == "llm":
             assert "--VCSINSTALL-CELL " in result.stdout
         assert not active_workspace.is_set()
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
         assert not project_config.is_set()
 
     def test_discovers_configuration_and_resolves_cache_relative_to_invocation(

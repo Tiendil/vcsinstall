@@ -6,6 +6,7 @@ from llm_tool_cli.config import errors as config_errors
 from llm_tool_cli.config.project import ProjectConfig, project_config
 from llm_tool_cli.core import errors as core_errors
 from llm_tool_cli.core import settings
+from llm_tool_cli.core.entities import ToolName
 from llm_tool_cli.core.result import Result
 from llm_tool_cli.paths import PathInput, ProjectConfigPath
 from llm_tool_cli.paths import errors as path_errors
@@ -28,9 +29,7 @@ _LOCK = "version = 1\n" + _DEPENDENCY + 'revision = "' + "1" * 40 + '"\n'
 class TestLoadWorkspace:
     @pytest.fixture(autouse=True)
     def initialize_settings(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.mark.parametrize("location", ["config", "lockfile"])
     def test_does_not_resolve_destination_paths_during_loading(self, tmp_path: Path, location: str) -> None:
@@ -411,9 +410,7 @@ class TestLoadWorkspace:
 class TestOpenWorkspace:
     @pytest.fixture(autouse=True)
     def initialize_settings(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     def test_activates_workspace_until_scope_exit(self, tmp_path: Path, project_state_root: Path) -> None:
         (tmp_path / "vcsinstall.toml").write_text("version = 1\n")
@@ -470,9 +467,7 @@ class TestOpenWorkspace:
 class TestWorkspace:
     @pytest.fixture(autouse=True)
     def initialize_settings(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     def test_scope__activates_loaded_workspace_without_reloading(self, tmp_path: Path) -> None:
         config = tmp_path / "vcsinstall.toml"

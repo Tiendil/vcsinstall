@@ -4,13 +4,15 @@ from pathlib import Path
 import pytest
 import tomli_w
 from llm_tool_cli.config.project import project_config
+from llm_tool_cli.config.runtime import runtime_config
 from llm_tool_cli.core import settings
+from llm_tool_cli.core.entities import ToolName
+from llm_tool_cli.tool_cache import errors
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
-from vcsinstall.cache import active_cache_root, errors
-from vcsinstall.cache.tests.helpers import cached_repository
 from vcsinstall.cli.application import app
+from vcsinstall.cli.commands.tests.helpers import cached_repository
 from vcsinstall.vcs_clients.tests.helpers import create_repository
 from vcsinstall.workspace import active_workspace
 
@@ -19,9 +21,7 @@ from vcsinstall.workspace import active_workspace
 class TestClean:
     @pytest.fixture(autouse=True)
     def initialize_settings(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.mark.parametrize("protocol", ["human", "llm", "automation"])
     @pytest.mark.parametrize("state", ["absent", "empty", "populated"])
@@ -66,14 +66,14 @@ class TestClean:
         assert config.read_bytes() == b"malformed["
         assert lockfile.read_bytes() == b"also malformed["
         assert root.exists() == (state != "absent")
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
         assert not active_workspace.is_set()
         assert not project_config.is_set()
 
     def test_default_cache_location_ignores_a_missing_config(self, tmp_path: Path, mocker: MockerFixture) -> None:
         root = tmp_path / "cache"
         cached_repository(root)
-        mocker.patch("vcsinstall.cache.paths.user_cache_path", return_value=root)
+        mocker.patch("llm_tool_cli.tool_cache.paths.user_cache_path", return_value=root)
 
         result = CliRunner().invoke(
             app, ["-p", "automation", "--config", str(tmp_path / "missing" / "config"), "cache", "clean"]
@@ -104,7 +104,7 @@ class TestClean:
     def test_rejects_arguments_and_options_before_cache_access(
         self, tmp_path: Path, mocker: MockerFixture, arguments: list[str]
     ) -> None:
-        mocker.patch("vcsinstall.cli.preparation.resolve_cache_root", side_effect=AssertionError("Unexpected access"))
+        mocker.patch("llm_tool_cli.cli.context.resolve_cache_root", side_effect=AssertionError("Unexpected access"))
 
         result = CliRunner().invoke(app, ["--cache-dir", str(tmp_path / "cache"), "cache", "clean", *arguments])
 
@@ -117,7 +117,9 @@ class TestClean:
     ) -> None:
         root = tmp_path / "cache"
         root.write_bytes(b"unrelated")
-        mocker.patch("vcsinstall.cache.paths.user_cache_path", side_effect=AssertionError("Unexpected fallback"))
+        mocker.patch(
+            "llm_tool_cli.tool_cache.paths.user_cache_path", side_effect=AssertionError("Unexpected fallback")
+        )
 
         result = CliRunner().invoke(app, ["-p", protocol, "--cache-dir", str(root), "cache", "clean"])
 
@@ -131,7 +133,7 @@ class TestClean:
             assert record["path"] == str(root)
         else:
             assert str(root) in result.stdout
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
 
     @pytest.mark.parametrize("protocol", ["human", "llm", "automation"])
     def test_deletion_failure_reports_partial_cleanup_without_success(
@@ -140,7 +142,7 @@ class TestClean:
         root = tmp_path / "cache"
         entry = cached_repository(root)
         cause = PermissionError(13, "Cannot delete cached files", str(entry / "repository"))
-        mocker.patch("vcsinstall.cache.storage.shutil.rmtree", side_effect=cause)
+        mocker.patch("llm_tool_cli.tool_cache.storage.shutil.rmtree", side_effect=cause)
 
         result = CliRunner().invoke(app, ["-p", protocol, "--cache-dir", str(root), "cache", "clean"])
 
@@ -155,8 +157,8 @@ class TestClean:
         else:
             assert str(root) in result.stdout
         assert "partially" in result.stdout
-        assert (entry / "identity.json").is_file()
-        assert not active_cache_root.is_set()
+        assert (entry / "identity.toml").is_file()
+        assert not runtime_config.is_set()
 
     def test_locked_install_rebuilds_cache_without_advancing_revisions(self, tmp_path: Path) -> None:
         client = create_repository(tmp_path / "source")

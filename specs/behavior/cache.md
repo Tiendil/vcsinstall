@@ -2,61 +2,47 @@
 
 ## Goal of the document
 
-This document describes vcsinstall's shared repository cache, its location and identity rules, and its reuse and cleanup guarantees.
+This document describes vcsinstall's repository-cache policy and its application of shared storage contracts.
 
 ## Scope
 
-This specification covers observable cache behavior during repository acquisition and refresh, local source inspection, delivery, and explicit cleanup, including access coordination through one cache lock file.
-The following are out of scope:
-
-- command syntax and output representation.
-- configuration and lockfile schemas.
-- version selection, content hashing, and installation-baseline transitions.
-- VCS protocols and hosting-provider APIs.
-- internal checkout layout, locking libraries, and platform-specific synchronization mechanisms.
-- cache protection for VCS subprocesses that outlive the vcsinstall process.
+This specification covers repository-cache behavior observed across vcsinstall operations and projects.
+Generic cache storage mechanics, command syntax, and project record formats are out of scope.
 
 ## Applicability
 
 Repository-cache use MUST follow the source and hosting contracts identified in `specs/behavior/vcs-interaction.md`.
-The repository storage and reuse requirements below MUST apply to either adapter when it uses this cache.
+The repository storage and reuse requirements below MUST apply to acquired repository views and all source or hosting operations using them.
 Operations using only uncached source and hosting capabilities MUST NOT acquire the cache lock, create its root, or populate cached repository data.
 Explicit `cache clean` MUST retain its cache operation contract independently of the current project's source backends.
 Hosting selection and publication to another repository MUST NOT change the original source's cache identity.
-If another repository is itself cached, its storage MUST follow its own backend and normalized locator identity under Repository identity and layout below.
+If another repository is itself cached, its storage MUST follow its own backend and normalized locator identity under Repository identity below.
 
 ## Cache-root selection
 
-An explicit global `--cache-dir DIRECTORY` MUST select the complete application cache root for the invocation.
-vcsinstall MUST NOT append another `vcsinstall` component to that directory.
+Cache-root selection MUST follow Cache roots under Tool storage locations in `specs/behavior/paths.md` in `llm-tool-cli`, using the canonical tool name `vcsinstall`, global `--cache-dir DIRECTORY` as the optional override, and the invocation's working directory for relative paths.
+An explicit override MUST select the complete application cache root for the invocation.
 The override MUST NOT change project configuration or the lockfile.
-Home markers MUST be expanded, and relative directories MUST resolve against the invocation's working directory rather than the project root.
 The directory MUST be interpreted as a filesystem path without project-path notation.
 
-Without an override, the cache root MUST be the platform's per-user cache location followed by `vcsinstall`.
-When the platform provides no usable default cache location, the fallback MUST be `<user-home>/.cache/vcsinstall`.
-If neither a default nor a home-based fallback can be resolved, commands that may use the cache MUST fail with guidance to provide `--cache-dir`.
-A directory's absence MUST NOT prevent its selection as a default or explicit cache root.
+Unavailable platform discovery MUST use the home-based fallback permitted by that contract.
+If neither a default nor a home-based fallback can be resolved, command setup MUST fail with unchanged shared diagnostics and corrective guidance.
 
-After selecting the location and expanding home markers, absolute resolution MUST follow the Project-root resolution contract in `specs/behavior/paths.md` in `llm-tool-cli`, with the cache location as the supplied filesystem root.
 The effective root MUST remain the same resolved absolute location throughout an invocation, including cleanup and its result.
 The cache MAY reside outside the target project.
 
-Commands that may use the cache MUST select and resolve its root before executing their requested operation, even when the selected backend does not use cached data.
+Every executing command MUST have its effective cache location selected under Invocation context in `specs/behavior/cli.md` in `llm-tool-cli`, including commands that do not use cached data.
 Filesystem checks needed to read or write cached data MUST remain deferred until those capabilities are used.
-An existing cache root accessed for cached data MUST be a directory.
-Missing directories MUST be created only when an operation needs to store cache data; selecting a root MUST NOT itself create it.
-A failure to resolve or access an explicitly selected path MUST fail without falling back to the default.
-Access or creation failure at a selected default root MUST also fail rather than silently switch to another location.
 
 **Example:** If the invocation's working directory is `/work/project/tools`, `--cache-dir ../shared-cache` selects `/work/project/shared-cache`, regardless of the selected configuration file's location.
 
 ## Cache-independent operations
 
-The project-independent interfaces listed in Application identity and project files in `specs/behavior/cli.md` MUST retain their cache independence.
-The following interfaces MUST also remain usable without resolving or accessing a cache root, including when an explicit `--cache-dir` is unusable:
+Help, completion, and bare command groups MUST remain usable without resolving a cache root, including when an explicit `--cache-dir` is unusable.
+The following commands MUST NOT create cache storage, acquire cache locks, or read cached data:
 
-- bare `dependency` and `cache`.
+- `version`.
+- `skill`.
 - `init`.
 - `list`.
 - `remove`.
@@ -65,16 +51,13 @@ The following interfaces MUST also remain usable without resolving or accessing 
 
 Loading or validating configuration and lock state MUST NOT require repository-cache access.
 Project coordination MUST remain independent of this cache under Project operation locking in `specs/behavior/cli.md`.
-Whether acquisition, source inspection, or delivery needs cached data MUST follow the applicable operation and adapter contracts; accepting `--cache-dir` MUST NOT itself make an operation cache-dependent.
+Whether acquisition, source inspection, or delivery needs cached data MUST follow the applicable operation and adapter contracts; selecting a cache location MUST NOT itself require cache storage to exist or be accessible.
 
-## Repository identity and layout
+## Repository identity
 
-Cached repositories MUST reside under `<cache-root>/repos/<vcs-name>/<repo-name>`.
-The VCS component MUST identify the source backend, such as `git`, rather than its transport scheme, such as `git+https`.
 Repository identity MUST follow Repository locators and identity in `specs/behavior/vcs-interaction.md`, with configured filesystem paths interpreted under `specs/behavior/config.md`.
-The repository-name component MUST be a single filesystem component derived deterministically from that complete identity and MUST distinguish repositories sharing a basename.
-It MAY combine a readable name with a digest of the normalized locator.
-Repository-entry locations MUST satisfy the Filesystem containment contract in `specs/behavior/paths.md` in `llm-tool-cli`, using the effective cache root as the supplied root.
+Cached data MUST be associated with that complete identity and MUST distinguish repositories sharing a basename.
+Repository-entry acquisition MUST follow Cache entries in `specs/behavior/cache.md` in `llm-tool-cli`, using the effective cache root and that repository identity.
 
 Repository cache identity MUST be independent of:
 
@@ -117,52 +100,27 @@ Missing cache data MUST NOT require removing or changing valid lock records.
 Preparation MAY populate or refresh the cache even when the project operation subsequently fails.
 Cache preparation alone MUST NOT establish project-operation success or advance project state.
 
+After failed preparation or refresh, later operations MUST NOT treat incomplete cached data as a complete valid repository or source revision.
+Cache failures and repairs MUST preserve project state under Preparation and consistency in `specs/behavior/locking.md`.
+
 **Example:** Dependencies `guides-current` and `guides-stable` use one Git repository, tracking `main` and `v1.0` respectively.
 Updating `guides-current` reuses the shared cache while leaving the stable dependency's revision and installed files unchanged.
 After `cache clean`, `install --locked` retrieves the required locked commits again when source data is needed; it fails if a required commit is unavailable rather than selecting a newer commit.
 
-## Cache ownership
-
-Cache ownership and repository identity MUST be established before existing data is reused or replaced as cached repository data.
-A directory MUST NOT become disposable merely because it resides under the selected cache root or resembles a repository cache entry.
-A conflict with unrelated content at a required cache location MUST fail without overwriting or deleting that content.
-Data belonging to one repository identity MUST NOT satisfy a request for another.
-
-Cache creation or refresh failure MAY leave disposable partial data.
-Later operations MUST NOT treat incomplete data as a complete valid repository or source revision.
-Cache failures and repairs MUST preserve project state under Preparation and consistency in `specs/behavior/locking.md`.
-
 ## Cache access locking
 
-All vcsinstall invocations using the same effective cache root MUST coordinate through a single cache lock file at `<cache-root>/cache.lock`.
-The lock MUST grant exclusive access to the entire cache, including all repositories and revisions across projects.
-Different effective cache roots MUST have independent locks.
-Cache-independent operations MUST NOT acquire or create this lock file.
-
-An operation MUST acquire the lock before reading or changing cached repository data or deleting disposable cache data.
-While the vcsinstall process remains running, exclusive access MUST remain effective for as long as the command or any VCS subprocess it starts accesses that data.
+Repository access and cleanup MUST follow Exclusive access in `specs/behavior/cache.md` in `llm-tool-cli`, using the effective root and a 10-second acquisition timeout.
+The protected lifetime MUST cover every source or hosting operation using cached repository data, including its VCS subprocesses while vcsinstall remains running.
+Cache-independent operations MUST NOT acquire cache access or create its coordination data.
 Sharing the cache MUST preserve repository identity and revision isolation and MUST NOT expose incomplete preparation as valid source data.
-
-When another invocation holds the lock, a command MUST wait for up to 10 seconds to acquire it and proceed if it becomes available within that period.
-If the lock remains unavailable when that timeout expires, the command MUST fail with an operational diagnostic identifying the cache root and the acquisition timeout.
-Waiting MUST NOT modify:
-
-- cached repository data.
-- project configuration.
-- project lockfiles.
-- installed content.
-
-Other lock-access failures MUST fail operationally and retain the applicable filesystem diagnostic information.
-
-Once all protected cache access has ended, normal completion, failure, or process termination MUST release exclusive access without requiring users to remove stale coordination files.
-The presence of the cache lock file alone MUST NOT indicate that the cache is in use.
-Once created, that file and its containing cache root MUST remain in place across lock release and cleanup so later invocations coordinate through the same file.
+Waiting or failed acquisition MUST NOT change project configuration, lockfiles, or installed content.
 
 ## Cleanup
 
-`cache clean` MUST remove all vcsinstall-owned disposable data from the effective cache root, including all cached repositories and their derived source data across VCS types and cached versions.
+`cache clean` MUST apply Cleanup in `specs/behavior/cache.md` in `llm-tool-cli` to all vcsinstall-owned disposable repository data in the effective cache, including derived source data across VCS types and cached versions.
+Its acquisition policy MUST follow Cache access locking above.
 Cleanup MUST NOT be restricted to repositories referenced by the current project.
-Cleanup MUST operate locally without network access or a VCS client and MUST NOT load or create project files.
+Cleanup MUST NOT require a VCS client or load or create project files.
 
 Cleanup MUST preserve:
 
@@ -172,30 +130,12 @@ Cleanup MUST preserve:
 - project operation coordination files under Project operation locking in `specs/behavior/cli.md`.
 - original source repositories.
 - previously published remote contributions.
-- unrelated content under the selected cache root.
-
-Cleanup MUST NOT follow symlinks within cached data to delete content outside the effective cache root.
-Cleanup MUST acquire and hold the same exclusive lock under Cache access locking, including its wait and timeout requirements, before deleting cached data.
-While cleanup holds the lock, another invocation MUST NOT begin using data being deleted.
-
-If the cache root is absent, cleanup MUST succeed as unchanged without creating a cache root or lock file.
-For an existing root, cleanup MUST follow Cache access locking before inspecting disposable data; finding none MUST succeed as unchanged.
-Cleanup MUST preserve the cache root and cache lock file when they exist; other coordination metadata MAY remain, but disposable cached data MUST be removed on success.
-Cache-access or deletion failures MUST fail explicitly rather than report complete cleanup or fall back to another cache root.
-If deletion fails after removing some data, diagnostics MUST identify partial cleanup rather than imply rollback.
 
 Later operations requiring source data MUST follow Repository reuse and revision isolation in this specification.
 Command arguments and cleanup result records MUST follow `specs/behavior/cli.md`.
 
 ## Failures
 
-Cache failures MUST identify the effective root when it can be resolved and the affected repository or filesystem path when applicable.
-Diagnostics MUST distinguish:
-
-- an unavailable location.
-- unsafe or conflicting cached data.
-- a cache-lock acquisition timeout.
-- a failed source operation.
-
-Filesystem diagnostics adopted from `llm-tool-cli` MUST retain their path and failure information.
+Cache storage failures MUST follow Failures in `specs/behavior/cache.md` in `llm-tool-cli`.
+Failed source operations MUST remain distinguishable from storage failures and retain their repository context under `specs/behavior/vcs-interaction.md`.
 Diagnostic rendering and exit statuses MUST follow `specs/behavior/cli.md`.

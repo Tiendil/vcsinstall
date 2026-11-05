@@ -17,7 +17,6 @@ from vcsinstall.cli.entities import (
     PushOutputOption,
     PushRepositoryOption,
 )
-from vcsinstall.cli.preparation import prepare_cache
 from vcsinstall.domain import RepositoryLocator
 from vcsinstall.hosting import PushOptions, get_hosting, validate_push_options
 from vcsinstall.runtime import dependency_push
@@ -90,7 +89,6 @@ def push_dependency(  # noqa: CFQ002, CCR001 — Prepare the independent public 
             patch_file=_filesystem_path(output, cwd=cwd).unwrap() if output is not None else None,
         )
         validate_push_options(options, has_message=message is not None).unwrap()
-        prepare_cache(context, cwd=cwd).unwrap()
         workspace = context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
         definition = workspace.config.dependencies.get(name)

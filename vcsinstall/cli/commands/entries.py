@@ -17,7 +17,6 @@ from vcsinstall.cli.entities import (
     RedefineEntryOption,
     SourceArgument,
 )
-from vcsinstall.cli.preparation import prepare_cache
 from vcsinstall.domain import VcsId
 from vcsinstall.runtime import entry_add, entry_list, entry_remove, install
 from vcsinstall.workspace import Entry, open_workspace
@@ -33,7 +32,6 @@ def add_entry(
     """Declare and install a file or directory at its dependency's locked revision."""
     with command_context(context) as command:
         cwd = Path.cwd()
-        prepare_cache(context, cwd=cwd).unwrap()
         workspace = context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
         if source.dependency not in workspace.config.dependencies:
@@ -83,7 +81,6 @@ def install_entries(context: typer.Context, locked: LockedOption = False) -> Non
     """Install all declared entries, reusing matching dependency revisions."""
     with command_context(context) as command:
         cwd = Path.cwd()
-        prepare_cache(context, cwd=cwd).unwrap()
         workspace = context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
         unsupported = sorted(

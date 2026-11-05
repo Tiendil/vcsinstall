@@ -56,7 +56,7 @@ Filesystem sources track their complete live content fingerprint, or accept a co
 
 An existing name requires `--redefine`, even for an identical declaration. Redefinition re-infers an omitted selector and refreshes every entry of that dependency at one revision while preserving entry mappings. Each entry owns its complete destination tree; extra local files count as local changes, and conflicting content fails before project changes. Missing selected files are restored. Changed entry roots are removed and recopied in full; entries already matching the source stay untouched. Identical redefinition reports `unchanged` and preserves project-file bytes.
 
-Git sources require the installed Git client and use a shared per-user cache. Put `--cache-dir DIRECTORY` before `dependency` to override its root. Dependency add resolves the cache root for every backend. Filesystem sources do not create cache data. Project-independent commands do not resolve or access the cache. Native authentication remains owned by Git.
+Git sources require the installed Git client and use a shared per-user cache. Put `--cache-dir DIRECTORY` before `dependency` to override its root. Shared command setup selects the cache path for every executing command, from the override or the platform default. Selecting a path does not create cache storage or acquire cache locks. Filesystem sources and project-independent informational commands do not use cached data; help and completion skip cache-path selection. Native authentication remains owned by Git.
 Automation success emits a `dependency` record, followed by ordered `installation` records for refreshed entries. Errors use the selected shared protocol.
 
 ## Listing dependencies
@@ -70,7 +70,7 @@ List reports every declared dependency, including those without entries, ordered
 
 The `entries` count includes each declared file or directory mapping once. `modified`, `missing`, and `unlocked` count entries whose existing files differ from their baseline, whose expected files are missing, or whose matching baseline is unavailable. Remaining entries are unmodified. Local additions and regular-file obstructions count as modifications; modifications take precedence over missing files. Empty directories do not affect comparison. An entry is locked when both its dependency revision lock and installation baseline match its declaration; otherwise it is unlocked. Malformed or unreadable state fails.
 
-The command accepts no arguments or command-specific options. It reads local content without changing project files, needs no source repository, network, VCS client, or repository cache, and ignores `--cache-dir`. It does not check upstream freshness. Automation emits metadata-only `dependency` records with operation `dependency list` and the four counts; it emits no installation records. An empty project succeeds without result records or creating a lockfile.
+The command accepts no arguments or command-specific options. It reads local content without changing project files, needs no source repository, network, VCS client, or repository cache. It does not check upstream freshness. Automation emits metadata-only `dependency` records with operation `dependency list` and the four counts; it emits no installation records. An empty project succeeds without result records or creating a lockfile.
 
 ## Listing entries
 
@@ -91,7 +91,7 @@ Each installation record identifies its owning `dependency`, `destination`, back
 
 Human and LLM output label the dependency on each entry. Automation emits metadata-only `installation` records with operation `list`, without mutation outcomes or dependency summaries. Dependencies without selected entries produce no results. An empty project succeeds without records. Local changes, missing content, and unlocked entries still exit successfully; malformed state and unreadable or unsupported selected content fail.
 
-List preserves configuration, lockfile bytes, and installed content. It needs no source repository, network, VCS client, or repository cache, ignores `--cache-dir`, and does not check source freshness. Directory comparison includes all local files, including hidden or ignored additions.
+List preserves configuration, lockfile bytes, and installed content. It needs no source repository, network, VCS client, or repository cache, and does not check source freshness. Directory comparison includes all local files, including hidden or ignored additions.
 
 ## Checking source freshness
 
@@ -139,7 +139,7 @@ Dependency remove requires exactly one declared name and refuses dependencies wi
 
 It removes the declaration, shared revision lock, and obsolete installation baselines, preserving installed files and unrelated records. A baseline still protecting an entry reassigned to another dependency must be reconciled first. Missing lock state does not block removal or create a lockfile; existing metadata must still validate.
 
-The command needs no source repository, network, Git client, or repository cache and ignores `--cache-dir`. Automation success emits one metadata-only `dependency` record with operation `dependency remove` and outcome `removed`. It describes the definition observed before removal, with its matching locked revision or null when none matches. An omitted Git selector reports a matching lock's inferred branch, or `ref_kind = default` and null `ref` without one.
+The command needs no source repository, network, Git client, or repository cache. Automation success emits one metadata-only `dependency` record with operation `dependency remove` and outcome `removed`. It describes the definition observed before removal, with its matching locked revision or null when none matches. An omitted Git selector reports a matching lock's inferred branch, or `ref_kind = default` and null `ref` without one.
 
 ## Adding entries
 
@@ -218,7 +218,7 @@ Ordinary removal deletes each selected destination root and its complete content
 
 `--keep-files` removes only the selected declarations and baselines, leaving their content untouched as unmanaged project files. It requires no content verification or matching baseline and takes precedence over `--force`. Neither mode creates a missing lockfile. Dependency declarations and shared revision locks remain after their last entry is removed; unselected entries retain their content and records.
 
-Remove uses no source repository, network, Git client, or repository cache, and ignores `--cache-dir`. Automation success emits one metadata-only `removal` record per selected entry, ordered by canonical destination, with operation `remove`, dependency name, destination, outcome `removed`, and Boolean `keep_files`.
+Remove uses no source repository, network, Git client, or repository cache. Automation success emits one metadata-only `removal` record per selected entry, ordered by canonical destination, with operation `remove`, dependency name, destination, outcome `removed`, and Boolean `keep_files`.
 
 ## Cleaning the cache
 

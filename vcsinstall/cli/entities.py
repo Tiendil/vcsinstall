@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Annotated
 
 import pydantic
@@ -59,11 +58,6 @@ RepositoryArgument = Annotated[
     ),
 ]
 
-
-CacheDirOption = Annotated[
-    Path | None,
-    typer.Option("--cache-dir", help="Shared repository cache root."),
-]
 
 VcsOption = Annotated[
     VcsId | None,

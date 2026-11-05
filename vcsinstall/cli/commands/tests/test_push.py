@@ -7,6 +7,7 @@ import tomli_w
 from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.config import load_config
 from llm_tool_cli.core import settings
+from llm_tool_cli.core.entities import ToolName
 from llm_tool_cli.core.result import Err, Result
 from llm_tool_cli.paths import ProjectPathId
 from pytest_mock import MockerFixture
@@ -32,9 +33,7 @@ from vcsinstall.workspace import errors as workspace_errors
 
 @pytest.fixture(autouse=True)
 def initialize_settings(isolated_settings: None) -> None:
-    settings.initialize(
-        label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-    )
+    settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
 
 @pytest.fixture

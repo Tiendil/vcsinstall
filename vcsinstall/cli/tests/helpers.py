@@ -7,16 +7,17 @@ from selectors import EVENT_READ, DefaultSelector
 _COORDINATED_CLI = """
 import sys
 from vcsinstall.cli.application import main
-from vcsinstall.workspace import coordination, loading
+from vcsinstall.workspace import loading
+from llm_tool_cli.tool_state import directory
 
 pause = sys.argv[1] == 'pause'
 sys.argv = ['vcsinstall', *sys.argv[2:]]
-acquire = coordination._acquire_project_lock
+acquire = directory.exclusive_lock
 load = loading.load_workspace
 
-def announce_acquire(root, path):
+def announce_acquire(path, *, timeout):
     print('acquiring', flush=True)
-    return acquire(root, path)
+    return acquire(path, timeout=timeout)
 
 def announce_load(**kwargs):
     result = load(**kwargs)
@@ -25,7 +26,7 @@ def announce_load(**kwargs):
         sys.stdin.buffer.read(1)
     return result
 
-coordination._acquire_project_lock = announce_acquire
+directory.exclusive_lock = announce_acquire
 loading.load_workspace = announce_load
 main()
 """

@@ -3,9 +3,9 @@ from pathlib import Path
 import pytest
 from filelock import FileLock, Timeout
 from llm_tool_cli.core.result import Err, Ok
+from llm_tool_cli.paths import CacheRootPath
 from pytest_mock import MockerFixture
 
-from vcsinstall.cache import CacheRootPath
 from vcsinstall.domain import RepositoryLocator, SourceRevision, VcsId
 from vcsinstall.domain.tests import make
 from vcsinstall.hosting import GitHostingAdapter
@@ -14,6 +14,20 @@ from vcsinstall.vcs_clients.tests.helpers import create_repository
 
 
 class TestGitHostingAdapter:
+    def test_acquire__shares_selectors_and_separates_repository_identities(self, tmp_path: Path) -> None:
+        first = create_repository(tmp_path / "first" / "shared")
+        second = create_repository(tmp_path / "second" / "shared")
+        dependency = make.dependency(repository=str(first.path), selector=make.selector("branch", "trunk"))
+        hosting = GitHostingAdapter(root=CacheRootPath(tmp_path / "cache"))
+
+        with hosting.acquire(dependency) as acquired:
+            first_path = acquired.unwrap()
+        pinned = dependency.replace(selector=make.selector("revision", first.resolve_commit("HEAD").unwrap()))
+        with hosting.acquire(pinned) as acquired:
+            assert acquired.unwrap() == first_path
+        with hosting.acquire(dependency.replace(repository=str(second.path))) as acquired:
+            assert acquired.unwrap() != first_path
+
     @pytest.mark.parametrize("selector_kind", [None, "branch", "tag"])
     def test_acquire__reuses_locked_revision_without_refreshing_binding(
         self, tmp_path: Path, selector_kind: str | None

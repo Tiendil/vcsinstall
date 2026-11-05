@@ -2,9 +2,9 @@ from collections.abc import Callable, Mapping
 from types import MappingProxyType
 
 from llm_tool_cli.cli.errors import InvalidArguments
+from llm_tool_cli.config.runtime import runtime_config
 from llm_tool_cli.core.result import Err, Ok, Result
 
-from vcsinstall.cache import active_cache_root
 from vcsinstall.domain import Dependency, VcsId
 from vcsinstall.hosting.adapters.filesystem import FilesystemHostingAdapter
 from vcsinstall.hosting.adapters.git import GitHostingAdapter
@@ -16,8 +16,8 @@ type HostingFactory = Callable[[], Result[HostingAdapter]]
 
 DEFAULT_HOSTING_FACTORIES: Mapping[HostingProvider, HostingFactory] = MappingProxyType(
     {
-        HostingProvider.git: lambda: Ok(GitHostingAdapter(root=active_cache_root.get())),
-        HostingProvider.github: lambda: Ok(GitHubHostingAdapter(root=active_cache_root.get())),
+        HostingProvider.git: lambda: Ok(GitHostingAdapter(root=runtime_config.get().cache_dir)),
+        HostingProvider.github: lambda: Ok(GitHubHostingAdapter(root=runtime_config.get().cache_dir)),
         HostingProvider.filesystem: lambda: Ok(FilesystemHostingAdapter()),
     }
 )

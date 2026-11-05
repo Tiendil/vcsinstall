@@ -73,7 +73,6 @@ A newly created fork MUST be available for the intended Git publication before t
 
 The [GitHub fork contract](https://docs.github.com/en/pull-requests/reference/forks) defines fork relationships and policy restrictions.
 The [GitHub CLI](https://cli.github.com/manual/gh_pr_create) can offer its own fork and push choices; those choices MUST NOT override vcsinstall's resolved source, publication repository, head, or base.
-Required hosted operations that exceed a convenience command's capabilities MUST use the selected client's authenticated API facilities or fail explicitly.
 
 ## Review creation, retry, and completion
 

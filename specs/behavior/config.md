@@ -171,7 +171,6 @@ Persisted installation state MUST follow the representation in `specs/behavior/l
 
 Commands MUST change configuration only when authorized by their contracts in `specs/behavior/cli.md`.
 Successful edits MUST leave valid configuration and preserve unrelated declarations and their meanings.
-Configuration updates MUST serialize the complete updated configuration.
 Preservation of comments, formatting, and declaration order is not required.
 Writers MAY update the configuration file directly; atomic replacement is not required.
 Project access MUST follow Project operation locking in `specs/behavior/cli.md`.

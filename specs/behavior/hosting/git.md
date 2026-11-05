@@ -40,8 +40,8 @@ Valid available objects MAY satisfy requests for immutable revisions without ref
 
 When freshness is required, observations MUST reflect the declared source's actual branch and tag targets, including moved or deleted refs.
 Default-version discovery MUST provide the source's advertised symbolic `HEAD` and branch metadata without assuming `main` or `master`.
-The acquired repository MUST retain that observation in native reference metadata independently of its administrative `HEAD`.
-Refreshing an unavailable or ambiguous advertised symbolic `HEAD` MUST clear any previously retained default observation rather than preserve a stale default.
+The observed source default MUST remain distinct from the cached repository's own `HEAD`.
+An unavailable or ambiguous advertised symbolic `HEAD` MUST NOT be satisfied by a previously observed default.
 Version interpretation, selector ambiguity, commit verification, and extraction MUST follow `specs/behavior/vcs/git.md` using the supplied view.
 
 **Note:** Git exposes advertised refs and symbolic `HEAD` through its [remote-reference inspection contract](https://git-scm.com/docs/git-ls-remote). The advertised default branch and its selected commit are separate values.

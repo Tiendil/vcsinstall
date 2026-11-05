@@ -213,9 +213,9 @@ When an entry's complete local file content already equals the selected source c
 Otherwise, after validation succeeds, installation and update MUST remove the existing destination root, whether a file or directory, and copy all selected source files into that destination.
 This replacement MUST apply per entry rather than per dependency; unchanged entries MUST remain untouched.
 Unchanged files within a changed entry MUST be copied again with the rest of that entry.
-File-to-directory and directory-to-file transitions MUST use the same root replacement without separate descendant-removal plans.
+File-to-directory and directory-to-file transitions MUST use the same root replacement.
 The zero-file equivalence in Directories MUST still apply; an absent or empty source MUST NOT require creating empty destination directories.
-Content copying MUST stream files with bounded Python memory rather than retain their complete payloads.
+Memory required for copying MUST remain bounded independently of individual file size.
 
 Removal without retaining files MUST delete the selected destination roots and their complete contents after the operation's applicable checks pass.
 Explicit permission to bypass local-content verification MAY authorize deleting local additions within selected entry roots under the removal contract.

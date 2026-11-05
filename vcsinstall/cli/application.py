@@ -2,24 +2,14 @@ from llm_tool_cli.cli.application import create_app
 from llm_tool_cli.cli.commands.initialization import register_init_command
 from llm_tool_cli.cli.commands.skills import register_skill_command
 from llm_tool_cli.cli.commands.version import register_version_command
-from llm_tool_cli.cli.options import ConfigOption, ProtocolOption
 from llm_tool_cli.core import settings
+from llm_tool_cli.core.entities import ToolName
 
 from vcsinstall.cli.commands import cache, dependency, entries
-from vcsinstall.cli.entities import CacheDirOption
 from vcsinstall.skills import SkillDocument
 from vcsinstall.workspace import Config, project_operation
 
 app = create_app(help="Install files into your repository from other repositories.")
-
-
-@app.callback()
-def initialize(
-    protocol: ProtocolOption = None,
-    config_path: ConfigOption = None,
-    cache_dir: CacheDirOption = None,
-) -> None:
-    """Declare shared global options and the cache directory option."""
 
 
 register_skill_command(app, package="vcsinstall.skills", documents=SkillDocument)
@@ -41,7 +31,5 @@ app.command("list")(entries.list_entries)
 
 
 def main() -> None:
-    settings.initialize(
-        label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-    )
+    settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
     app()

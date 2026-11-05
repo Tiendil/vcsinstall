@@ -7,8 +7,12 @@ from filelock import FileLock, Timeout
 from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.config import errors as config_errors
 from llm_tool_cli.config.project import project_config
+from llm_tool_cli.config.runtime import runtime_config
 from llm_tool_cli.core import settings
+from llm_tool_cli.core.entities import ToolName
 from llm_tool_cli.core.result import Err, Ok, Result
+from llm_tool_cli.file_locks import errors as lock_errors
+from llm_tool_cli.file_locks.tests.helpers import held_lock
 from llm_tool_cli.output import StreamOutputEmitter, output
 from llm_tool_cli.paths import PathInput
 from llm_tool_cli.protocol.cell_shortcuts import operation_succeeded
@@ -16,12 +20,10 @@ from llm_tool_cli.protocol.logic_cells.base import LogicCell
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
-from vcsinstall.cache import active_cache_root
-from vcsinstall.cache.tests.helpers import held_lock
 from vcsinstall.cli import application
 from vcsinstall.cli.application import main
 from vcsinstall.cli.tests.helpers import coordinated_cli, wait_for_phase
-from vcsinstall.workspace import Config, Lockfile, active_workspace, errors, project_operation
+from vcsinstall.workspace import Config, Lockfile, active_workspace, project_operation
 
 
 @pytest.mark.usefixtures("isolated_settings")
@@ -75,9 +77,30 @@ class TestMain:
 class TestApplication:
     @pytest.fixture(autouse=True)
     def initialize_settings(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
+
+    def test_static_name_controls_storage_and_cell_framing(self, tmp_path: Path, mocker: MockerFixture) -> None:
+        cache_home = tmp_path / "cache"
+        state_home = tmp_path / "state"
+        mocker.patch.dict("os.environ", {"XDG_CACHE_HOME": str(cache_home), "XDG_STATE_HOME": str(state_home)})
+        project = tmp_path / "project"
+        project.mkdir()
+        config = project / "vcsinstall.toml"
+        runner = CliRunner()
+
+        with settings.static_config.scope(settings.static_config.get().replace(tool_name=ToolName("sample-tool"))):
+            initialized = runner.invoke(application.app, ["-p", "llm", "--config", str(config), "init"])
+            cleaned = runner.invoke(application.app, ["-p", "llm", "cache", "clean"])
+
+        assert initialized.exit_code == 0, initialized.output
+        assert cleaned.exit_code == 0, cleaned.output
+        assert "--SAMPLE-TOOL-CELL " in initialized.stdout
+        assert "--SAMPLE-TOOL-CELL " in cleaned.stdout
+        assert f"cache_dir={cache_home / 'sample-tool'}" in cleaned.stdout
+        assert len(list((state_home / "sample-tool" / "projects").glob("*/operation.lock"))) == 1
+        assert not cache_home.exists()
+        assert not (state_home / "vcsinstall").exists()
+        assert settings.static_config.get().tool_name == "vcsinstall"
 
     @pytest.mark.parametrize("protocol", ["human", "llm", "automation"])
     def test_init_creates_valid_commented_starter_without_lock(self, tmp_path: Path, protocol: str) -> None:
@@ -146,8 +169,6 @@ class TestApplication:
         [
             ["--help"],
             ["-h"],
-            ["version"],
-            ["skill", "usage"],
             ["init", "--help"],
             ["dependency"],
             ["dependency", "--help"],
@@ -172,11 +193,11 @@ class TestApplication:
             ["list", "-h"],
         ],
     )
-    def test_project_independent_interfaces_ignore_unusable_config_and_cache(
+    def test_help_ignores_unusable_config_and_cache(
         self, tmp_path: Path, arguments: list[str], project_state_root: Path, mocker: MockerFixture
     ) -> None:
         mocker.patch(
-            "vcsinstall.workspace.coordination.user_state_path", side_effect=AssertionError("Unexpected state")
+            "llm_tool_cli.tool_state.directory.user_state_path", side_effect=AssertionError("Unexpected state")
         )
         cache = tmp_path / "cache-loop"
         cache.symlink_to(cache)
@@ -191,14 +212,28 @@ class TestApplication:
         assert list(tmp_path.iterdir()) == [cache]
         assert not project_state_root.exists()
 
+    @pytest.mark.parametrize("arguments", [["version"], ["skill", "usage"]])
+    def test_projectless_commands_select_cache_without_accessing_storage(
+        self, tmp_path: Path, arguments: list[str], project_state_root: Path, mocker: MockerFixture
+    ) -> None:
+        cache = tmp_path / "cache"
+        mocker.patch("llm_tool_cli.tool_cache.ToolCache.entry", side_effect=AssertionError("Unexpected cache use"))
+        result = CliRunner().invoke(
+            application.app,
+            ["--config", str(tmp_path / "missing.toml"), "--cache-dir", str(cache), *arguments],
+        )
+        assert result.exit_code == 0, result.exception
+        assert not cache.exists()
+        assert not project_state_root.exists()
+        assert not project_config.is_set()
+        assert not runtime_config.is_set()
+
 
 @pytest.mark.usefixtures("isolated_settings")
 class TestProjectCoordination:
     @pytest.fixture(autouse=True)
     def initialize_settings(self, isolated_settings: None) -> None:
-        settings.initialize(
-            label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-        )
+        settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
 
     @pytest.mark.parametrize(
         "arguments",
@@ -240,8 +275,7 @@ class TestProjectCoordination:
         assert result.exit_code == 3, result.output
         assert not result.stderr
         record = json.loads(result.stdout)
-        assert record["code"] == errors.ProjectLockTimeout.model_fields["code"].default
-        assert record["project_root"] == str(tmp_path)
+        assert record["code"] == lock_errors.Timeout.model_fields["code"].default
         assert record["path"] == str(path)
         assert float(record["timeout"]) == 0
         assert config.read_text() == "invalid["
@@ -294,9 +328,9 @@ class TestProjectCoordination:
         result = CliRunner().invoke(application.app, ["-p", protocol, "--config", str(config), "list"])
         assert result.exit_code == 3, result.output
         assert not result.stderr
-        assert str(tmp_path) in result.stdout
+        assert str(project_state_root) in result.stdout
         if protocol == "automation":
-            assert json.loads(result.stdout)["code"] == errors.ProjectLockAccessFailed.model_fields["code"].default
+            assert json.loads(result.stdout)["code"] == lock_errors.AccessFailed.model_fields["code"].default
         elif protocol == "llm":
             assert "--VCSINSTALL-CELL " in result.stdout
         else:
@@ -384,7 +418,7 @@ class TestProjectCoordination:
             def _render(self, cells: list[LogicCell]) -> str:
                 assert active_workspace.get().config_path == config
                 assert project_config.get().config_path == config
-                assert active_cache_root.get() == cache
+                assert runtime_config.get().cache_dir == cache
                 path = next(project_state_root.glob("projects/*/operation.lock"))
                 with pytest.raises(Timeout), FileLock(path, timeout=0, preserve_lock_file=True):
                     pass
@@ -406,7 +440,7 @@ class TestProjectCoordination:
         ]
         assert not active_workspace.is_set()
         assert not project_config.is_set()
-        assert not active_cache_root.is_set()
+        assert not runtime_config.is_set()
         assert not cache.exists()
         path = next(project_state_root.glob("projects/*/operation.lock"))
         with FileLock(path, timeout=0, preserve_lock_file=True):

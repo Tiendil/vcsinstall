@@ -107,7 +107,7 @@ State that requires no logical change MUST leave the lockfile's bytes unchanged.
 Generated state MUST NOT include cache paths, timestamps, or machine-specific checkout locations.
 Repository locators MUST retain their declared meaning, including filesystem sources, under the configuration contract.
 
-Lockfile serialization MUST complete before writing begins.
+Failure to prepare valid lockfile content MUST leave the existing lockfile unchanged.
 Writers MAY update the lockfile directly; atomic replacement is not required.
 A write failure MAY leave partially written content and MUST report the affected path and known completed effects.
 Project access MUST follow Project operation locking in `specs/behavior/cli.md`.

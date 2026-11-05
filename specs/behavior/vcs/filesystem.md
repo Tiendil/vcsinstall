@@ -59,7 +59,7 @@ Immutable-pin freshness MUST follow Source freshness in `specs/behavior/locking.
 ## Revision availability and extraction
 
 The backend MUST NOT populate or require the repository cache, acquire its lock, or depend on `--cache-dir`.
-Source preparation MAY use temporary storage for the current invocation without retaining repository snapshots for later operations.
+Source preparation MUST NOT retain repository snapshots for later operations.
 Cache cleanup MUST NOT change which filesystem revisions are available.
 
 An operation requiring content at a locked or pinned revision MUST verify that the live source's complete fingerprint matches that revision.

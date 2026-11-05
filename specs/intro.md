@@ -34,11 +34,11 @@ The index MUST be kept complete and accurate when specifications are added, remo
 - `./specs/dictionary.md` — Shared terminology for dependencies, entry ownership, and project state.
 - `./specs/architecture/entities.md` — Shared data modeling and entity ownership conventions.
 - `./specs/architecture/errors.md` — Failure classification, representation, and propagation conventions.
-- `./specs/architecture/modules_layout.md` — System boundaries and ownership of operations, state, and integrations.
+- `./specs/architecture/modules_layout.md` — System boundaries and ownership across vcsinstall and shared infrastructure.
 - `./specs/architecture/naming.md` — Project and code naming conventions.
 - `./specs/architecture/python.md` — General Python coding and documentation conventions.
 - `./specs/architecture/tests.md` — Requirements for project tests.
-- `./specs/behavior/cache.md` — The shared repository cache contract.
+- `./specs/behavior/cache.md` — Repository-cache policy and its application of shared storage contracts.
 - `./specs/behavior/cli.md` — CLI syntax, option semantics, command behavior, and patch output failure handling.
 - `./specs/behavior/config.md` — The project declaration format and configuration contract.
 - `./specs/behavior/files-and-directories.md` — The entry destination ownership and file-tree management contract.

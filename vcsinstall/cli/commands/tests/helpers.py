@@ -3,14 +3,28 @@ from pathlib import Path
 
 import tomli_w
 from llm_tool_cli.config import load_config
-from llm_tool_cli.paths import ProjectPathId
+from llm_tool_cli.paths import CacheRootPath, PathSegment, ProjectPathId
+from llm_tool_cli.tool_cache import CacheIdentity
 from typer.testing import CliRunner
 
 from vcsinstall.cli.application import app
 from vcsinstall.filesystem import hashes
+from vcsinstall.hosting import repository_cache
 from vcsinstall.workspace import Config, DirectoryBaseline, Entry, FileBaseline, InstallationBaseline, Lockfile
 
 type CommandResult = tuple[int, list[dict[str, object]], str]
+
+
+def cached_repository(root: Path) -> Path:
+    """Populate owned repository data for cache-clean command tests."""
+    identity = CacheIdentity(namespace=PathSegment("git"), key="https://host/shared")
+    with repository_cache(CacheRootPath(root)).entry(identity) as result:
+        entry = result.unwrap()
+        payload = entry / "repository" / "versions"
+        payload.mkdir(parents=True)
+        (payload / "first").write_bytes(b"cached first revision")
+        (payload / "second").write_bytes(b"cached second revision")
+    return entry
 
 
 def invoke_dependency_push(config: Path, cache: Path, *arguments: str) -> CommandResult:

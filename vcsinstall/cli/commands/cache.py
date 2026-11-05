@@ -1,10 +1,9 @@
-from pathlib import Path
-
 import typer
-from llm_tool_cli.cli.context import command_context
+from llm_tool_cli.cli.commands.cache import register_cache_clean_command
+from llm_tool_cli.config.runtime import runtime_config
+from llm_tool_cli.core.result import Ok
 
-from vcsinstall.cli.preparation import prepare_cache
-from vcsinstall.runtime import cache_clean
+from vcsinstall.hosting import repository_cache
 
 app = typer.Typer(
     help="Manage the shared repository cache.",
@@ -13,9 +12,8 @@ app = typer.Typer(
 )
 
 
-@app.command("clean")
-def clean(context: typer.Context) -> None:
-    """Clear owned cached repositories without changing projects or original sources."""
-    with command_context(context):
-        prepare_cache(context, cwd=Path.cwd()).unwrap()
-        cache_clean().unwrap()
+register_cache_clean_command(
+    app,
+    cache_factory=lambda context: Ok(repository_cache(runtime_config.get().cache_dir)),
+    help="Clear owned cached repositories without changing projects or original sources.",
+)

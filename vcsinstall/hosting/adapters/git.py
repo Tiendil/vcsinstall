@@ -8,6 +8,8 @@ from uuid import uuid4
 from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.paths import (
+    CacheRootPath,
+    PathSegment,
     ProjectPathId,
     ProjectRootPath,
     ResolvedProjectPath,
@@ -16,8 +18,8 @@ from llm_tool_cli.paths import (
     resolve_inside_project,
     resolve_project_root,
 )
+from llm_tool_cli.tool_cache import CacheIdentity
 
-from vcsinstall.cache import CacheRootPath, RepoCache
 from vcsinstall.domain import (
     ContentKind,
     Dependency,
@@ -31,6 +33,7 @@ from vcsinstall.domain import (
 )
 from vcsinstall.filesystem import FSClient
 from vcsinstall.hosting import errors as publication_errors
+from vcsinstall.hosting.cache import repository_cache
 from vcsinstall.hosting.contributions import covering_changes
 from vcsinstall.hosting.entities import (
     Contribution,
@@ -368,7 +371,8 @@ class GitHostingAdapter:
     def acquire(
         self, dependency: Dependency, *, revision: SourceRevision | None = None, refresh: bool = True
     ) -> Iterator[Result[Path]]:
-        with RepoCache(root=self.root, dependency=dependency).lock() as cached:
+        identity = CacheIdentity(namespace=PathSegment(dependency.vcs), key=dependency.repository)
+        with repository_cache(self.root).entry(identity) as cached:
             if cached.is_err():
                 yield Err(cached.unwrap_err())
             else:

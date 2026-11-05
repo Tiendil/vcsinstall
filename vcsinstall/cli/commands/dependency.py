@@ -18,7 +18,6 @@ from vcsinstall.cli.entities import (
     TagOption,
     VcsOption,
 )
-from vcsinstall.cli.preparation import prepare_cache
 from vcsinstall.domain import Dependency, RepositoryLocator, SelectorKind, VcsId, VersionSelector, urls
 from vcsinstall.hosting import GitHostingAdapter, HostingAdapter, get_hosting
 from vcsinstall.runtime import (
@@ -142,7 +141,6 @@ def add_dependency(  # noqa: CFQ002 — Typer exposes these independent command 
         if selectors:
             request = request.replace(selector=selectors[0])
         cwd = Path.cwd()
-        prepare_cache(context, cwd=cwd).unwrap()
         context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
         dependency = prepare_dependency(request, cwd=cwd, vcs=vcs).unwrap()
@@ -178,7 +176,6 @@ def outdated_dependencies(context: typer.Context, names: DependencyNamesArgument
     """Report dependencies whose configured source version differs from their locked revision."""
     with command_context(context) as command:
         cwd = Path.cwd()
-        prepare_cache(context, cwd=cwd).unwrap()
         context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
         dependency_outdated(tuple(names or ())).unwrap()
@@ -189,7 +186,6 @@ def update_dependencies(context: typer.Context, names: DependencyNamesArgument =
     """Advance selected dependencies and refresh all their entries with local-change protection."""
     with command_context(context) as command:
         cwd = Path.cwd()
-        prepare_cache(context, cwd=cwd).unwrap()
         context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
         dependency_update(tuple(names or ())).unwrap()

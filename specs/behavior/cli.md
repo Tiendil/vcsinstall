@@ -98,7 +98,7 @@ The following commands MUST select and validate existing project configuration b
 
 Missing configuration MUST fail with the shared diagnostic rather than implicitly initialize a project.
 
-The following interfaces MUST NOT load or create project files or require a cache or a VCS client:
+The following interfaces MUST NOT load or create project files, access cache storage, or require a VCS client:
 
 - root and command help.
 - shell completion.
@@ -114,24 +114,22 @@ Configuration-path discovery and resolution MAY precede acquisition without read
 The lock MUST remain held through the complete operation and result delivery.
 The project-independent interfaces under Application identity and project files, including cache cleanup, MUST NOT resolve or access project operation locks.
 
-Coordination MUST use the platform's per-user application state directory for `vcsinstall`, independently of `--cache-dir` and repository-cache availability.
+Coordination location selection MUST follow State roots under Tool storage locations in `specs/behavior/paths.md` in `llm-tool-cli`, using the canonical tool name `vcsinstall`, independently of `--cache-dir` and repository-cache availability.
 On Linux this MUST follow `XDG_STATE_HOME`, defaulting to `~/.local/state`, with a `vcsinstall` application directory.
-The coordination file MUST be `<application-state-directory>/projects/<project-id>/operation.lock`.
-The project identifier MUST be the lowercase SHA-256 digest of the filesystem-encoded, platform-case-normalized absolute project-root path after shared project-root resolution.
+Project identity MUST use the resolved project-root location under Project-root resolution in that specification, treating path spellings equivalent under the platform's case rules as the same project.
 Different selected configuration filenames in the same root MUST share a lock; different project roots MUST have independent locks.
 Coordination guarantees MUST apply to invocations using the same resolved project root and application state directory.
 Editors, VCS commands, and processes using another state directory remain outside this guarantee.
 
 A command MUST wait for up to 10 seconds when the lock is held and proceed if it becomes available within that period.
-A timeout MUST fail operationally and identify the project root, coordination path, and acquisition timeout.
+A timeout MUST fail operationally and preserve the shared diagnostic identifying the coordination path and acquisition timeout.
 State-directory resolution and lock-access failures MUST fail explicitly without silently selecting another coordination location.
 Waiting or failed acquisition MUST NOT change project configuration, lockfiles, installed content, or repository-cache data.
 Creating coordination directories and files MUST NOT create a missing project directory.
 
 Normal completion, failure, and process termination MUST release exclusive access without requiring users to delete stale coordination files.
-The coordination file and its containing directory MUST remain in place across release and cache cleanup; file existence alone MUST NOT indicate ownership.
+Cache cleanup MUST NOT disrupt project coordination; retained coordination files MUST NOT by themselves indicate an active operation.
 Coordination paths below the resolved application state directory MUST follow the shared containment and symbolic-link rules.
-Project locks MUST be acquired before any repository-cache locks needed by the operation.
 These locks MUST NOT imply rollback or atomic updates across project files and installed content.
 
 ## Global options
@@ -150,8 +148,8 @@ Configuration-independent commands MUST remain usable with an unusable `--config
 
 ### `--cache-dir DIRECTORY`
 
-Cache-root selection and Cache-independent operations in `specs/behavior/cache.md` MUST govern path interpretation, defaults, and which commands resolve the cache root.
-Repository identity and layout and Repository reuse and revision isolation in that specification MUST govern cached repositories and their source content.
+Cache-root selection and Cache-independent operations in `specs/behavior/cache.md` MUST govern path interpretation, defaults, invocation setup, and cache-storage independence.
+Repository identity and Repository reuse and revision isolation in that specification MUST govern cached repositories and their source content.
 
 ## Dependency definitions and source arguments
 
@@ -457,7 +455,7 @@ The artifact path MUST NOT overlap:
 
 An existing target MUST be a regular file rather than a directory or symbolic link.
 An explicitly selected unmanaged regular file MAY be replaced.
-The artifact MUST be written directly only after validation and contribution preparation succeed.
+The artifact MUST be written only after validation and contribution preparation succeed.
 An output or patch-generation failure MUST fail the command and MAY leave an empty or partial output file, including truncating an existing artifact.
 An empty changed selection MUST leave the output file unchanged.
 
@@ -592,11 +590,8 @@ The required subcommand MUST be `clean`.
 
 ### `vcsinstall cache clean` command
 
-Cache clean MUST follow Cleanup in `specs/behavior/cache.md` for the effective cache root selected by the global `--cache-dir` rules.
-It MUST NOT accept repository or entry path selectors, positional arguments, or command-specific options.
-No confirmation prompt or `--force` option MUST be required.
-
-Success MUST emit one cache result record, including for an absent or already empty cache.
+Cache clean MUST adopt the invocation, lifecycle, failure, and result contracts in Cache cleanup command in `specs/behavior/cli.md` in `llm-tool-cli`.
+Its storage effects MUST follow Cleanup in `specs/behavior/cache.md` for the effective cache root selected by the global `--cache-dir` rules.
 
 Examples:
 
@@ -756,12 +751,7 @@ Removal records MUST NOT require a post-removal installation status or an existi
 
 ### Cache records
 
-Cache clean MUST use record kind and `type` metadata `cache`.
-Automation cache records MUST expose:
-
-- `operation` — `clean`.
-- `cache_dir` — The effective absolute cache-root filesystem path.
-- `outcome` — `cleaned` when disposable cached data was removed, or `unchanged` when none existed.
+Cache cleanup results MUST follow the output contract in Cache cleanup command in `specs/behavior/cli.md` in `llm-tool-cli`, using the selected repository-cache root.
 
 ### Record delivery
 

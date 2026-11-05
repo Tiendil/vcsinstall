@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from llm_tool_cli.core import settings
+from llm_tool_cli.core.entities import ToolName
 from llm_tool_cli.core.result import Err, Ok, Result
 from pytest_mock import MockerFixture
 
@@ -126,9 +127,7 @@ class GitHubService:
 
 @pytest.fixture
 def github_project(tmp_path: Path, mocker: MockerFixture, isolated_settings: None) -> tuple[Path, Path, GitHubService]:
-    settings.initialize(
-        label=settings.ToolLabel("VCSINSTALL"), config_filename=settings.ConfigFilename("vcsinstall.toml")
-    )
+    settings.initialize(name=ToolName("vcsinstall"), config_filename=settings.ConfigFilename("vcsinstall.toml"))
     mocker.patch.dict(
         os.environ,
         {
