@@ -59,7 +59,7 @@ Helpful lower-level subsections MAY appear; deep implementation details SHOULD b
 
 ### Purpose and status
 
-The README MUST explain that vcsinstall's intended purpose is installing files into a target repository from source repositories, with a lockfile and support for pushing local changes back to their source.
+The README MUST explain that vcsinstall's intended purpose is installing files into a target repository from source repositories, with a lockfile and support for synchronizing local changes into a source checkout.
 The rationale SHOULD explain why tracking the source of copied files and preserving a path for returning local changes are useful.
 It MUST NOT imply support for particular version-control systems, source hosts, or synchronization policies without corresponding behavior specifications.
 

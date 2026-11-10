@@ -13,13 +13,13 @@ The following are out of scope:
 - content-hash computation and installation-baseline transitions.
 - cache layout and synchronization mechanisms.
 - implementing Git protocols.
-- repository acquisition, refresh, and contribution workflows.
+- repository acquisition, refresh, and local synchronization.
 
 ## Backend and repository identity
 
 The backend name MUST be `git`.
 The common contract MUST follow `specs/behavior/vcs-interaction.md`.
-Repository acquisition, refresh, and outgoing changes MUST follow `specs/behavior/hosting/git.md` or `specs/behavior/hosting/github.md` for the selected hosting implementation.
+Repository acquisition and refresh MUST follow `specs/behavior/hosting/git.md`.
 Repository locators MUST support native Git URLs, local paths, and scp-style addresses under Repository locators and identity in `specs/behavior/vcs-interaction.md`.
 Configured locators MUST retain Git's native form under `specs/behavior/config.md`.
 

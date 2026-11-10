@@ -67,17 +67,30 @@ class FSClient:
         return Ok(None)
 
     @unwrap_to_error
-    def remove(self, path: ProjectPathId, *, preserve_root: bool = False) -> Result[None]:
-        """Remove a file or complete tree, optionally retaining the selected directory.
+    def remove(
+        self,
+        path: ProjectPathId,
+        *,
+        preserve_root: bool = False,
+        preserve_paths: frozenset[ProjectPathId] = frozenset(),
+    ) -> Result[None]:
+        """Remove a file or tree while retaining explicitly preserved paths and their ancestors.
 
         With preserve_root=True, '@/docs' is emptied while the directory itself
         remains. Files are removed directly regardless of preserve_root.
+        Preserved paths are root-relative identifiers and are never traversed,
+        even when they name symlinks or unsupported filesystem objects.
         """
         self._require_writable(self.root / path.removeprefix("@/")).unwrap()
         target = self.resolve_path(path).unwrap()
+        preserved: frozenset[Path] = frozenset(
+            self.root.joinpath(*item.removeprefix("@/").split("/")) for item in preserve_paths
+        )
+        if target in preserved:
+            return Ok(None)
         try:
             if target.is_dir():
-                self._remove_dir(target, preserve_root=preserve_root)
+                self._remove_dir(target, preserve_root=preserve_root, preserved=preserved)
             else:
                 self._remove_file(target)
         except OSError as exc:
@@ -88,15 +101,22 @@ class FSClient:
         """Unlink a contained file or child symlink without following its target."""
         path.unlink(missing_ok=True)
 
-    def _remove_dir(self, path: Path, *, preserve_root: bool = False) -> None:
+    def _remove_dir(  # noqa: CCR001 — Retain protected descendants and every required ancestor.
+        self, path: Path, *, preserve_root: bool = False, preserved: frozenset[Path] = frozenset()
+    ) -> bool:
         """Remove children recursively, then remove this directory unless it is preserved."""
+        retained = preserve_root
         for child in path.iterdir():
+            if child in preserved:
+                retained = True
+                continue
             if stat.S_ISDIR(child.lstat().st_mode):
-                self._remove_dir(child)
+                retained = self._remove_dir(child, preserved=preserved) or retained
             else:
                 self._remove_file(child)
-        if not preserve_root:
+        if not retained:
             path.rmdir()
+        return retained
 
     @unwrap_to_error
     def inspect_kind(self, path: ProjectPathId = ProjectPathId("@/")) -> Result[ContentKind]:
@@ -114,12 +134,20 @@ class FSClient:
         return Err([errors.AccessFailed(path=target, reason="Unsupported filesystem object.")])
 
     @unwrap_to_error
-    def inspect_tree(self, path: ProjectPathId = ProjectPathId("@/")) -> Result[ContentTree]:
-        """Inspect selected files without retaining their contents."""
-        return self._inspect_tree(self.resolve_path(path).unwrap())
+    def inspect_tree(
+        self, path: ProjectPathId = ProjectPathId("@/"), *, exclude_names: frozenset[str] = frozenset()
+    ) -> Result[ContentTree]:
+        """Inspect files without retaining their contents or traversing excluded names.
+
+        Exclusions contain case-folded child names. Excluded paths are reported
+        relative to the selected root, including names within nested directories.
+        """
+        return self._inspect_tree(self.resolve_path(path).unwrap(), exclude_names=exclude_names)
 
     @unwrap_to_error
-    def _inspect_tree(self, path: Path) -> Result[ContentTree]:  # noqa: CCR001
+    def _inspect_tree(  # noqa: CCR001 — Inspect supported kinds and prune excluded child names.
+        self, path: Path, *, exclude_names: frozenset[str] = frozenset()
+    ) -> Result[ContentTree]:
         resolve_inside_project(path, self.root).unwrap()
         try:
             if not path.exists():
@@ -141,8 +169,15 @@ class FSClient:
             if not stat.S_ISDIR(mode):
                 return Err([errors.AccessFailed(path=path, reason="Unsupported filesystem object.")])
             files: list[FileInfo] = []
+            excluded: list[ProjectPathId] = []
             for child in sorted(path.iterdir()):
-                subtree = self._inspect_tree(child).unwrap()
+                if child.name.casefold() in exclude_names:
+                    excluded.append(ProjectPathId("@/" + child.name))
+                    continue
+                subtree = self._inspect_tree(child, exclude_names=exclude_names).unwrap()
+                excluded.extend(
+                    ProjectPathId("@/" + child.name + "/" + item.removeprefix("@/")) for item in subtree.excluded_paths
+                )
                 for file in subtree.files:
                     suffix = file.path.removeprefix("@/")
                     files.append(
@@ -152,7 +187,7 @@ class FSClient:
                             executable=file.executable,
                         )
                     )
-            return Ok(ContentTree(kind=ContentKind.directory, files=tuple(files)))
+            return Ok(ContentTree(kind=ContentKind.directory, files=tuple(files), excluded_paths=tuple(excluded)))
         except (OSError, UnicodeError, pydantic.ValidationError) as exc:
             return Err([errors.AccessFailed(path=path, reason=str(exc)).with_cause(exc)])
 

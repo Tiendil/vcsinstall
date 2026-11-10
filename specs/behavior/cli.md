@@ -14,7 +14,7 @@ The following are out of scope:
 - revision locking, content hashing, and baseline state transitions.
 - internal cache lifecycle and checkout organization.
 - adapter architecture.
-- hosting-provider APIs and provider-specific review workflows.
+- repository acquisition internals.
 - exact skill prose.
 
 ## Dictionary
@@ -25,6 +25,7 @@ The following are out of scope:
 - `SOURCE_PATH` — a canonical `@/` identifier anchored at the selected dependency's repository root.
 - `DESTINATION` — the final project path at which `add` installs an entry.
 - `ENTRY_PATH` — a local path selecting a declared entry by its destination, including when its installed content is missing.
+- `SOURCE_DIR` — an existing local directory treated as a source content root for synchronization.
 - `REF` — an untyped source-version reference accepted in a repository URL fragment.
 - `REVISION` — an immutable source revision identifier under the selected backend's contract.
 
@@ -65,7 +66,7 @@ The required commands MUST be:
 - `dependency outdated [NAME...]` — Check all or named dependencies for changes in their configured source versions and report differing locked and current revisions.
 - `dependency remove NAME` — Remove an unused dependency declaration and its lock.
 - `dependency update [NAME...]` — Advance all or named dependencies within their configured version selectors and refresh each dependency's entries together.
-- `dependency push --mode MODE [OPTIONS] NAME [ENTRY_PATH...]` — Deliver changes from all or selected entries of one named dependency through the explicit mode.
+- `dependency sync-to [--force] NAME SOURCE_DIR` — Mirror locally changed entries into a supplied local source content root.
 - `add [OPTIONS] SOURCE DESTINATION` — Declare and install one entry from a dependency's locked revision.
 - `install [OPTIONS]` — Install the entries declared by the project, preferring their locked revisions.
 - `remove [OPTIONS] ENTRY_PATH...` — Remove declared entries and their installed content, with `--keep-files` retaining the content as unmanaged project files.
@@ -91,7 +92,7 @@ The following commands MUST select and validate existing project configuration b
 - `dependency outdated`.
 - `dependency remove`.
 - `dependency update`.
-- `dependency push`.
+- `dependency sync-to`.
 - `install`.
 - `remove`.
 - `list`.
@@ -231,8 +232,8 @@ Explicit source options without source arguments MUST be rejected.
 
 Backend selection and capabilities, Native client execution, and Version resolution and anchoring in `specs/behavior/vcs-interaction.md` MUST govern source interaction.
 Each source backend MUST follow its contract for selectors and extraction from an available repository view.
-Repository acquisition, refresh, and outgoing workflows MUST follow the hosting contracts and selection rules in `specs/behavior/vcs-interaction.md`.
-Unversioned-source behavior MUST NOT silently weaken the locking and publication contracts of VCS-backed dependencies.
+Repository acquisition and refresh MUST follow the hosting contracts and selection rules in `specs/behavior/vcs-interaction.md`.
+Unversioned-source behavior MUST NOT silently weaken the locking and synchronization contracts of VCS-backed dependencies.
 
 ### Source arguments
 
@@ -264,7 +265,6 @@ Add MUST allow files and directories to be installed with names and paths differ
 
 For `list`, omitted entry paths MUST select every declared entry.
 Remove MUST require at least one explicit `ENTRY_PATH` and MUST NOT infer a selection when none is supplied.
-`dependency push` MUST restrict entry-path selection to its named dependency under the rules below.
 Explicit entry paths MUST select exactly the matching declared entry roots by their canonical destination paths, without implicit descendant selection or glob expansion.
 Selecting an entry MUST NOT require its installed content to exist.
 Inputs normalizing to the same entry MUST select it once.
@@ -288,7 +288,7 @@ The required subcommands MUST be:
 - `outdated`.
 - `remove`.
 - `update`.
-- `push`.
+- `sync-to`.
 
 ### `vcsinstall dependency add` command
 
@@ -377,113 +377,29 @@ vcsinstall dependency update ci formatting
 vcsinstall dependency update --force ci
 ```
 
-### `vcsinstall dependency push` command
+### `vcsinstall dependency sync-to` command
 
-Dependency push MUST require exactly one declared dependency name followed by zero or more `ENTRY_PATH` arguments and the required `--mode MODE`.
-An unknown name MUST fail as an invalid argument before source access or contribution effects.
-The dependency name MUST NOT be inferred from entry paths or local changes.
-The root MUST NOT expose a `push` command or alias.
+The command MUST accept exactly one declared dependency name and one `SOURCE_DIR` argument, with optional `--force`.
+It MUST NOT accept entry selectors or publication options.
+Unknown names MUST fail as invalid arguments before synchronization effects.
+The root MUST NOT expose a `push` or `sync-to` command or alias.
 
-#### Mode and options
+`SOURCE_DIR` MUST be an existing local directory, with home expansion and relative paths interpreted against the invocation directory.
+It MUST select the recipient content root for this invocation without changing the configured repository or version selector.
+The command MUST NOT require its repository identity or branch to match the dependency.
+It MUST follow the `dependency sync-to` operation contract in `specs/behavior/locking.md` and Synchronization in `specs/behavior/files-and-directories.md`.
+`--force` MUST request overwrite permission under those contracts.
 
-`--mode` MUST select exactly one value under Delivery modes in `specs/behavior/vcs-interaction.md`.
-An unsupported mode, hosting/source combination, or mode-specific option MUST fail as an invalid argument before reading command payloads or accessing sources and hosting services.
-
-The command MUST accept these command-specific options:
-
-- `--mode MODE` — Required delivery outcome.
-- `--branch BRANCH` — Contribution branch name for PR and branch modes, or existing destination branch for direct mode.
-- `--push-repository REPOSITORY` — Explicit publication repository for PR, branch, and direct modes, without changing the installation source.
-- `--base BRANCH` — Review target branch for PR mode.
-- `--hosting-provider PROVIDER` — Explicit hosting implementation for required acquisition and the selected delivery mode.
-- `--output PATH` / `-o PATH` — Required patch artifact file in patch mode.
-- `--message MESSAGE` / `-m MESSAGE` — Commit message for modes preparing a commit; repeated values MUST become separate paragraphs.
-
-Options MUST be accepted only in the modes listed for them.
-`--message` MUST be accepted in all modes except overwrite.
-Without `--message`, modes preparing a commit MUST supply a nonempty default message without launching an editor.
-The resolved message MUST apply to that commit or patch metadata.
-
-#### Entry selection
-
-Without entry paths, the command MUST inspect only the named dependency's declared entries and select all entries whose contribution content differs from the recorded baseline under Contributions in `specs/behavior/files-and-directories.md`.
-A known dependency with no changed entries MUST succeed without delivery effects or installation records once local selection and option validation passes, including when it has no entries.
-With entry paths, it MUST select exactly the declared entries identified under the common entry-selection rules, including unchanged entries.
-Every explicitly selected entry MUST belong to the named dependency.
-Unknown entry paths and entries belonging to another dependency MUST fail as invalid arguments before fetching sources or invoking delivery effects.
-This membership restriction MUST apply even when dependencies share a repository, requested selector, and locked revision.
-Entries from different dependencies MUST NOT be combined in one invocation.
-The command MAY select only some entries of the named dependency; verification and exclusion of unselected entries MUST follow the `dependency push` operation contract in `specs/behavior/locking.md`.
-
-Selecting a directory entry MUST select its complete local file tree, including new files absent from its lockfile manifest, under Contributions in `specs/behavior/files-and-directories.md`.
-The command MUST NOT require individual child-file listings for a directory entry.
-
-#### Preparation and delivery
-
-The command MUST invoke the `dependency push` operation contract in `specs/behavior/locking.md` for baselines and change detection.
-The command MUST process contribution changes from the valid selection under Contributions in `specs/behavior/files-and-directories.md`.
-Explicitly selected entries whose complete contribution content matches the recorded baseline MUST succeed as unchanged once validation passes.
-
-Contribution publication, Publication destination selection, and the selected mode contract in `specs/behavior/vcs-interaction.md` MUST govern effects.
-
-When PR or branch mode delivers changed entries, omitting `--branch` MUST cause a contribution branch name to be chosen automatically and reported.
-The option MUST NOT change dependency or source-version selection.
-
-#### Hosting and publication selection
-
-Hosting selection MUST follow Hosting selection and capabilities in `specs/behavior/vcs-interaction.md`.
-
-`--push-repository` MUST select one repository interpreted through the named dependency's backend.
-A VCS-qualified locator MUST agree with that backend; an unqualified native locator MUST use the already selected backend rather than infer another source kind.
-Version fragments MUST NOT be accepted because the argument selects a recipient, not a source version.
-Relative native filesystem locators MUST resolve against the invocation's working directory.
-
-Direct-mode destination branch selection MUST follow Destination branch in `specs/behavior/hosting/git.md`.
-PR review target selection MUST follow PR target selection in the selected hosting contract, including `specs/behavior/hosting/github.md` for GitHub.
-
-#### Patch output
-
-Patch mode MUST require a filesystem `--output` path; `-` MUST fail as an invalid argument rather than select standard output.
-Home markers MUST expand, and relative paths MUST resolve against the invocation's working directory.
-The path MUST name the complete artifact file, without project-path notation or an implicit filename suffix.
-Standard output MUST remain reserved for the selected protocol's result and diagnostic cells.
-
-The artifact path MUST NOT overlap:
-
-- the selected project configuration.
-- the project lockfile.
-- any declared installation destination.
-- tool-managed cache data.
-- native source administrative data.
-
-An existing target MUST be a regular file rather than a directory or symbolic link.
-An explicitly selected unmanaged regular file MAY be replaced.
-The artifact MUST be written only after validation and contribution preparation succeed.
-An output or patch-generation failure MUST fail the command and MAY leave an empty or partial output file, including truncating an existing artifact.
-An empty changed selection MUST leave the output file unchanged.
-
-#### Results
-
-Success MUST emit one installation record per selected entry using `dependency push` as the operation.
-Results MUST identify the delivery mode and the actual completed outcome under Installation records below.
-Failures and completion guarantees MUST follow Failures and completed effects in `specs/behavior/vcs-interaction.md`.
+Success MUST emit one installation record for each locally changed entry, including an entry already matching its recipient.
+A dependency with no changed entries MUST succeed without result records or filesystem writes after argument and local-state validation.
+Results MUST use operation `dependency sync-to`, absolute `source_dir`, and outcome `synced` or `unchanged` under Installation records below.
 
 Examples:
 
 ```bash
-vcsinstall dependency push ci --mode pr
-vcsinstall dependency push ci @/specs/shared --mode pr --branch contribute/specs -m "Clarify the shared specification"
-vcsinstall dependency push formatting @/licenses/shared.txt @/docs/shared --mode branch -F ./contribution.txt
-vcsinstall dependency push ci --mode branch --push-repository git+ssh://git@example.org/alice/shared.git
-vcsinstall dependency push ci --mode direct -m "Clarify the shared specification"
-vcsinstall dependency push ci-stable --mode direct --branch release/1.x
-vcsinstall dependency push ci --mode patch --output ./ci-fix.patch
-vcsinstall dependency push ci @/specs/shared --mode patch --output ./ci-addition.patch
-vcsinstall dependency push ci-stable --mode pr --base release/1.x --hosting-provider github
-vcsinstall dependency push local-guides --mode overwrite
+vcsinstall dependency sync-to ci ../shared
+vcsinstall dependency sync-to --force ci /work/shared-checkout
 ```
-
-Each entry-path example requires all supplied entries to belong to the named dependency.
 
 ## `vcsinstall add` command
 
@@ -624,7 +540,7 @@ The default stdout stream MUST be used for result, warning, and expected-error d
 External VCS output MUST NOT be copied directly into the protocol stream; useful diagnostic information MUST be delivered through appropriate cells.
 vcsinstall MUST NOT add terminal styling or progress-control sequences.
 
-Payloads and ordering MUST be deterministic for the same inputs, selected project, and resolved local/source state, except for generated cell identifiers and automatically chosen contribution branch names.
+Payloads and ordering MUST be deterministic for the same inputs, selected project, and resolved local/source state, except for generated cell identifiers.
 Human output SHOULD present compact installation summaries.
 LLM output SHOULD make source identity, destination, and outcomes explicit.
 Consumers MUST NOT treat generated cell ids as installation identifiers.
@@ -697,7 +613,7 @@ Results for entries that remain declared after the operation MUST use the instal
 The record kind and `type` metadata MUST be `installation`.
 Automation records MUST expose these common fields:
 
-- `operation` — The invoking command's name, including the complete subcommand path for `dependency add`, `dependency update`, and `dependency push`.
+- `operation` — The invoking command's name, including the complete subcommand path for `dependency add`, `dependency update`, and `dependency sync-to`.
 - `dependency` — The name of the dependency owning the entry.
 - `destination` — The canonical project-path identifier selecting the entry.
 - `vcs` — The source backend name.
@@ -718,29 +634,17 @@ Installation records from mutating commands MUST also expose `outcome`, using:
 
 - `installed` or `unchanged` for `add` and `install`.
 - `updated` or `unchanged` for `dependency update` and `dependency add`.
-- `pushed` for completed repository delivery, `exported` for completed patch delivery, or `unchanged` for unchanged entries in `dependency push`.
+- `synced` for completed recipient replacement or `unchanged` for already matching recipient content in `dependency sync-to`.
 
 Entry records from `dependency update` or dependency redefinition MUST include `previous_revision`.
 Repository and selector fields MUST describe the owning dependency rather than imply per-entry overrides.
 Entry records for one dependency MUST agree on the shared revision when their baselines match.
-Push records MUST additionally expose:
-
-- `mode` — The explicitly selected delivery mode.
-- `push_repository` — The actual recipient for a pushed entry, or null when no repository delivery completed for that entry.
-- `branch` — The published contribution branch for PR or branch delivery, or existing target branch for direct delivery, otherwise null.
-- `push_revision` — The resulting or verified recipient revision for completed repository delivery, otherwise null.
-- `hosting_provider` — The selected hosting implementation for completed delivery of changed content, including patch export, otherwise null.
-- `base_branch` — The actual review target branch for completed PR delivery, otherwise null.
-- `review_url` — The confirmed hosted review URL for completed PR delivery, otherwise null.
-- `patch_file` — The effective absolute artifact path for exported patch delivery, otherwise null.
-
-Unchanged entries MUST use null for these effect fields other than `mode`, including when changed entries from the same selection were delivered.
-Every changed entry delivered by one invocation MUST identify the same mode and applicable contribution metadata.
-Direct delivery MUST use `pushed` for entries with contribution changes verified as already present at the destination, with that observed recipient revision, even when no new commit is required.
-For filesystem overwrite, `push_repository` MUST identify the original source directory and `push_revision` MUST be the resulting complete source fingerprint.
-For patch delivery, `patch_file` MUST identify the same complete artifact for each exported entry; repository and review effect fields MUST be null, while `hosting_provider` MUST identify the selected implementation.
-The `revision` field MUST continue to identify the installation baseline rather than the newly published source revision.
-New local directory files MUST produce `status = modified` until a successful installation or update records matching source content as the baseline; publication alone MUST NOT change that status.
+Synchronization records MUST additionally expose `source_dir`, the absolute recipient content root supplied to the invocation.
+The repository, selector, and `revision` fields MUST continue to describe the installation baseline rather than the recipient.
+Local `status` MUST remain unchanged by synchronization; modified and missing content MUST remain visible until a later installation or update records matching source content.
+An entry whose recipient content already matches its local content MUST report `unchanged` without filesystem writes.
+Every other successfully synchronized entry MUST report `synced`.
+Results MUST NOT claim a new repository revision, commit, branch, review, or patch artifact.
 
 ### Removal records
 
@@ -777,6 +681,6 @@ Local-change conflicts, VCS failures, and permission failures MUST use the share
 Error representation and unexpected technical failures MUST follow `specs/architecture/errors.md`; environment-error cells MUST follow `specs/behavior/protocol.md` in `llm-tool-cli`.
 
 Command-shape, option-conflict, and local entry-selection failures MUST be detected before fetching sources or applying changes.
-Failures requiring source-reference resolution MAY follow source fetching but MUST precede project changes or contribution publication.
-Local-change and source-preparation failures MUST be detected before applying project changes or publishing contributions.
-Failures after completed effects MUST follow Preparation and consistency in `specs/behavior/locking.md` for project changes, Failures and completed effects in `specs/behavior/vcs-interaction.md` for contributions, and Cleanup in `specs/behavior/cache.md` for cache cleanup.
+Failures requiring source-reference resolution MAY follow source fetching but MUST precede project changes or synchronization writes.
+Local-change and source-preparation failures MUST be detected before applying project changes or synchronization writes.
+Failures after completed effects MUST follow Preparation and consistency and the synchronization operation contract in `specs/behavior/locking.md`, and Cleanup in `specs/behavior/cache.md` for cache cleanup.

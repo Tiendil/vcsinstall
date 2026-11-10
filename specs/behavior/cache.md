@@ -15,7 +15,7 @@ Repository-cache use MUST follow the source and hosting contracts identified in 
 The repository storage and reuse requirements below MUST apply to acquired repository views and all source or hosting operations using them.
 Operations using only uncached source and hosting capabilities MUST NOT acquire the cache lock, create its root, or populate cached repository data.
 Explicit `cache clean` MUST retain its cache operation contract independently of the current project's source backends.
-Hosting selection and publication to another repository MUST NOT change the original source's cache identity.
+Hosting selection and local synchronization MUST NOT change the original source's cache identity.
 If another repository is itself cached, its storage MUST follow its own backend and normalized locator identity under Repository identity below.
 
 ## Cache-root selection
@@ -48,10 +48,11 @@ The following commands MUST NOT create cache storage, acquire cache locks, or re
 - `remove`.
 - `dependency list`.
 - `dependency remove`.
+- `dependency sync-to`.
 
 Loading or validating configuration and lock state MUST NOT require repository-cache access.
 Project coordination MUST remain independent of this cache under Project operation locking in `specs/behavior/cli.md`.
-Whether acquisition, source inspection, or delivery needs cached data MUST follow the applicable operation and adapter contracts; selecting a cache location MUST NOT itself require cache storage to exist or be accessible.
+Whether acquisition or source inspection needs cached data MUST follow the applicable operation and adapter contracts; selecting a cache location MUST NOT itself require cache storage to exist or be accessible.
 
 ## Repository identity
 
@@ -66,7 +67,7 @@ Repository cache identity MUST be independent of:
 - source paths.
 - local destinations.
 - the target project and its configuration location.
-- the hosting implementation or selected delivery mode.
+- the acquisition implementation.
 
 Dependencies using the same normalized repository MUST share its repository cache entry, including across projects and when they select different branches, tags, or revisions.
 Sharing cached repository data MUST preserve independently locked dependencies under State and shared revisions in `specs/behavior/locking.md`.
@@ -82,9 +83,8 @@ Sharing cached repository data MUST preserve independently locked dependencies u
 Repository acquisition and refresh MUST follow Repository acquisition and refresh in `specs/behavior/vcs-interaction.md`.
 Inspection of available cached views MUST follow Source inspection and extraction in that specification.
 Operations preparing source content MUST reuse valid cached repository data while obtaining the source freshness required by the command.
-Hosting acquisition, refresh, and publication using cached objects MUST retain the same repository identity, revision isolation, and exclusive-access guarantees as local source inspection.
-Native Git and GitHub hosting MUST share Git's cache namespace rather than create hosting-specific repository copies.
-Prepared publication commits MUST NOT replace source content or make a recipient's state authoritative for the dependency's source selection.
+Hosting acquisition and refresh using cached objects MUST retain the same repository identity, revision isolation, and exclusive-access guarantees as local source inspection.
+Git acquisition MUST use Git's cache namespace independently of the repository host.
 Operations requiring source data MUST recreate missing cache data as needed and retrieve required revisions under the applicable operation contract in `specs/behavior/locking.md`.
 Rebuilding cached views MUST use the hosting acquisition contract without requiring source inspection to perform transport access.
 

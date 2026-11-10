@@ -29,7 +29,7 @@ All vcsinstall code MUST belong under `vcsinstall/`.
 - `filesystem` — The filesystem adapter, local content inspection, and filesystem effects.
 - `vcs_clients` — Invocation of native VCS clients and interpretation of their command results.
 - `sources` — The source adapter and backend implementations for repository semantics, revision resolution, and content extraction from available repository views.
-- `hosting` — The hosting adapter and implementations for repository acquisition, refresh, change delivery, and hosted reviews.
+- `hosting` — Repository acquisition, refresh, and repository-cache policy.
 - `runtime` — Command-independent operation policies and coordination.
 - `cli` — Command parsing, application setup, and shared command registration.
 - `skills` — Document definitions and packaged Markdown.
@@ -72,7 +72,7 @@ It MUST consume dependency declarations with an already selected backend and nor
 It MUST supply observed facts to its validation guards and coordinate external effects and persistence through their owning boundaries under the operation's behavior contract.
 It MUST determine the revision and freshness requirements of the requested operation, coordinate acquisition or refresh when needed, and use source capabilities to resolve versions and extract content from the resulting repository view.
 It MUST delegate backend-specific input validation and selector interpretation to source adapters rather than branch on backend identifiers or selector kinds.
-Project mutation and contribution effects MUST retain their separate consistency and failure guarantees.
+Project mutation and synchronization effects MUST retain their separate consistency and failure guarantees.
 The operation layer MUST own the sequence of inspection, whole-selection validation, filesystem effects, and persistence.
 Partial-operation diagnostics and installation-state reporting MUST belong to this layer rather than filesystem primitives.
 Only capabilities needed by the requested operation MUST be invoked; hosting and cache access MUST remain optional where their behavior contracts permit.
@@ -130,32 +130,24 @@ Hosting selection MUST NOT acquire repositories or perform cache filesystem acce
 Shared command setup MUST select that location independently of workspace activation and retain complete runtime settings through execution and output, restoring the caller's settings when the invocation ends.
 Cache-backed hosting MUST use the invocation's selected cache root consistently throughout acquisition and use.
 
-Hosting adapters MUST own repository acquisition, refresh, and complete outgoing workflows under `specs/behavior/vcs-interaction.md`, including:
-
-- native repository acquisition and transport authentication.
-- remote repository metadata probes used for backend recognition.
-- discovery and refresh of reference metadata, including advertised default branches.
-- making required repository data available for source inspection and extraction.
-- preparation of selected source-path changes and native contribution commits.
-- destination selection and publication to branches or filesystem sources.
-- patch generation and export.
-- hosted repository identification, permissions, and fork management where required.
-- creation or lookup of review requests where required.
-
+Hosting adapters MUST own repository acquisition, transport authentication, metadata probes, reference refresh, and making required repository views available under `specs/behavior/vcs-interaction.md`.
 Hosting MUST own the lifetime of acquired repository access and its coordination with cache storage.
 Cache-backed access MUST remain exclusive until all source consumers finish, including failure paths.
 Operations MUST use acquired repository views without implementing backend-specific cache or hosting branches.
-Git hosting MUST own native Git clone/fetch, remote-reference discovery, commit preparation, branch and direct delivery, and patch generation.
-GitHub hosting MUST compose Git hosting with GitHub-specific repository and review capabilities.
-Filesystem hosting MUST provide access to the declared source directory and apply authorized source writes through the lower-level filesystem adapter; it MUST remain distinct from that adapter and the filesystem source adapter.
-Noop hosting MUST simulate acquisition, refresh, and outgoing workflows independently of the selected source adapter.
-These implementations MUST share the hosting-adapter boundary rather than introduce another publication-adapter layer.
-Hosting selection MUST belong to one hosting-owned boundary shared by acquisition and outgoing workflows, with delivery compatibility checked by the selected adapter.
+Git hosting MUST own native Git clone/fetch and remote-reference discovery for every Git repository host.
+Filesystem hosting MUST provide access to the declared source directory through the lower-level filesystem adapter.
+Controlled noop hosting MUST simulate acquisition and refresh independently of the selected source adapter.
+Hosting selection MUST belong to one hosting-owned acquisition boundary selected by source backend.
+
+Local synchronization selection, baseline comparisons, mapping compatibility, preservation policy, and effect ordering MUST belong to `runtime`.
+It MUST use `filesystem` primitives directly and MUST NOT route local synchronization through hosting or native VCS clients.
+Filesystem inspection MAY expose excluded paths and removal MAY preserve caller-selected paths; filesystem primitives MUST NOT choose repository-administration policy themselves.
+Synchronization entities MUST remain runtime-owned plain operation data rather than hosting delivery models.
 
 Reusable local repository-inspection capabilities MAY be exposed by `sources` for hosting implementations.
 `vcs_clients` MUST own native VCS command execution and reusable object and reference inspection, including parsing native command output.
 Native inspection MUST retain object identities, file modes, and path bytes so adapters can apply their behavior contracts to selected content.
-Source adapters MUST retain selector inference and content-selection policy, and hosting adapters MUST retain acquisition, refresh, and publication decisions.
+Source adapters MUST retain selector inference and content-selection policy, and hosting adapters MUST retain acquisition and refresh decisions.
 Shared client operations and cached objects MUST preserve these ownership boundaries.
 
 Adapter boundary data and failures MUST follow `specs/architecture/entities.md` and `specs/architecture/errors.md`.
@@ -167,20 +159,16 @@ It MUST use `llm_tool_cli` for generic cache storage, ownership validation, coor
 The CLI MUST own the `cache` command group and use shared cache-clean registration from `llm_tool_cli.cli.commands`.
 Shared registration MUST own cleanup execution and result projection; vcsinstall MUST supply its repository-cache policy using the shared runtime location.
 Source inspection MUST consume acquired repository views without owning cache preparation.
-Cache management MUST NOT take ownership of requested versions, installation baselines, or durable contribution history.
-Source and publication repository identities MUST remain distinct when prepared source objects are published elsewhere.
+Cache management MUST NOT take ownership of requested versions, installation baselines, or durable synchronization history.
 
 ## External integrations
 
 Real VCS operations MUST use installed native clients rather than implement their wire protocols.
 Git source access and Git hosting MUST use the installed `git` client through `vcs_clients`.
-GitHub-specific hosting operations MUST use the installed `gh` client, including its authenticated API facilities where convenience commands do not cover the required hosted operation.
-These operations MUST use the client's configured account and host rather than derive an API identity from Git commit authorship.
-
-Service-specific tools MUST be required only by operations needing that service's capabilities.
-Git acquisition, local source inspection, and native delivery MUST remain independent of `gh` availability and login state, including when GitHub hosting delegates acquisition or native delivery to Git hosting.
+Git acquisition and local source inspection MUST remain independent of hosted-service clients and APIs.
+Local synchronization MUST NOT require a native VCS client.
 Filesystem and noop source and hosting operations MUST NOT require native VCS clients.
-Credential configuration and commit identity MUST remain owned by the native clients; vcsinstall MUST NOT introduce another credential store in project declarations or lock state.
+Credential configuration MUST remain owned by the native clients; vcsinstall MUST NOT introduce another credential store in project declarations or lock state.
 Native-client failures and effects MUST follow `specs/behavior/vcs-interaction.md` and its source and hosting contracts.
 
 ## Shared infrastructure

@@ -2,7 +2,7 @@
 
 ## Goal of the document
 
-This document describes the common source and hosting contract for identifying repositories and accessing or delivering their content.
+This document describes the common source and hosting contract for identifying repositories and accessing their content.
 
 ## Scope
 
@@ -14,7 +14,7 @@ The following are out of scope:
 - installation-baseline transitions and content-hash computation.
 - cache layout and access locking.
 - Python interfaces and VCS wire protocols.
-- adapter-specific delivery and review details beyond the applicable hosting contract.
+- local synchronization effects.
 
 ## Contract boundaries
 
@@ -23,7 +23,7 @@ Architectural responsibilities and integration choices MUST follow `specs/archit
 CLI argument syntax and input decoding MUST follow `specs/behavior/cli.md`; persisted declarations MUST follow `specs/behavior/config.md`.
 Revision selection, baseline verification, and project state changes MUST follow `specs/behavior/locking.md`.
 Persisted revision and content identities MUST follow `specs/behavior/lockfile.md`.
-File membership, manifests, and equality MUST follow Source file selection, File manifests, and Local comparison in `specs/behavior/files-and-directories.md` at source-inspection and contribution boundaries.
+File membership, manifests, and equality MUST follow Source file selection, File manifests, and Local comparison in `specs/behavior/files-and-directories.md` at source-inspection boundaries.
 Source and hosting access using the repository cache MUST follow `specs/behavior/cache.md`.
 
 Test-only adapters MUST be available only when explicitly supplied by a test environment under `specs/architecture/tests.md`.
@@ -105,13 +105,12 @@ Source resolution and extraction MUST use an available repository view and MUST 
 
 - repository acquisition.
 - repository refresh.
-- contribution preparation.
-- delivery effects or artifact creation.
+- synchronization preparation and effects.
 
 Unsupported transports or selectors MUST fail explicitly rather than be ignored or reinterpreted as another capability.
 Unsupported command options MUST be rejected under the CLI's invalid-argument contract before repository acquisition, source-content inspection, or external mutation; backend-specific compatibility checks MAY follow the metadata probes needed to identify that backend.
 Read access MUST NOT imply permission to publish.
-Ordinary filesystem and HTTP source notation MUST NOT by itself imply VCS revision history or contribution-branch support.
+Ordinary filesystem and HTTP source notation MUST NOT by itself imply VCS revision history.
 
 Additional VCS support MUST preserve native semantics rather than impose Git's branch model on every backend.
 For example, Mercurial may support tags and changeset identifiers, while SVN revisions identify repository states and branch or tag locations are ordinary source paths.
@@ -121,36 +120,13 @@ Additional selector kinds, such as Mercurial bookmarks, MUST have explicit input
 
 ## Hosting selection and capabilities
 
-The supported production hosting implementations MUST be:
-
-- `git` — Native Git acquisition, refresh, and delivery, under `specs/behavior/hosting/git.md`.
-- `github` — Delegated Git acquisition and native delivery, with GitHub PR workflows, under `specs/behavior/hosting/github.md`.
-- `filesystem` — Access to an ordinary source directory and authorized direct writes, under `specs/behavior/hosting/filesystem.md`.
-
-Tests MAY explicitly supply test-only `noop` hosting under `specs/behavior/hosting/noop.md`, independently of source-backend selection.
-
-A source hosted on GitHub MUST retain backend `git`; hosting selection MUST NOT change its native repository locator or revision meaning.
-Hosting selection MUST NOT create another source entity or change repository-cache identity or lock matching.
-The CLI's `dependency push --hosting-provider` option MUST select the hosting implementation for that invocation, including any required acquisition; an explicit value MUST override inference.
-
-Hosting selection MUST use the same source-identity and explicit-override rules for acquisition, refresh, and every delivery mode.
-Without an explicit value, a Git source unambiguously recognized as GitHub through its source host or native-client configuration MUST select `github`; other Git sources MUST select `git`.
-Filesystem sources MUST select `filesystem`.
-The selected implementation MUST check whether it supports the requested delivery mode; selection MUST NOT change providers to accommodate that mode.
-
-Hosting recognition MAY inspect read-only local repository metadata and native-client configuration, but MUST NOT acquire repositories, contact service APIs, or require service authentication.
-Unavailable or ambiguous optional recognition MUST retain native Git access rather than block it.
-Acquisition and refresh MUST NOT require a delivery mode or publication permission.
-
-Unknown implementations and unsupported hosting/source/mode combinations MUST fail under the CLI's invalid-argument contract before payload reads, repository acquisition, or source-content inspection.
-Where service identification is required, unresolved or ambiguous identity MUST fail with guidance to select or configure hosting before external mutation.
-Custom GitHub hosts and SSH aliases MUST be resolved unambiguously rather than routed to an unrelated default API host; a Git locator MUST NOT alone imply GitHub.
-
-Each hosting implementation MUST define its compatible source kinds and acquisition guarantees.
-Its delivery contract MUST define supported modes, destination rules, and external effects.
-Native acquisition and delivery MUST remain usable without service-specific clients or API authentication.
-Operations requiring service authentication or account discovery MUST report their failures explicitly rather than trigger interactive login or another account selection.
-Additional implementations MUST define acquisition and refresh behavior, supported delivery, and applicable review or fork capabilities before being exposed.
+Hosting MUST provide repository acquisition and refresh independently of local source inspection.
+Git dependencies MUST use native Git acquisition, including repositories hosted on GitHub or accessed through SSH aliases.
+Filesystem dependencies MUST use direct access to the declared directory.
+Controlled noop hosting MAY be supplied explicitly by tests independently of the source adapter.
+Production selection MUST remain owned by the hosting boundary and MUST NOT invoke hosted-service discovery or authentication.
+Selection MUST preserve repository identity, native locator, selector meaning, and cache identity.
+Each hosting implementation MUST define its acquisition and refresh guarantees under its corresponding contract in `specs/behavior/hosting/`.
 
 ## Native client execution
 
@@ -166,7 +142,7 @@ Native client output MUST follow the CLI's protocol-delivery contract rather tha
 
 Source inspection MUST NOT alter an original repository's working files or administrative state.
 Cache changes MUST remain separate from original source and target project state.
-Only a separately authorized hosting workflow MAY publish changes to a recipient under its delivery contract.
+Repository acquisition and source inspection MUST NOT mutate the original source repository.
 
 ## Repository acquisition and refresh
 
@@ -184,7 +160,7 @@ An available view MUST NOT imply complete history, retained snapshots, or future
 
 Cached acquisition and reuse MUST follow `specs/behavior/cache.md`.
 An uncached hosting implementation MUST define how the declared source becomes available without requiring the cache.
-Acquisition MUST preserve the original source's content and administrative state; only authorized delivery MAY change the recipient under its mode contract.
+Acquisition MUST preserve the original source's content and administrative state.
 
 ## Version resolution and anchoring
 
@@ -224,94 +200,8 @@ Unsupported source objects or names that cannot be represented safely at the des
 Symbolic links MUST NOT bypass source or destination containment.
 Prepared source content MUST satisfy Content identity in `specs/behavior/files-and-directories.md` and Source integrity and cache independence in `specs/behavior/locking.md`.
 
-## Contribution publication
+## Failures
 
-Publication selection and local verification MUST follow the `dependency push` contracts in `specs/behavior/cli.md` and `specs/behavior/locking.md`.
-Each invocation MUST deliver changes from exactly one declared dependency through exactly one explicit delivery mode.
-The source repository MUST remain the authority for installed versions; the publication repository MAY differ under Publication destination selection below.
-Selected changes MUST map installed destinations back to their recorded source paths, including selected additions, replacements, and deletions.
-Directory publication MUST reproduce the complete local tree under Contributions and Filesystem effects in `specs/behavior/files-and-directories.md`, preserving source content outside selected mappings.
-Selected mappings proposing conflicting content or deletion at the same source path MUST fail before creating a contribution or applying source writes.
-Compatible overlapping edits MAY be combined, but unselected entries MUST NOT contribute local changes.
-
-Contribution bases and revision requirements MUST follow the `dependency push` operation contract in `specs/behavior/locking.md` and the selected hosting contract.
-The resulting contribution MUST reproduce the selected changes at their source paths while preserving unrelated content from its applicable base.
-A source root or content kind that cannot be represented by the selected hosting implementation MUST cause an explicit failure rather than an inaccurate successful publication.
-A selection without changed content MUST complete without source fetching, hosting requests, or delivery effects once local selection and option validation passes.
-All required source preparation and selected-content checks MUST finish before creating a fork or applying delivery effects.
-
-Creation of a contribution branch MUST protect existing branches from overwrite.
-PR retry MAY reuse a verified matching contribution under the hosting contract, but MUST NOT overwrite a conflicting existing branch.
-Direct mode MUST protect conflicting destination content under its contract; selecting it MUST NOT authorize history rewriting.
-Delivery results MUST identify the requested mode and its actual completed effects under the CLI output contract.
-
-Publication MUST preserve project state under the `dependency push` operation contract in `specs/behavior/locking.md`.
-Acknowledging accepted content on a later update MUST follow Updating baselines in that specification without recording publication history.
-
-## Delivery modes
-
-The explicit `--mode` values MUST be as follows; required outcomes apply to changed content, while unchanged selections follow Contribution publication above.
-
-| Mode | Required outcome | Required capabilities |
-| --- | --- | --- |
-| `pr` | Publish a contribution branch and create or recover its hosted review request. | Compatible repository publication and hosted review support. |
-| `branch` | Publish a contribution branch without creating a hosted review. | Native contribution-branch publication. |
-| `direct` | Apply selected changes to an existing destination branch, or confirm they are already present. | Native branch advancement with baseline protection. |
-| `patch` | Write one contribution patch artifact without remote publication. | Contribution patch generation. |
-| `overwrite` | Apply selected changes directly to the original source. | Explicit direct-overwrite support. |
-
-Modes MUST NOT be selected implicitly from backend capabilities, permissions, or failure of another mode.
-A PR includes its contribution branch; callers MUST NOT need a separate branch-creation request.
-Only PR mode MAY create a fork or hosted review as part of delivery.
-Patch generation MUST NOT require service API authentication or a writable remote; required source acquisition MUST retain the transport-authentication contract under Native client execution.
-Filesystem overwrite MUST follow `specs/behavior/hosting/filesystem.md`.
-For Git sources, branch, direct, and patch delivery MUST follow the Git hosting contract; GitHub PR delivery MUST follow its hosting contract.
-Noop hosting MAY simulate these modes only under its explicit test-fixture contract.
-
-## Publication destination selection
-
-Branch and direct modes MUST publish to the dependency's source repository unless `--push-repository` explicitly selects another repository using the same backend.
-PR mode MUST use the explicitly selected publication repository or let its hosting implementation choose a suitable writable source or fork under its contract.
-An explicit PR publication repository MUST be validated as an eligible review head for the original source.
-Patch and overwrite modes MUST reject publication-repository overrides.
-
-A publication override MUST remain invocation-local and MUST NOT rewrite the dependency's source declaration or requested selector.
-The recipient MUST be selected unambiguously before publication; one invocation MUST NOT publish to multiple repositories.
-Failure to publish to an explicit recipient MUST NOT select a third repository.
-Transport or authentication failure MUST NOT be treated as proof that a fork is needed; PR fork selection MUST use hosting permission and policy information.
-Creating a hosted review MUST NOT imply permission to merge it or authorize automatic merging.
-
-## Patch artifacts
-
-Patch mode MUST write the selected hosting implementation's contribution format to the required `--output` file under the CLI contract.
-The artifact MUST describe changes at original source paths rather than installed destination paths.
-The output MUST remain user-managed data rather than a cache entry or lockfile field.
-An output failure MUST fail the operation rather than report an exported contribution.
-
-## Direct source overwrite
-
-Selecting overwrite mode MUST explicitly authorize direct writes only to the selected source mappings.
-Selection and local verification MUST follow the common publication contract above, with source containment under Source inspection and extraction.
-Write permissions and representability MUST follow `specs/behavior/hosting/filesystem.md`; authorization MUST NOT bypass those constraints.
-
-## Failures and completed effects
-
-Acquisition and source-inspection failures MUST identify the backend, repository, and affected selector, revision, or source path when applicable.
-Diagnostics MUST distinguish:
-
-- unsupported capabilities.
-- missing source content.
-- unavailable revisions.
-- permission failures.
-- client or filesystem failures.
-
-Native-client and hosting failures MUST retain useful diagnostic information through the shared CLI error contract.
-
-Preparation failures MUST preserve project state under Preparation and consistency in `specs/behavior/locking.md` and MUST NOT publish a partial prepared contribution.
-If an external write fails after effects occur, diagnostics MUST identify known completed effects and uncertainty rather than imply rollback or successful publication.
-An uncertain publication outcome MUST NOT authorize bypassing branch-collision or direct-mode protections, or silently repeating destructive writes.
-If a fork or branch was created before a later failure, diagnostics MUST identify its repository and branch or revision when known.
-If review creation fails or its outcome is uncertain, diagnostics MUST retain the published branch and enough target information to retry safely.
-The operation MUST NOT automatically delete completed remote effects to simulate rollback.
-PR delivery of changed content MUST require a confirmed matching review URL; branch publication alone MUST NOT complete that delivery.
-Non-PR modes MUST remain independent of whether a hosted review could be created or merged.
+Acquisition, refresh, and source-inspection failures MUST preserve their native diagnostics and MUST NOT silently select another repository or revision.
+Expected failures MUST follow `specs/architecture/errors.md`.
+Local synchronization MUST follow its separate operation contract in `specs/behavior/locking.md`.

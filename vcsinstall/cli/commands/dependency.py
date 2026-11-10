@@ -7,7 +7,7 @@ from llm_tool_cli.cli.errors import InvalidArguments
 from llm_tool_cli.core.result import Err, Ok, Result, unwrap_to_error
 from llm_tool_cli.paths import PathInput
 
-from vcsinstall.cli.commands.push import push_dependency
+from vcsinstall.cli.commands.sync_to import sync_dependency_to
 from vcsinstall.cli.entities import (
     BranchOption,
     DependencyNameArgument,
@@ -43,7 +43,7 @@ app = typer.Typer(
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
-app.command("push")(push_dependency)
+app.command("sync-to")(sync_dependency_to)
 
 
 @unwrap_to_error

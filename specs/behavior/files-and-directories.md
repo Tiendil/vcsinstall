@@ -11,7 +11,7 @@ The following are out of scope:
 
 - configuration, lockfile, and CLI syntax.
 - dependency revision selection and installation-baseline transitions.
-- repository acquisition, cache organization, and delivery modes.
+- repository acquisition and cache organization.
 - module ownership and filesystem transaction mechanisms.
 
 ## Shared contracts
@@ -52,7 +52,7 @@ The following summarizes their responsibilities; field definitions and validatio
 | Expected source absence | Retains the entry declaration. | Records `kind = "absent"` without a hash or file manifest. |
 
 The lockfile's directory manifests identify the recorded source file set for baseline comparison; configuration does not expand a directory mapping into declarations for every child.
-Publication of a directory selects its complete current local file tree under Contributions, including files not yet present in the recorded manifest.
+Synchronization of a directory selects its complete current local file tree under Synchronization, including files not yet present in the recorded manifest.
 An empty directory baseline has an empty `files` array, and descendant directories have no independent manifest records.
 Actual installed bytes remain at the configured destinations and are compared with these recorded baselines.
 Local additions and modifications are not added to either project file merely because they exist on disk.
@@ -161,7 +161,7 @@ Content identity MUST NOT depend on:
 - ownership.
 - permissions.
 - absolute filesystem locations.
-- files outside the applicable comparison or contribution scope.
+- files outside the applicable comparison or synchronization scope.
 - empty directories.
 
 ### File hashes
@@ -189,7 +189,7 @@ Local inspection MUST enumerate and hash the complete actual file tree at each s
 The recorded manifest MUST supply expected baseline content rather than restrict local inspection to recorded paths.
 Target-VCS tracking, staging, and ignore status MUST NOT change ownership or suppress local changes.
 Files absent from the manifest MUST participate as local additions.
-Publication MUST use the same complete local tree under Contributions.
+Synchronization MUST use the same complete local tree under Synchronization.
 
 Comparison against an existing baseline or proposed source content MUST include every actual local file.
 A file omitted by an expected state MUST represent expected absence at that position in that state.
@@ -205,7 +205,7 @@ An empty directory and an absent container MAY reproduce the same zero-file cont
 
 ## Filesystem effects
 
-Installation, update, removal, and delivery MUST change only destinations authorized by the applicable operation.
+Installation, update, removal, and synchronization MUST change only destinations authorized by the applicable operation.
 All selected entries MUST pass their applicable path, content, baseline, and source checks before the first mutation.
 Local additions inside an owned destination MUST undergo the same content protection as recorded files; they MUST NOT be silently discarded.
 Local content MUST collectively agree with an accepted state or have explicit replacement permission under Installation protection and Updating baselines in `specs/behavior/locking.md`.
@@ -223,30 +223,31 @@ Explicit permission to bypass local-content verification MAY authorize deleting 
 It MUST NOT authorize deleting content outside those roots or bypass containment validation.
 Root replacement MUST NOT require backups, atomic swaps, or rollback; failure diagnostics MUST follow Preparation and consistency in `specs/behavior/locking.md`.
 
-## Contributions
+## Synchronization
 
-A directory contribution MUST reproduce the complete current local file tree beneath the selected entry root.
-All local files MUST participate automatically, including new files absent from the lockfile manifest.
-Selecting the directory entry MUST be sufficient; individual child-file listings MUST NOT be required.
-The same directory selection MUST apply in every delivery mode.
+Synchronization MUST inspect the complete local tree of each declared entry in its named dependency and compare it with the recorded baseline.
+Directory changes MUST include new, hidden, generated, and target-VCS-ignored files automatically.
+Recorded files missing locally MUST represent proposed deletions.
+File and directory transitions MUST remain changes within the same declared mapping.
 
-Target-VCS tracking, staging, and ignore rules MUST NOT implicitly alter contribution membership.
-Hidden files and generated files MUST participate in directory contributions.
-Unsupported objects in the local tree MUST fail under Failures before delivery effects.
+Each selected local tree MUST map to its declared source path beneath the supplied recipient root.
+Successful replacement MUST reproduce the complete proposed tree, including removal of recipient-only children within that mapping.
+Recipient content outside selected mappings MUST remain unchanged.
+Compatible overlapping mappings MUST be applied once at their covering scope, while retaining a result for each selected entry.
+Required-parent checks MUST apply outside those covering scopes; obstructions replaced within an authorized covering tree MUST NOT prevent its compatible nested mappings.
+Conflicting mappings MUST fail before effects.
 
-Contribution change detection MUST compare the complete local tree with the recorded baseline.
-A new local file MUST constitute an addition in both local inspection and contribution change detection.
-A recorded file missing locally MUST contribute a deletion when publication is explicitly requested; installation and update MUST follow their respective Missing files contracts.
-Root-file type changes MUST remain changes within the selected mapping.
+The recipient root MUST remain a directory, including when `@/` maps to empty or absent local content.
+Repository administrative names `.git`, matched without case distinctions, MUST be excluded from recipient content comparisons and preserved without traversal during replacement, including worktree-marker files and nested metadata.
+Incoming source-path mappings and proposed file paths MUST NOT write those administrative names.
+`SOURCE_DIR` MUST NOT be inside `.git` administration.
+A proposed regular file that would replace an ancestor of preserved administrative content MUST fail before writes, including with force.
+Mappings overlapping project records, installed entry destinations, or selected managed cache storage MUST fail before writes.
+Force MUST NOT waive containment, unsupported-object, required-parent, or administrative-preservation checks.
 
-Directory delivery MUST reproduce the complete local tree at the mapped source path, including removal of source-only children when the selected mode permits the change.
-Directory comparisons with a recipient or contribution base MUST include its complete tree, so additional source files cannot be hidden by the old installation manifest.
-The selected mode's baseline protection MUST still apply to this complete tree.
-Source content outside selected mappings MUST be preserved.
-An obstruction or type change that cannot preserve that content MUST fail before delivery.
-
-Publication MUST NOT change configuration, the installation manifest, or lockfile bytes.
-A later successful update MUST add newly published files to the baseline only when they belong to its selected source revision.
+Filesystem copying MUST remain streamed and bounded independently of individual file size.
+Written mapped content MUST be verified against the proposed local content, excluding preserved administrative data.
+Operation state and partial-failure guarantees MUST follow `dependency sync-to` in `specs/behavior/locking.md`.
 
 ## Failures
 
@@ -255,7 +256,7 @@ Unsupported objects and names that cannot satisfy the encoding or destination-co
 Files outside selected entry destinations MUST NOT be inspected merely to reject their object kinds.
 Containment and required-parent checks MAY inspect those paths when necessary to determine whether a proposed effect is permitted.
 Symbolic links MUST NOT be followed in violation of the shared containment contract.
-Preparation and partial-effect guarantees MUST follow Preparation and consistency in `specs/behavior/locking.md` and Failures and completed effects in `specs/behavior/vcs-interaction.md` at their respective operation boundaries.
+Preparation and partial-effect guarantees MUST follow Preparation and consistency in `specs/behavior/locking.md` and the synchronization contract in that specification at their respective operation boundaries.
 
 ## Example
 
@@ -265,7 +266,7 @@ Running a local tool creates `__pycache__/basic.pyc` and an empty `output` direc
 - Editing `guide.md` MUST produce a managed modification.
 - A missing `examples/basic.py` MUST be protected as a local deletion; explicitly forced installation MUST restore it when it remains selected, under Updating baselines in `specs/behavior/locking.md`.
 - The cache file and new local file MUST make the entry locally modified; the empty directory alone MUST NOT change content equality.
-- Pushing the directory MUST include `examples/new.py` and the cache file automatically.
+- Synchronizing the directory MUST include `examples/new.py` and the cache file automatically.
 - Ordinary removal MUST refuse to delete the modified entry; removal with explicit permission to discard local changes MUST delete the complete destination tree, including the cache file and `examples/new.py`.
 - A later update whose source contains `examples/new.py` MUST include it in the proposed manifest. If the cache file remains absent from that source and baseline, it MUST still cause a local-change conflict.
 - Once the entire local file tree agrees with the selected source, update MUST record that baseline without replacing the destination.

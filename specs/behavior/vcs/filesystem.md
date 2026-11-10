@@ -19,7 +19,7 @@ The following are out of scope:
 
 The backend name MUST be `filesystem`.
 The common contract MUST follow `specs/behavior/vcs-interaction.md`.
-Acquisition of the source directory and outgoing changes MUST follow `specs/behavior/hosting/filesystem.md`.
+Acquisition of the source directory MUST follow `specs/behavior/hosting/filesystem.md`.
 The supplied repository view MUST expose the existing readable source directory for local inspection.
 An unavailable or invalid directory view MUST remain an operational failure rather than be treated as an empty repository.
 

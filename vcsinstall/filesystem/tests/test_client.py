@@ -120,6 +120,19 @@ class TestFSClient:
         assert file.hash == tree.files[0].hash
 
     @pytest.mark.skipif(os.name != "posix", reason="POSIX executable permissions")
+    def test_inspect_tree__reports_exclusions_without_traversal(self, client: FSClient) -> None:
+        (client.root / ".Git").mkdir()
+        (client.root / ".Git/link").symlink_to("missing")
+        (client.root / "nested").mkdir()
+        (client.root / "nested/.git").write_bytes(b"marker")
+        (client.root / "nested/keep").write_bytes(b"keep")
+
+        tree = client.inspect_tree(exclude_names=frozenset({".git"})).unwrap()
+
+        assert [file.path for file in tree.files] == ["@/nested/keep"]
+        assert tree.excluded_paths == ("@/.Git", "@/nested/.git")
+        assert (client.root / ".Git/link").is_symlink()
+
     def test_inspect_tree__retains_executable_metadata(self, client: FSClient) -> None:
         path = client.root / "script"
         path.write_bytes(b"executable")
@@ -326,6 +339,36 @@ class TestFSClient:
         assert target.is_dir() and not tuple(target.iterdir())
         assert target.stat().st_ino == original.st_ino
         assert target.stat().st_mode == original.st_mode
+
+    @pytest.mark.parametrize("kind", ["directory", "file", "symlink"])
+    def test_remove__preserves_paths_and_their_ancestors_without_traversal(self, writer: FSClient, kind: str) -> None:
+        target = writer.root / "target"
+        (target / "nested").mkdir(parents=True)
+        preserved = target / "nested/keep"
+        if kind == "directory":
+            preserved.mkdir()
+            (preserved / "link").symlink_to("missing")
+        elif kind == "file":
+            preserved.write_bytes(b"preserve")
+        else:
+            preserved.symlink_to("missing")
+        before = preserved.lstat()
+        (target / "nested/remove").write_bytes(b"remove")
+        (target / "remove").write_bytes(b"remove")
+        (target / "empty").mkdir()
+
+        writer.remove(
+            ProjectPathId("@/target"), preserve_paths=frozenset({ProjectPathId("@/target/nested/keep")})
+        ).unwrap()
+
+        assert list(target.iterdir()) == [target / "nested"]
+        assert list((target / "nested").iterdir()) == [preserved]
+        assert preserved.lstat().st_ino == before.st_ino
+        assert preserved.lstat().st_mode == before.st_mode
+        if kind == "file":
+            assert preserved.read_bytes() == b"preserve"
+        elif kind == "directory":
+            assert (preserved / "link").is_symlink()
 
     @pytest.mark.parametrize("exists", [False, True])
     def test_remove__preserve_root_still_removes_files_without_creating_missing_targets(

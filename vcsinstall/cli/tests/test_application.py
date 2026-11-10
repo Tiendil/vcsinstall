@@ -248,7 +248,7 @@ class TestProjectCoordination:
             ["dependency", "remove", "ci"],
             ["dependency", "outdated"],
             ["dependency", "update"],
-            ["dependency", "push", "ci", "--mode", "patch", "-o", "./contribution.patch"],
+            ["dependency", "sync-to", "ci", "./source"],
         ],
     )
     def test_project_commands_lock_before_loading_or_creating(

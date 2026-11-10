@@ -39,7 +39,7 @@ from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, Sel
 from vcsinstall.filesystem import FSClient
 from vcsinstall.filesystem import errors as filesystem_errors
 from vcsinstall.filesystem import hashes
-from vcsinstall.hosting import DeliveryResult, HostingAdapter, PublicationRequest, PushOptions
+from vcsinstall.hosting import HostingAdapter
 from vcsinstall.runtime import errors as runtime_errors
 from vcsinstall.sources import DEFAULT_ADAPTERS, SourceAdapter
 from vcsinstall.sources import errors as source_errors
@@ -63,15 +63,6 @@ class ProbingHosting:
     def probe_repository(self, repository: RepositoryLocator) -> Result[bool]:
         self.probes.append(repository)
         return self.result
-
-    def validate_artifact(self, dependency: Dependency, path: Path | None) -> Result[None]:
-        raise AssertionError("Input preparation must not validate publication artifacts.")
-
-    def validate_options(self, dependency: Dependency, options: PushOptions) -> Result[None]:
-        raise AssertionError("Input preparation must not validate publication options.")
-
-    def publish(self, request: PublicationRequest, *, source: SourceAdapter) -> Result[DeliveryResult]:
-        raise AssertionError("Input preparation must not publish changes.")
 
     def acquire(
         self, dependency: Dependency, *, revision: SourceRevision | None = None, refresh: bool = True

@@ -33,6 +33,7 @@ class ContentTree(BaseEntity):
 
     kind: ContentKind
     files: tuple[FileInfo, ...] = ()
+    excluded_paths: tuple[ProjectPathId, ...] = ()
 
     @pydantic.model_validator(mode="after")
     def _validate_files(self) -> Self:  # noqa: CCR001 — Validate root kinds and paths together.

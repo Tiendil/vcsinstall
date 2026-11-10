@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from llm_tool_cli.paths import ProjectPathId
 
 from vcsinstall.core import errors as core_errors
@@ -10,6 +12,27 @@ class InternalError(core_errors.InternalError):
 
 class EnvironmentError(core_errors.EnvironmentError):
     pass
+
+
+class SyncFailed(EnvironmentError):
+    code: str = "dependency_sync_failed"
+    message: str = "Cannot synchronize dependency {error.dependency!r} into {error.source_dir}: {error.reason}"
+    ways_to_fix: list[str] = ["Resolve the accompanying mapping, content, or filesystem diagnostic and retry."]
+    dependency: DependencyName
+    source_dir: Path
+    reason: str
+
+
+class SyncWriteFailed(EnvironmentError):
+    code: str = "dependency_sync_write_failed"
+    message: str = (
+        "Synchronization into {error.source_dir} failed; recipient content may be partially changed. "
+        "Project installation state has not changed."
+    )
+    ways_to_fix: list[str] = [
+        "Inspect the recipient, resolve the accompanying filesystem error, and retry synchronization."
+    ]
+    source_dir: Path
 
 
 class LocalConflict(EnvironmentError):

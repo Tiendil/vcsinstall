@@ -19,7 +19,7 @@ from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, Sou
 from vcsinstall.domain.tests import make
 from vcsinstall.filesystem import FSClient
 from vcsinstall.filesystem import errors as filesystem_errors
-from vcsinstall.hosting import DeliveryResult, GitHostingAdapter, PublicationRequest, PushOptions
+from vcsinstall.hosting import GitHostingAdapter
 from vcsinstall.runtime import (
     dependency_add,
     dependency_list,
@@ -31,7 +31,7 @@ from vcsinstall.runtime import (
 )
 from vcsinstall.runtime import errors as runtime_errors
 from vcsinstall.runtime.commands import _prepare_dependency_lock
-from vcsinstall.sources import ResolvedSource, SourceAdapter
+from vcsinstall.sources import ResolvedSource
 from vcsinstall.sources import errors as source_errors
 from vcsinstall.sources import get_adapter
 from vcsinstall.sources.adapters.noop import NoopSourceAdapter
@@ -51,15 +51,6 @@ class ControlledHosting:
 
     def probe_repository(self, repository: RepositoryLocator) -> Result[bool]:
         raise AssertionError("Runtime must not probe repository input.")
-
-    def validate_artifact(self, dependency: Dependency, path: Path | None) -> Result[None]:
-        raise AssertionError("Acquisition must not validate publication artifacts.")
-
-    def validate_options(self, dependency: Dependency, options: PushOptions) -> Result[None]:
-        raise AssertionError("Acquisition must not validate publication options.")
-
-    def publish(self, request: PublicationRequest, *, source: SourceAdapter) -> Result[DeliveryResult]:
-        raise AssertionError("Acquisition must not publish changes.")
 
     @contextmanager
     def acquire(

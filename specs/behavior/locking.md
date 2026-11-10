@@ -112,7 +112,7 @@ Deleting a managed child within a directory entry MUST produce a local differenc
 
 Deleting the local copy alone leaves its baseline as a file and produces local status `missing`.
 Installation and dependency update MUST protect that local deletion under Updating baselines below unless replacement is explicitly forced.
-Publishing that deletion leaves the baseline unchanged; update can record absence when the selected source also omits the entry.
+Synchronizing that deletion leaves the baseline unchanged; update can record absence when the selected source also omits the entry.
 
 ## Local state inspection
 
@@ -178,7 +178,7 @@ When the complete local file set already matches the selected source, the entry 
 Otherwise, successful application MUST replace the entire entry destination under Filesystem effects in `specs/behavior/files-and-directories.md`, including recopying unchanged files within a changed entry.
 Per-file records MUST NOT permit merging independent local and upstream edits when complete local content agrees with neither accepted state.
 Only content at the revision selected by the dependency's effective selector MUST be used for this equality check.
-The decision MUST depend on content equality rather than publication history, commit ancestry, or evidence that a contribution was accepted.
+The decision MUST depend on content equality rather than synchronization history, commit ancestry, or evidence that a change was accepted.
 
 **Example:** The baseline for an installed guide contains `Original guide.\n`, and its local content is changed to `Clarified guide.\n`.
 If the selected upstream revision contains exactly `Clarified guide.\n`, update leaves the local file untouched and records that revision and hash as its baseline, regardless of which machine published the change or how it reached upstream.
@@ -249,20 +249,28 @@ Prior valid bindings MAY verify old installations after explicit configuration c
 Source deletions within a mapping MUST be reflected without changing unrelated project content.
 Entries whose resolved revision and installed content require no change MUST succeed as unchanged.
 
-### `dependency push`
+### `dependency sync-to`
 
-Publication MUST use the dependency's matching lock and the existing entry baselines without advancing the lock.
-Branch, PR, and patch preparation MUST use the locked revision as their base rather than resolve a newer source version for that purpose.
-PR target inspection MAY resolve a current review branch for validation without changing the contribution base or installation revision.
-Direct delivery MUST prepare against the current destination branch with the recorded baselines under `specs/behavior/hosting/git.md`, without requiring the old locked source content when those baselines are trustworthy.
-Filesystem overwrite MAY inspect the live source and resolve its resulting publication revision under `specs/behavior/hosting/filesystem.md`.
-Every entry inspected to determine the changed selection MUST have a matching, trustworthy baseline and inspectable local state.
-Unavailable or inconsistent baselines and unreadable content MUST fail before source fetching, hosting requests, or delivery effects.
-Change detection MUST compare each entry's complete local contribution content with the installation baseline under Contributions in `specs/behavior/files-and-directories.md`; a previous push MUST NOT acknowledge those changes as a new baseline.
-New files within a directory MUST participate automatically and MUST also count as local modifications during ordinary inspection.
-Unselected entries MUST NOT require local-content verification or contribute changes.
-Publication MUST leave configuration, lockfile bytes, and installed content unchanged and MUST NOT maintain persistent publication history.
-Patch output MUST remain a separately requested artifact under the CLI contract rather than a change to installation state.
+Synchronization MUST use a matching dependency lock and trustworthy matching entry baselines without advancing the lock.
+Every entry inspected to determine the changed selection MUST have an inspectable complete local tree and a matching baseline.
+The command MUST select every declared entry of the named dependency whose complete local file content differs from its baseline, including local additions and deletions.
+Other dependencies MUST NOT contribute changes.
+
+For each selected entry, protected synchronization MUST permit recipient replacement only when its complete content matches the installation baseline or the proposed local content.
+Missing recipient files MUST participate in that comparison as recipient deletions.
+Explicit force permission MUST waive only this recipient-content equality check.
+Overlapping mappings MUST propose compatible content; incompatible mappings MUST fail before any recipient writes, including with force.
+Already matching recipient content MUST receive no filesystem writes.
+
+Synchronization MUST operate on the supplied local content root without repository acquisition, revision resolution, native VCS clients, hosted-service access, or repository-cache access.
+The original source repository and locked source objects MUST NOT be required to remain available.
+All selected mappings MUST pass baseline, path, object, preservation, and recipient-content checks before the first write.
+Preparation failure MUST leave the entire recipient unchanged.
+Write failure MAY leave partially synchronized recipient content and MUST report that possibility while preserving the original filesystem diagnostics.
+No rollback or persistent synchronization history MUST be implied.
+
+Configuration, lockfile bytes, installation baselines, and installed content MUST remain unchanged.
+A later successful installation or dependency update MUST acknowledge local changes only through its ordinary selected-source content rules.
 
 ### `remove`
 

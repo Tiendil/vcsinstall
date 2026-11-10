@@ -1,13 +1,12 @@
 from enum import StrEnum
 
-from llm_tool_cli.paths import ProjectPathId
+from llm_tool_cli.paths import ProjectPathId, ProjectRootPath
 from llm_tool_cli.protocol.logic_cells.base import LogicCell
 from llm_tool_cli.protocol.logic_cells.uniform import UniformCell
 from llm_tool_cli.protocol.output_cells.base import MetaValue, OutputCell
 
 from vcsinstall.domain import Dependency, DependencyName, SourcePath, SourceRevision
-from vcsinstall.hosting import DeliveryMode, DeliveryResult
-from vcsinstall.runtime.entities import DependencyPlan, LocalStatus, PushPlan
+from vcsinstall.runtime.entities import DependencyPlan, LocalStatus, SyncPlan
 from vcsinstall.sources import ResolvedSource
 from vcsinstall.workspace import Entry
 
@@ -19,8 +18,7 @@ class Outcome(StrEnum):
     unchanged = "unchanged"
     installed = "installed"
     removed = "removed"
-    pushed = "pushed"
-    exported = "exported"
+    synced = "synced"
 
 
 class RefKind(StrEnum):
@@ -36,7 +34,7 @@ class Operation(StrEnum):
     dependency_outdated = "dependency outdated"
     dependency_remove = "dependency remove"
     dependency_update = "dependency update"
-    dependency_push = "dependency push"
+    dependency_sync_to = "dependency sync-to"
     add = "add"
     remove = "remove"
     install = "install"
@@ -138,45 +136,27 @@ class InstallationCell(DependencyCell):
         )
 
 
-class PushCell(InstallationCell):
-    operation: Operation = Operation.dependency_push
-    mode: DeliveryMode
-    delivery: DeliveryResult | None = None
+class SyncCell(InstallationCell):
+    operation: Operation = Operation.dependency_sync_to
+    source_dir: ProjectRootPath
 
-    def _render(self, cell_type: type[OutputCell]) -> OutputCell:  # noqa: CCR001 — Project optional effects.
+    def _render(self, cell_type: type[OutputCell]) -> OutputCell:
         installation = super()._render(cell_type)
-        delivery = self.delivery
-        return cell_type.build_meta(
-            "installation",
-            **installation.meta,
-            mode=self.mode,
-            push_repository=delivery.repository if delivery else None,
-            branch=delivery.branch if delivery else None,
-            push_revision=delivery.revision if delivery else None,
-            hosting_provider=delivery.provider if delivery else None,
-            base_branch=delivery.base_branch if delivery else None,
-            review_url=delivery.review_url if delivery else None,
-            patch_file=str(delivery.patch_file) if delivery and delivery.patch_file else None,
-        )
+        return cell_type.build_meta("installation", **installation.meta, source_dir=str(self.source_dir))
 
 
-def push_cells(plan: PushPlan, delivery: DeliveryResult | None) -> list[LogicCell]:
-    """Project prepared push entries, attaching delivery effects only to changed content."""
+def sync_cells(plan: SyncPlan) -> list[LogicCell]:
+    """Report recipient effects while retaining the local installation baseline and status."""
     return [
-        PushCell(
+        SyncCell(
             dependency=plan.name,
             definition=plan.definition,
             revision=plan.revision,
-            destination=entry.contribution.destination,
-            source_path=entry.contribution.source_path,
+            destination=entry.destination,
+            source_path=entry.source_path,
             status=entry.status,
-            outcome=(
-                Outcome.unchanged
-                if not entry.changed
-                else Outcome.exported if plan.options.mode == DeliveryMode.patch else Outcome.pushed
-            ),
-            mode=plan.options.mode,
-            delivery=delivery if entry.changed else None,
+            source_dir=plan.source_dir,
+            outcome=Outcome.synced if entry.changed else Outcome.unchanged,
         )
         for entry in plan.entries
     ]

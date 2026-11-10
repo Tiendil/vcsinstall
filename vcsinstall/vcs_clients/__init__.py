@@ -3,7 +3,6 @@
 from vcsinstall.vcs_clients import errors
 from vcsinstall.vcs_clients.git import (
     GitClient,
-    GitCommit,
     GitObjectId,
     GitObjectKind,
     GitTreeEntry,
@@ -14,7 +13,6 @@ from vcsinstall.vcs_clients.git import (
 
 __all__ = [
     "GitClient",
-    "GitCommit",
     "GitObjectId",
     "GitObjectKind",
     "GitTreeEntry",

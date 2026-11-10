@@ -24,9 +24,8 @@ from vcsinstall.domain import (
 )
 from vcsinstall.domain.tests import make
 from vcsinstall.filesystem import ContentTree, FSClient, hashes
-from vcsinstall.hosting import DeliveryResult, PublicationRequest, PushOptions
 from vcsinstall.runtime import errors, install
-from vcsinstall.sources import ResolvedSource, SourceAdapter
+from vcsinstall.sources import ResolvedSource
 from vcsinstall.sources import errors as source_errors
 from vcsinstall.sources.adapters.noop import NoopSourceAdapter
 from vcsinstall.workspace import Config, DependencyLock, Entry, FileBaseline, Lockfile, LockfilePath, Workspace
@@ -42,15 +41,6 @@ class ControlledHosting:
 
     def probe_repository(self, repository: RepositoryLocator) -> Result[bool]:
         raise AssertionError("Installation must not probe declared repositories.")
-
-    def validate_artifact(self, dependency: Dependency, path: Path | None) -> Result[None]:
-        raise AssertionError("Installation must not validate publication artifacts.")
-
-    def validate_options(self, dependency: Dependency, options: PushOptions) -> Result[None]:
-        raise AssertionError("Installation must not validate publication options.")
-
-    def publish(self, request: PublicationRequest, *, source: SourceAdapter) -> Result[DeliveryResult]:
-        raise AssertionError("Installation must not publish changes.")
 
     @contextmanager
     def acquire(

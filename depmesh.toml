@@ -235,7 +235,7 @@ relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/vcs/noop.md"] }
 output = { type = "files", pattern = "./vcsinstall/sources/adapters/noop.py" }
 
-# Native Git hosting and its client implement Git acquisition and delivery.
+# Native Git hosting and its client implement Git acquisition.
 [[rules]]
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
@@ -251,19 +251,6 @@ output = { type = "union", items = [
   { type = "files", pattern = "./vcsinstall/hosting/adapters/git.py" },
   { type = "files", pattern = "./vcsinstall/vcs_clients/git.py" },
 ] }
-
-# The github hosting adapter follows its hosting contract.
-[[rules]]
-relation = "governed_by"
-input = { type = "one_of", artifacts = [
-  "./vcsinstall/hosting/adapters/github.py",
-] }
-output = { type = "list", artifacts = ["./specs/behavior/hosting/github.md"] }
-
-[[rules]]
-relation = "governs"
-input = { type = "one_of", artifacts = ["./specs/behavior/hosting/github.md"] }
-output = { type = "files", pattern = "./vcsinstall/hosting/adapters/github.py" }
 
 # The filesystem hosting adapter follows its hosting contract.
 [[rules]]

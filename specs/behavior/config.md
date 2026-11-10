@@ -102,7 +102,7 @@ Effective repository identity MUST follow Repository locators and identity in `s
 The explicit `vcs` field MUST select the backend for `repository`; a transport such as HTTPS MUST NOT override it.
 
 New or changed dependency declarations written by vcsinstall MUST record the selected backend and normalized native repository locator separately.
-Hosting implementation and publication-repository selections for change delivery MUST remain invocation-local under `specs/behavior/cli.md` rather than overwrite these source fields or add publication history.
+The synchronization recipient MUST remain invocation-local under `specs/behavior/cli.md` rather than overwrite these source fields or add synchronization history.
 VCS-qualified CLI URLs and source-version fragments MUST be decomposed into the corresponding configuration fields rather than retained as a combined source argument.
 
 Relative filesystem repository locators in configuration MUST resolve against the project root, independently of the invocation's working directory.

@@ -1,9 +1,9 @@
 # `vcsinstall` Usage
 
-`vcsinstall` is being developed to install files into a repository from other repositories, with lockfile and push-back support.
+`vcsinstall` is being developed to install files into a repository from other repositories, with lockfile and local synchronization support.
 The current CLI provides help, version information, this usage document, configuration initialization, dependency declaration, locking, listing, freshness checks, updates and removal, entry installation and inspection, complete project installation, entry removal, and shared cache cleanup.
 `dependency add` supports Git and ordinary filesystem sources, including protected replacement of existing dependency entries.
-`dependency push` delivers local changes through explicit Git, GitHub, and filesystem modes while preserving installation state.
+`dependency sync-to` mirrors changed entries into a supplied local source directory while preserving installation state.
 
 ## Commands
 
@@ -20,7 +20,7 @@ vcsinstall list
 vcsinstall dependency list
 vcsinstall dependency outdated
 vcsinstall dependency update
-vcsinstall dependency push ci --mode patch -o ./ci-fix.patch
+vcsinstall dependency sync-to ci ../shared-checkout
 vcsinstall remove @/specs/shared
 vcsinstall dependency remove ci
 vcsinstall cache clean
@@ -29,7 +29,7 @@ vcsinstall cache clean
 `python -m vcsinstall` exposes the same CLI as the `vcsinstall` executable.
 The `skill` command defaults to the `usage` document.
 Help, version, skill, and cache cleanup commands work without project configuration.
-Init creates configuration; dependency add, dependency list, dependency outdated, dependency update, dependency push, dependency remove, add, install, list, and remove require existing valid configuration.
+Init creates configuration; dependency add, dependency list, dependency outdated, dependency update, dependency sync-to, dependency remove, add, install, list, and remove require existing valid configuration.
 Dependency add resolves the selected revision, writes its declaration and lock, and creates no entry mappings.
 
 ## Concurrent project operations
@@ -185,31 +185,26 @@ Ordinary install establishes complete matching lock state and removes obsolete r
 
 Put global `--cache-dir DIRECTORY` before `install` to override the cache root. Install resolves that root for every backend but creates cache data only when needed. Automation success emits metadata-only `dependency` records ordered by name, followed by `installation` records ordered by destination. Records use operation `install` and outcome `installed` or `unchanged`; installation status is `unmodified`.
 
-## Publishing local changes
+## Synchronizing local changes
 
 ```bash
-vcsinstall dependency push ci --mode branch -m "Clarify the shared guide"
-vcsinstall dependency push ci @/specs/shared --mode pr --branch contribute/shared-guide
-vcsinstall dependency push ci --mode direct --branch release/1.x
-vcsinstall dependency push ci --mode patch --output ./ci-fix.patch
-vcsinstall dependency push local-guides --mode overwrite
+vcsinstall dependency sync-to ci ../shared-checkout
+vcsinstall dependency sync-to --force ci ~/repos/shared
 ```
 
-Push requires one declared dependency and an explicit `--mode`: `pr`, `branch`, `direct`, `patch`, or `overwrite`. There is no root `push` command. Without paths it selects only that dependency's changed entries. Explicit paths use exact declared entry roots and may include unchanged entries, but cannot select entries of another dependency. A directory contributes its complete local tree, including new, hidden, generated, and ignored files and deletions. Every inspected entry needs a matching dependency lock and baseline. Unselected entries need no local verification. An unchanged selection needs no source or hosting access.
+Sync-to requires one declared dependency name and an existing local `SOURCE_DIR`. Relative paths use the invocation directory; home markers expand. The directory is treated as the source repository's content root without checking its identity or branch. It can be an ordinary directory or any suitable checkout.
 
-Branch, PR, and patch modes prepare against the locked commit. Branch mode creates one new branch, automatically named unless `--branch` is supplied; an existing branch causes failure. Direct mode targets one existing branch, selected by `--branch` or the effective branch selector. It uses the current recipient commit, preserving unrelated upstream changes, and permits each complete selected entry only when the recipient matches its baseline or already matches the proposed local content. Different remote changes anywhere in a selected directory cause a conflict. Already-present contributions succeed without another commit. A tag or revision pin requires an explicit direct `--branch` or PR `--base`.
+The command inspects every declared entry of the named dependency, requiring a matching lock and baseline, and selects all locally changed entries. It accepts no entry selectors. A directory includes its complete local tree, including new, hidden, generated, and ignored files, deletions, and file/directory transitions. Each selected entry maps back to its original source path beneath `SOURCE_DIR`.
 
-PR mode uses GitHub hosting, inferred from github.com or an unambiguous configured host, or selected with `--hosting-provider github`. The installed `gh` client supplies the account and authentication. The source repository and selected base are the review target; the locked commit must be its ancestor. The adapter publishes to a writable source or an eligible account-owned fork, creating a fork when permitted. `--push-repository` overrides the recipient for PR, branch, or direct modes and never changes the installation source. PR recipients must belong to the source's fork network. The option cannot contain a source-version fragment. Relative repository paths resolve against the invocation directory.
+By default, every complete recipient entry must match the installation baseline or already match the proposed local content. Recipient additions, modifications, and deletions conflict otherwise. `--force` permits full replacement of those mapped trees. Content outside the selected mappings is preserved; compatible overlapping mappings are written once, while conflicting mappings fail.
 
-PR completion requires a confirmed matching review URL. Retry with the reported branch and the same selection, message, and base. An existing branch can be reused only when its complete tree, parent, and message match. A matching open PR is recovered; conflicting, closed, or merged reviews fail with guidance. Failures retain known fork and branch effects and uncertainty for safe recovery. Native Git modes remain usable without gh or API authentication, including with explicit GitHub hosting.
+Git administrative names `.git` are preserved without traversal, including nested repositories, worktree-marker files, and symlinks. Incoming administrative paths and replacements that would destroy their ancestors are rejected. The source root remains a directory. Force does not bypass baseline, containment, unsupported-object, required-parent, metadata-preservation, or project-state and cache protection checks.
 
-Patch mode requires `--output PATH` / `-o PATH` naming the complete artifact file. `-` and project-path notation are rejected. Home markers expand and relative paths use the invocation directory. The target must be absent or a regular unmanaged file outside project records, all entry destinations, cache data, and source administration. Output is streamed directly after contribution preparation; a failed export can leave an empty or partial file, including truncating an existing artifact. The mailbox patch includes author, message, binary changes, full blob identifiers, and locked-base information and supports `git am`. An unchanged selection leaves the artifact untouched.
+All selected entries are checked before any writes. A write failure can leave partially synchronized recipient content and reports that possibility. Retrying an already matching recipient succeeds without writes. Sync-to requires no repository acquisition, native VCS client, network, or cache access; the configured original source may be unavailable.
 
-Filesystem sources support only explicit overwrite. It replaces complete selected source mappings despite changes since installation, preserves unrelated source content, and reports the resulting complete fingerprint. It requires no Git, gh, or cache access. Unsupported objects, parent obstructions, or changes that cannot preserve unrelated content fail before writes. Partial-write failures are reported without implying rollback.
+Review, commit, and publish changes in the source checkout using your usual tools. Synchronization leaves configuration, lockfile bytes, installed files, and recorded baselines unchanged. Local additions remain `modified`; local deletions remain `missing`. Once the configured source contains the same changes, an ordinary `dependency update ci` records them as the new baseline. Use `dependency update --force ci` to replace divergent local content.
 
-All modes except overwrite accept repeated `--message` / `-m` paragraphs. A nonempty default message avoids editors. `--base` applies only to PR; `--branch` to PR, branch, and direct; `--output` only to patch; `--message` does not apply to overwrite. `--hosting-provider` overrides automatic selection for acquisition and delivery. Every operation uses the same defaults: GitHub for unambiguously recognized GitHub sources, native Git for other Git sources, and filesystem for directories. The selected provider validates the requested mode. Optional host recognition uses local metadata and client configuration without service API access; unavailable or ambiguous recognition preserves native Git access.
-
-Push leaves configuration, lockfile bytes, installed files, and recorded baselines unchanged. Local additions remain `modified`; local deletions remain `missing`. A later successful dependency update records matching source content as the new baseline. Results are ordered installation records with operation `dependency push`, mode, unchanged local status, and outcome `pushed`, `exported`, or `unchanged`. Effect fields report the actual recipient, branch, contribution revision, hosting provider, PR base and URL, or absolute patch file. Unchanged entries have null effect fields. The `revision` field always remains the installation revision. A default selection without changes emits no records.
+Results are installation records ordered by destination with operation `dependency sync-to`, absolute `source_dir`, unchanged local status, and outcome `synced` or `unchanged`. Repository, selector, and revision fields still describe the installation baseline. A dependency with no changed entries emits no records.
 
 ## Removing entries
 

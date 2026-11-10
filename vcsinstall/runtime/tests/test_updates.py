@@ -16,10 +16,9 @@ from pytest_mock import MockerFixture
 from vcsinstall.domain import Dependency, DependencyName, RepositoryLocator, SourcePath, SourceRevision, VcsId
 from vcsinstall.domain.tests import make
 from vcsinstall.filesystem import ContentTree, FSClient, hashes
-from vcsinstall.hosting import DeliveryResult, PublicationRequest, PushOptions
 from vcsinstall.runtime import dependency_update
 from vcsinstall.runtime import errors as runtime_errors
-from vcsinstall.sources import ResolvedSource, SourceAdapter
+from vcsinstall.sources import ResolvedSource
 from vcsinstall.sources import errors as source_errors
 from vcsinstall.sources.adapters.noop import NoopSourceAdapter
 from vcsinstall.workspace import Config, DependencyLock, Entry, FileBaseline, Lockfile, LockfilePath, Workspace
@@ -35,15 +34,6 @@ class ScopedHosting:
 
     def probe_repository(self, repository: RepositoryLocator) -> Result[bool]:
         raise AssertionError("Updates must not probe declared repositories.")
-
-    def validate_artifact(self, dependency: Dependency, path: Path | None) -> Result[None]:
-        raise AssertionError("Updates must not validate publication artifacts.")
-
-    def validate_options(self, dependency: Dependency, options: PushOptions) -> Result[None]:
-        raise AssertionError("Updates must not validate publication options.")
-
-    def publish(self, request: PublicationRequest, *, source: SourceAdapter) -> Result[DeliveryResult]:
-        raise AssertionError("Updates must not publish changes.")
 
     @contextmanager
     def acquire(

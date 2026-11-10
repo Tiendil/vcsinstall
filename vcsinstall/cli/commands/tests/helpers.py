@@ -27,10 +27,10 @@ def cached_repository(root: Path) -> Path:
     return entry
 
 
-def invoke_dependency_push(config: Path, cache: Path, *arguments: str) -> CommandResult:
+def invoke_dependency_sync_to(config: Path, cache: Path, *arguments: str) -> CommandResult:
     result = CliRunner().invoke(
         app,
-        ["-p", "automation", "--config", str(config), "--cache-dir", str(cache), "dependency", "push", *arguments],
+        ["-p", "automation", "--config", str(config), "--cache-dir", str(cache), "dependency", "sync-to", *arguments],
     )
     if result.exception is not None and not isinstance(result.exception, SystemExit):
         raise result.exception

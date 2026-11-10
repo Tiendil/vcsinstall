@@ -25,18 +25,15 @@ The following topics are out of scope:
 - `unmanaged content` — content in the target project outside declared entry destinations.
 - `source backend` — the source kind defining repository identity, version semantics, revision resolution, and content extraction from an available repository view.
 - `repository view` — repository data and version metadata available for source inspection, using cached VCS data, a live directory, or controlled test fixtures.
-- `hosting adapter` — an integration providing repository acquisition, refresh, and supported change-delivery workflows for a compatible source backend; it may use native repository facilities or a hosting service.
+- `hosting adapter` — an integration providing repository acquisition and refresh for a compatible source backend.
 - `native repository locator` — the backend-native location or identifier for a source repository, without vcsinstall's version fragment.
 - `source repository` — the source content root accessed through a selected backend, including a VCS repository or an ordinary filesystem directory.
 - `source path` — a canonical `@/` identifier selecting content within a dependency's source repository.
 - `dependency source reference` — a CLI `NAME@/PATH` reference combining a declared dependency name with a source path anchored at that dependency's repository root.
-- `publication repository` — the repository selected to receive a contribution, independently of the source used for installation and updates.
-- `review target` — the source repository and branch into which a hosted contribution requests integration.
-- `delivery mode` — the explicitly requested way to deliver or apply selected local changes.
 - `target repository` — the repository receiving installed files.
 - `project configuration file` — `vcsinstall.toml`, the tool's configuration for a project.
 - `lockfile` — `vcsinstall.lock`, a record of shared dependency revisions, per-entry content identities, and directory file manifests used to reproduce an installation.
-- `push back` — transfer of local changes to installed files back to their source repository.
+- `synchronization` — mirroring complete locally changed entries into their source paths under an explicitly supplied local content root.
 - `protocol` — a CLI output contract selected by `--protocol`.
 - `human protocol` — output protocol optimized for terminal users.
 - `llm protocol` — output protocol optimized for coding agents invoking the tool.
@@ -44,4 +41,4 @@ The following topics are out of scope:
 - `expected error` — an operational failure handled through the project's diagnostic contract in `specs/architecture/errors.md`.
 - `warning` — a non-fatal problem discovered while processing a request.
 
-Installation, lockfile, and push-back terms describe the intended product scope; they do not prescribe command syntax or storage formats.
+Installation, lockfile, and synchronization terms describe the intended product scope; they do not prescribe command syntax or storage formats.

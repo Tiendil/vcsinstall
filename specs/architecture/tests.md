@@ -56,11 +56,11 @@ Ordinary attribute replacement SHOULD NOT use `monkeypatch` when the standard fi
 Source and hosting adapters MUST be independently replaceable by controlled test collaborators through the boundaries in `specs/architecture/modules_layout.md`.
 Tests MAY replace shared adapter-selector lookups with scoped patches at their lookup sites.
 The noop source and hosting adapters MUST follow their respective contracts in `specs/behavior/vcs/noop.md` and `specs/behavior/hosting/noop.md`.
-Tests of acquisition and delivery orchestration MAY combine a controlled source backend and separate noop hosting without native clients or network effects.
-They MAY also combine a real Git source with noop hosting, using test-prepared local repository views and the real Git client for local inspection; acquisition, refresh, and publication MUST remain simulated in that combination.
+Tests of acquisition orchestration MAY combine a controlled source backend and separate noop hosting without native clients or network effects.
+They MAY also combine a real Git source with noop hosting, using test-prepared local repository views and the real Git client for local inspection; acquisition and refresh MUST remain simulated in that combination.
 Tests of native Git source semantics MUST exercise the real Git source adapter against available local views.
-Tests of native Git acquisition, refresh, and publication MUST exercise Git hosting, using the real Git client with test-created local repositories.
-Tests of GitHub workflows MAY compose real Git hosting with controlled service responses at the GitHub API boundary without network access.
+Tests of native Git acquisition and refresh MUST exercise Git hosting, using the real Git client with test-created local repositories.
+Local synchronization tests MUST exercise the real filesystem boundary, including preservation and recipient protection.
 Noop results MUST NOT substitute for native-client or service-specific integration coverage.
 
 ## Test module layout

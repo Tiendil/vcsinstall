@@ -2,7 +2,7 @@
 
 ## Goal of the document
 
-This document describes a deterministic source backend for controlled repository views without native VCS clients or real publication.
+This document describes a deterministic source backend for controlled repository views without native VCS clients.
 
 ## Scope
 
@@ -63,9 +63,9 @@ The test fixture mechanism MAY model such failures without prescribing a concret
 
 ## Hosting composition
 
-Acquisition, refresh, and outgoing simulations MUST follow `specs/behavior/hosting/noop.md` and MUST be supplied independently.
+Acquisition and refresh simulations MUST follow `specs/behavior/hosting/noop.md` and MUST be supplied independently.
 Source inspection MUST interpret the supplied view without simulating acquisition, refreshing references, or inventing source access.
-Source and hosting fixture repository state MAY be shared explicitly by a test; simulated delivery MUST NOT change a separately supplied source fixture implicitly.
+Source and hosting fixture repository state MAY be shared explicitly by a test; simulated refresh MUST NOT change a separately supplied source fixture implicitly.
 
 ## Failures and determinism
 
