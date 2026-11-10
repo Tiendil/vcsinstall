@@ -111,7 +111,7 @@ Deleting a managed child within a directory entry MUST produce a local differenc
 3. The entry remains declared, and `vcsinstall list` reports it as unmodified because absence is expected. If upstream later recreates `LICENSE`, a subsequent dependency update restores the file.
 
 Deleting the local copy alone leaves its baseline as a file and produces local status `missing`.
-Installation or update MUST restore it when it remains selected under Missing files in `specs/behavior/files-and-directories.md`.
+Installation and dependency update MUST protect that local deletion under Updating baselines below unless replacement is explicitly forced.
 Publishing that deletion leaves the baseline unchanged; update can record absence when the selected source also omits the entry.
 
 ## Local state inspection
@@ -154,30 +154,29 @@ The comparison MUST NOT advance the lock or select a different revision for an i
 
 ## Installation protection
 
-Entry addition and declared installation MUST NOT silently overwrite existing local modifications or additions that conflict with the selected source.
-Missing selected files MUST be restored under Missing files in `specs/behavior/files-and-directories.md`, including missing children within a partially installed directory.
-Restoring those files MUST NOT bypass the verification of existing content or required source-integrity checks.
+Entry addition and declared installation MUST apply the complete-content protection rules in Updating baselines below.
+Missing selected files MUST participate in that comparison under Missing files in `specs/behavior/files-and-directories.md`.
 Entry redefinition MUST verify existing content against the previous entry baseline before replacing its declaration or lock record.
 Success MUST leave affected declarations, lock records, and installed content consistent while preserving unselected project content.
 
 ## Updating baselines
 
-Dependency updates and operations adopting their protection MUST compare each selected entry with its prior baseline and the prepared content at the selected source revision under Local comparison in `specs/behavior/files-and-directories.md`.
-Missing or untrustworthy baselines and source-integrity failures MUST cause operational failure.
-For these installation and update protection checks, genuinely missing file positions MUST NOT by themselves cause verification to fail against either the prior baseline or the selected source content.
+Installation and dependency operations MUST compare each selected entry with its prior baseline and the prepared content at the selected source revision under Local comparison in `specs/behavior/files-and-directories.md`.
+Missing or untrustworthy baselines required by the operation and source-integrity failures MUST cause operational failure.
+Protected operations MUST compare complete local file sets, including missing files as local deletions.
+A new entry without a prior baseline MUST use an empty prior file set for local-content protection.
 Existing regular-file content, including obstructing files, MUST still be compared throughout the complete scope under Local comparison in `specs/behavior/files-and-directories.md`.
 Directory presence alone MUST NOT cause an installation or update conflict; complete-tree inspection and root replacement MUST follow Filesystem effects in that specification, including protection of local additions.
-This restoration allowance MUST NOT change exact content equality for hashing, local inspection, or contribution preparation.
-For entries with trustworthy baselines, local-content verification MUST follow these rules:
+Without explicit overwrite permission, local-content verification MUST follow these rules:
 
-- When existing local content agrees with the selected source content at every position where local content exists, verification MUST pass even if it differs from the prior baseline. Missing selected files MUST be installed, and success MUST record the selected revision and content identity as the new baseline.
-- Otherwise, when existing local content agrees with the prior baseline at every scoped position where local content exists, verification MUST pass, and update MUST apply the selected source content, including restoring missing selected files.
-- When existing local content agrees with neither state across all scoped positions where local content exists, verification MUST fail without overwriting it or advancing any selected dependency lock.
+- When complete local content agrees with the selected source content, verification MUST pass even if it differs from the prior baseline. Success MUST record the selected revision and content identity as the new baseline.
+- Otherwise, when complete local content agrees with the prior baseline, verification MUST pass, and update MUST apply the selected source content, including newly added source files.
+- When complete local content agrees with neither state, verification MUST fail without overwriting it or advancing any selected dependency lock.
 
 Directory equality MUST cover the complete actual local file tree, including files absent from both the old and proposed manifests.
 When the complete local file set already matches the selected source, the entry MUST receive no filesystem writes even if its revision or baseline metadata changes.
 Otherwise, successful application MUST replace the entire entry destination under Filesystem effects in `specs/behavior/files-and-directories.md`, including recopying unchanged files within a changed entry.
-Per-file records MUST NOT permit merging independent local and upstream edits when existing local content agrees with neither accepted state across the complete scope of existing local content.
+Per-file records MUST NOT permit merging independent local and upstream edits when complete local content agrees with neither accepted state.
 Only content at the revision selected by the dependency's effective selector MUST be used for this equality check.
 The decision MUST depend on content equality rather than publication history, commit ancestry, or evidence that a contribution was accepted.
 
@@ -186,8 +185,20 @@ If the selected upstream revision contains exactly `Clarified guide.\n`, update 
 If upstream instead contains different content, update fails while the local content still differs from the prior baseline, including when upstream contains the same clarification plus additional edits.
 
 **Example:** A directory baseline contains `a.txt` and `b.txt`, but local `b.txt` is missing.
-If existing local `a.txt` still matches its prior baseline, update MUST apply the selected source's changes to `a.txt` and restore selected `b.txt` from that same revision.
-If local `a.txt` differs from both the prior baseline and selected source, update MUST fail before changing either file; the missing `b.txt` MUST NOT hide that conflict.
+If the selected source still contains `b.txt`, ordinary update MUST fail even when local `a.txt` still matches its prior baseline.
+If the selected source also omits `b.txt` and the remaining local files exactly match that source, update MUST record the new baseline without restoring `b.txt`.
+Protected installation MUST apply the same complete-content comparison; explicitly forced installation MAY restore missing files with the selected source content.
+
+An explicitly forced installation or dependency update MUST permit replacement of local modifications, additions, and deletions within the selected entry roots with the selected source content.
+Force MUST waive only local-content equality checks.
+The following checks MUST still pass:
+
+- baseline validation.
+- source integrity.
+- source availability.
+- path validation.
+
+Force MUST NOT change the selected dependencies, repository locations, or version selectors.
 
 ## Operation contracts
 
@@ -218,11 +229,13 @@ Matching dependency locks MUST be reused even if a source branch or tag has adva
 Each missing or changed dependency binding MUST be resolved, and all its entries MUST use that resulting shared revision without advancing unrelated valid locks.
 Dependencies without entries MUST also receive matching locks when needed.
 Installation protection and Source integrity and cache independence MUST apply.
+Explicit force permission MUST follow the overwrite rules in Updating baselines without changing revision selection.
 When declarations, matching locks, and installed content already agree, installation MUST succeed as unchanged without advancing revisions.
 
 Ordinary installation MUST produce a complete configuration match and remove obsolete records only after successful preparation and installation.
 It MUST NOT delete installed content merely because its declaration was manually removed.
 Locked installation MUST require an existing complete configuration match before changing installed content and MUST leave lockfile bytes unchanged.
+Locked installation MUST accept explicit force permission without waiving its configuration-match or lockfile-byte requirements.
 Locked installation MAY fetch missing immutable source content and MUST NOT imply offline execution.
 
 ### `dependency update`
@@ -230,6 +243,7 @@ Locked installation MAY fetch missing immutable source content and MUST NOT impl
 Updating MUST include every declared entry of each selected dependency, including locking dependencies with no entries.
 The effective selector MUST resolve under Source freshness for each selected dependency.
 Updating baselines MUST apply, with shared revisions and entry baselines changed together.
+An explicit force request MUST follow the forced-update rules in Updating baselines.
 Configuration, repository locations, and requested selectors MUST remain unchanged.
 Prior valid bindings MAY verify old installations after explicit configuration changes under Matching configuration.
 Source deletions within a mapping MUST be reflected without changing unrelated project content.

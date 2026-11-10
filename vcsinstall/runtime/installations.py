@@ -20,7 +20,7 @@ from vcsinstall.runtime.commands import (
     _prepare_dependency_plan,
     _prepare_dependency_request,
 )
-from vcsinstall.runtime.entities import DependencyPlan, DependencyRequest
+from vcsinstall.runtime.entities import DependencyPlan, DependencyRequest, LocalContentPolicy
 from vcsinstall.runtime.validation import validate_no_local_content_conflicts
 from vcsinstall.sources import ResolvedSource, SourceAdapter, get_adapter
 from vcsinstall.workspace import Lockfile, Workspace, active_workspace
@@ -37,7 +37,12 @@ def _installation_errors(name: DependencyName, problems: EnvironmentErrors) -> E
 
 @unwrap_to_error
 def _prepare_installation_request(  # noqa: CCR001 — Keep lock matching and reuse of observed local content together.
-    workspace: Workspace, name: DependencyName, *, source: SourceAdapter, locked: bool
+    workspace: Workspace,
+    name: DependencyName,
+    *,
+    source: SourceAdapter,
+    locked: bool,
+    content_policy: LocalContentPolicy,
 ) -> Result[DependencyRequest]:
     request = _prepare_dependency_request(workspace, name, source=source).unwrap()
     if locked and request.lock is None:
@@ -59,11 +64,18 @@ def _prepare_installation_request(  # noqa: CCR001 — Keep lock matching and re
         baseline = matching_baseline.unwrap()
         expected = baseline.file_hashes()
         validate_no_local_content_conflicts(
-            expected, expected, files=tree.file_hashes, destination=entry.destination
+            expected, expected, files=tree.file_hashes, destination=entry.destination, policy=content_policy
         ).unwrap()
         if expected == tree.file_hashes:
             retained.append(
-                _plan_entry(entry, source=tree, previous=baseline, filesystem=filesystem, observed=tree).unwrap()
+                _plan_entry(
+                    entry,
+                    source=tree,
+                    previous=baseline,
+                    filesystem=filesystem,
+                    observed=tree,
+                    content_policy=content_policy,
+                ).unwrap()
             )
     return Ok(request.replace(observed=observed, retained=retained))
 
@@ -81,15 +93,16 @@ def _installation_lockfile(workspace: Workspace, plans: list[DependencyPlan]) ->
 
 @unwrap_to_error
 def install(  # noqa: CCR001 — Keep whole-project preparation, acquisition lifetimes, and effects in one scope.
-    *, locked: bool = False
+    *, locked: bool = False, force: bool = False
 ) -> Result[None]:
     """Install the complete declared project, preparing every dependency before project mutation."""
     workspace = active_workspace.get()
     if locked:
         workspace.validate_complete_records().unwrap()
+    content_policy = LocalContentPolicy.overwrite if force else LocalContentPolicy.protect
     sources = {name: get_adapter(dependency.vcs) for name, dependency in sorted(workspace.config.dependencies.items())}
     requests = [
-        _prepare_installation_request(workspace, name, source=source, locked=locked)
+        _prepare_installation_request(workspace, name, source=source, locked=locked, content_policy=content_policy)
         .map_err(partial(_installation_errors, name))
         .unwrap()
         for name, source in sources.items()
@@ -118,7 +131,9 @@ def install(  # noqa: CCR001 — Keep whole-project preparation, acquisition lif
                         source.resolve(request.definition, path).map_err(partial(_installation_errors, name)).unwrap()
                     )
             plans.append(
-                _prepare_dependency_plan(workspace, request, resolved, source=source, allow_absent=False)
+                _prepare_dependency_plan(
+                    workspace, request, resolved, source=source, allow_absent=False, content_policy=content_policy
+                )
                 .map_err(partial(_installation_errors, name))
                 .unwrap()
             )

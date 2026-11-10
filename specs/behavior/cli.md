@@ -357,7 +357,8 @@ The command MUST operate locally without a VCS client or repository-cache access
 
 ### `vcsinstall dependency update` command
 
-Dependency update MUST accept zero or more declared dependency names and MUST NOT accept command-specific options or entry path selectors.
+Dependency update MUST accept zero or more declared dependency names and the optional `--force` flag.
+It MUST NOT accept entry path selectors or source-selection overrides.
 Without names, it MUST select every declared dependency, including dependencies without entries.
 With names, it MUST select exactly those dependencies; repeated names MUST select each dependency once.
 Unknown names MUST fail as invalid arguments before fetching sources or changing project files.
@@ -365,6 +366,7 @@ An empty dependency collection MUST succeed without result records.
 The root MUST NOT expose an `update` command or alias.
 
 The command MUST invoke the `dependency update` operation contract in `specs/behavior/locking.md` for the selected dependencies.
+`--force` MUST request forced updating under Updating baselines in that specification.
 
 Examples:
 
@@ -372,6 +374,7 @@ Examples:
 vcsinstall dependency update
 vcsinstall dependency update ci
 vcsinstall dependency update ci formatting
+vcsinstall dependency update --force ci
 ```
 
 ### `vcsinstall dependency push` command
@@ -520,12 +523,15 @@ vcsinstall add --redefine --allow-outdated formatting@/specs @/specs/shared
 Install MUST invoke the `install` operation contract in `specs/behavior/locking.md` for the selected configuration.
 It MUST NOT accept positional arguments or source-selection options.
 `--locked` MUST select locked installation under that contract.
+`--force` MUST request explicit overwrite permission under Updating baselines in that specification and MUST be compatible with `--locked`.
 
 Examples:
 
 ```bash
 vcsinstall install
 vcsinstall install --locked
+vcsinstall install --force
+vcsinstall install --locked --force
 ```
 
 ## `vcsinstall remove` command

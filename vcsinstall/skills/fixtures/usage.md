@@ -54,7 +54,7 @@ Git selectors accept `#branch=NAME`, `#tag=NAME`, `#rev=COMMIT`, or an unambiguo
 Configuration and locks store selection as `selector = { kind = "branch", value = "main" }`, using kind `branch`, `tag`, or `revision`. An omitted selector keeps backend default behavior; the lock's `revision` separately records the resolved content ID.
 Filesystem sources track their complete live content fingerprint, or accept a complete `--rev sha256:...` pin. They have no branches or tags and retain no historical snapshots.
 
-An existing name requires `--redefine`, even for an identical declaration. Redefinition re-infers an omitted selector and refreshes every entry of that dependency at one revision while preserving entry mappings. Each entry owns its complete destination tree; extra local files count as local changes, and conflicting content fails before project changes. Missing selected files are restored. Changed entry roots are removed and recopied in full; entries already matching the source stay untouched. Identical redefinition reports `unchanged` and preserves project-file bytes.
+An existing name requires `--redefine`, even for an identical declaration. Redefinition re-infers an omitted selector and refreshes every entry of that dependency at one revision while preserving entry mappings. Each entry owns its complete destination tree; extra and missing local files count as local changes, and conflicting content fails before project changes. Complete local content must match the prior baseline or selected source. Changed entry roots are removed and recopied in full; entries already matching the source stay untouched. Identical redefinition reports `unchanged` and preserves project-file bytes.
 
 Git sources require the installed Git client and use a shared per-user cache. Put `--cache-dir DIRECTORY` before `dependency` to override its root. Shared command setup selects the cache path for every executing command, from the override or the platform default. Selecting a path does not create cache storage or acquire cache locks. Filesystem sources and project-independent informational commands do not use cached data; help and completion skip cache-path selection. Native authentication remains owned by Git.
 Automation success emits a `dependency` record, followed by ordered `installation` records for refreshed entries. Errors use the selected shared protocol.
@@ -116,14 +116,17 @@ Configuration, lockfile bytes, and installed content remain unchanged. Put globa
 ```bash
 vcsinstall dependency update
 vcsinstall dependency update ci formatting
+vcsinstall dependency update --force ci
 vcsinstall -p automation dependency update ci
 ```
 
-Without names, update selects every dependency, including those without entries. Explicit names select exactly those dependencies, with duplicates selecting each once. Unknown names fail before source access. There are no command-specific options or entry-path selectors, and there is no root `update` command.
+Without names, update selects every dependency, including those without entries. Explicit names select exactly those dependencies, with duplicates selecting each once. Unknown names fail before source access. The only command-specific option is `--force`; entry-path selectors are not accepted, and there is no root `update` command.
 
 Each selected dependency resolves its configured selector once and refreshes all its entries at that revision. Branches and tags retain their literal names; Git declarations without a selector retain a matching lock's recorded branch even when the remote default changes. Revision pins remain pinned. Filesystem live sources use their current complete fingerprint without requiring the old source state to remain available. Configuration and unselected installations remain unchanged.
 
-Every declared entry needs a trustworthy prior baseline. Existing local files must collectively match either that baseline or the selected source across the complete entry tree; independent edits are not merged. Missing selected files are restored, and upstream additions, deletions, and file/directory changes are applied. Changed entry roots are removed and recopied completely; entries already equal to the selected source receive no filesystem writes. Source deletions record expected absence while retaining the mapping for later recreation.
+Every declared entry needs a trustworthy prior baseline. Complete local content must match either that baseline or the selected source across the entire entry tree, including absent files; independent edits are not merged. A locally deleted file conflicts when the selected source still contains it. A deletion already present in the selected source can be acknowledged when the whole entry matches, and new upstream files are installed when local content matches the old baseline. Upstream deletions and file/directory changes are applied. Changed entry roots are removed and recopied completely; entries already equal to the selected source receive no filesystem writes. Source deletions record expected absence while retaining the mapping for later recreation.
+
+`--force` permits replacing local modifications, additions, and deletions with the selected source content across all entries of the selected dependencies. It preserves repository and selector choices and does not bypass baseline, source-integrity, source-availability, or containment validation. `install --force` restores selected content at matching locked revisions rather than advancing the dependencies.
 
 All selected entries are prepared before any project mutation. A preparation failure leaves every selected file and lock unchanged. A failure while applying files can leave content inconsistent with the prior lock and is reported explicitly. Successful updates write locks and baselines together after file application; unchanged state preserves lockfile bytes.
 
@@ -155,7 +158,7 @@ Add declares and installs exactly one file or complete directory from an existin
 Sources use `NAME@/PATH`, with `NAME@/` selecting the repository root. Source paths retain literal percent signs, plus signs, query characters, and fragment characters; quote them for your shell when needed. Repository URLs and version options belong to `dependency add`.
 The destination is the exact final file or directory path. It accepts `@/` project identifiers, contained absolute paths, or paths relative to the invocation directory. An existing directory does not append the source basename. Destinations cannot overlap another entry or either project file.
 
-An already declared destination requires `--redefine`, even for an identical mapping. Redefinition may change the owning dependency but still verifies the previous baseline and protects local edits and additions. Identical redefinitions report `unchanged`; missing selected files are restored. Files already equal to selected source content receive no writes. Empty directory selections record an empty manifest without requiring a destination directory.
+An already declared destination requires `--redefine`, even for an identical mapping. Redefinition may change the owning dependency but still verifies the previous baseline and protects local edits, additions, and deletions. Complete local content must match the prior baseline or selected source; a partial existing directory is not silently completed. Identical redefinitions report `unchanged`. Files already equal to selected source content receive no writes. Empty directory selections record an empty manifest without requiring a destination directory.
 
 Add refreshes and checks the dependency's effective selector against its locked revision. A moved branch, tag, or live filesystem fingerprint fails unless `--allow-outdated` is supplied; `--redefine` grants no freshness permission. Even with `--allow-outdated`, refresh and resolution must succeed and the locked source path must remain available. Filesystem sources retain no historical snapshots, so a changed live source cannot reproduce an old fingerprint.
 Put global `--cache-dir DIRECTORY` before `add` to override the shared Git cache. Both add commands resolve its root for every backend; filesystem sources do not create cache data. Automation success emits one metadata-only `installation` record with operation `add`, status `unmodified`, and outcome `installed` or `unchanged`.
@@ -165,12 +168,16 @@ Put global `--cache-dir DIRECTORY` before `add` to override the shared Git cache
 ```bash
 vcsinstall install
 vcsinstall install --locked
+vcsinstall install --force
+vcsinstall install --locked --force
 vcsinstall -p automation install
 ```
 
 Install covers every declared dependency and entry, including dependencies without entries. It accepts no positional arguments or source-selection options. Configuration remains unchanged. Matching dependency locks retain their revisions even when branches or tags move; newly declared entries also use those revisions. Missing or changed bindings are resolved once per dependency, and an omitted Git selector retains a matching lock's recorded branch.
 
-Existing local files must collectively agree with their prior baseline or the selected source across the complete entry tree. Local additions are protected, missing files are restored, and changed entry roots are recopied completely. Entries already matching a trustworthy baseline need no source, VCS client, or cache access. Every dependency is prepared before any project mutation. Preparation failure preserves all installed files and records; an application failure may leave content inconsistent with the prior records and is reported explicitly.
+Complete local content must agree with its prior baseline or the selected source across the entire entry tree, including absent files. Local edits, additions, and deletions are protected; a missing recorded file causes a conflict while the selected source still contains it. Changed entry roots are recopied completely. Entries already matching a trustworthy baseline need no source, VCS client, or cache access. Every dependency is prepared before any project mutation. Preparation failure preserves all installed files and records; an application failure may leave content inconsistent with the prior records and is reported explicitly.
+
+`--force` permits replacing changed entry roots with the selected source content, including restoring missing managed files and discarding local modifications or additions. Required metadata, source-integrity, source-availability, and containment checks still apply. Force preserves normal revision selection. A fresh checkout with recorded entries but absent installed content requires `install --force`; combine it with `--locked` to preserve lockfile bytes.
 
 Ordinary install establishes complete matching lock state and removes obsolete records after successful preparation and installation. It leaves content from manually removed declarations in place. An empty project succeeds without result records and establishes an empty lockfile.
 

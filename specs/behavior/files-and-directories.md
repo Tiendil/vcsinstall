@@ -114,21 +114,22 @@ Local files MUST NOT be accepted into an installation baseline merely because th
 ## Missing files
 
 Whether a source file remains selected MUST be determined by the configured mapping and backend content view under Source file selection.
-If a selected file exists at the operation's source revision and its local destination is missing, installation and update MUST install that file normally, regardless of whether the previous manifest contained it.
-This requirement MUST apply to standalone file entries and missing children of partially installed directory entries.
-Local absence MUST NOT itself cause a file to be skipped or require permission to restore it.
+Local absence MUST participate in complete-content comparisons for standalone file entries and children of directory entries.
+Installation and dependency updates MUST handle missing local files under Updating baselines in `specs/behavior/locking.md`, including its local-deletion protection and explicit force permission.
+Once those checks permit replacement, missing files present at the selected source revision MUST be installed.
 
 Restoration MUST use the source revision selected by the operation under Operation contracts in `specs/behavior/locking.md`.
-Source-integrity and availability checks MUST still pass, and existing local modifications and additions MUST retain their normal protection.
+Source-integrity and availability checks MUST still pass, and existing local content MUST retain the operation's protection or explicit overwrite permission.
 Existing objects at file or parent positions MUST undergo the applicable type and preservation checks rather than be treated as missing files.
 Unreadable content MUST remain an inspection failure rather than be classified as missing.
 
 Ordinary local inspection MUST continue to compare the actual installed state with the recorded baseline under Local comparison.
-Treating a missing file as restorable during installation or update MUST NOT report an incomplete installation as unmodified or rewrite a baseline to accept the missing content.
+Observing missing files MUST NOT report an incomplete installation as unmodified or rewrite a baseline to accept the missing content.
 Verification of existing content and installation-baseline transitions MUST follow Installation protection and Updating baselines in `specs/behavior/locking.md`.
 
 **Example:** A directory mapping selects `a.txt` and `b.txt` at the operation's source revision.
-If local `b.txt` is absent, installation or update MUST restore it after the applicable checks pass, whether it is newly added upstream or was already recorded in the previous manifest.
+If local `b.txt` was recorded in the previous manifest but is now absent, protected installation MUST reject that deletion while the selected source still contains the file; explicitly forced installation MUST restore it after the applicable checks pass.
+If `b.txt` is newly added upstream and complete local content still matches the previous baseline, dependency update MUST install it normally.
 If the selected source revision no longer contains `b.txt`, installation or update MUST NOT recreate it from an older revision.
 
 ## Directories
@@ -197,7 +198,7 @@ Files inside an owned destination MUST participate regardless of whether a file 
 Directory presence alone MUST NOT count as a local-file modification.
 
 Exact equality MUST require the same file paths and hashes, with the structural-directory equivalence in Directories.
-Installation and update protection MUST retain the missing-file restoration allowance in `specs/behavior/locking.md`.
+Installation and update protection MUST follow their respective comparison rules in Installation protection and Updating baselines in `specs/behavior/locking.md`.
 Matching some changed files MUST NOT acknowledge remaining local differences.
 Source-integrity checks MUST enumerate the complete selected source file set, so unexpected source files cannot be hidden by comparing only previously recorded paths.
 An empty directory and an absent container MAY reproduce the same zero-file content; source availability and initial source-path validation MUST remain separate checks.
@@ -207,7 +208,7 @@ An empty directory and an absent container MAY reproduce the same zero-file cont
 Installation, update, removal, and delivery MUST change only destinations authorized by the applicable operation.
 All selected entries MUST pass their applicable path, content, baseline, and source checks before the first mutation.
 Local additions inside an owned destination MUST undergo the same content protection as recorded files; they MUST NOT be silently discarded.
-Existing local files MUST collectively agree with an accepted state under Installation protection and Updating baselines in `specs/behavior/locking.md`.
+Local content MUST collectively agree with an accepted state or have explicit replacement permission under Installation protection and Updating baselines in `specs/behavior/locking.md`.
 
 When an entry's complete local file content already equals the selected source content, installation and update MUST leave its filesystem content untouched, even if the dependency revision or baseline metadata changes.
 Otherwise, after validation succeeds, installation and update MUST remove the existing destination root, whether a file or directory, and copy all selected source files into that destination.
@@ -235,7 +236,7 @@ Unsupported objects in the local tree MUST fail under Failures before delivery e
 
 Contribution change detection MUST compare the complete local tree with the recorded baseline.
 A new local file MUST constitute an addition in both local inspection and contribution change detection.
-A recorded file missing locally MUST contribute a deletion when publication is explicitly requested; installation and update MUST retain the restoration behavior in Missing files.
+A recorded file missing locally MUST contribute a deletion when publication is explicitly requested; installation and update MUST follow their respective Missing files contracts.
 Root-file type changes MUST remain changes within the selected mapping.
 
 Directory delivery MUST reproduce the complete local tree at the mapped source path, including removal of source-only children when the selected mode permits the change.
@@ -262,7 +263,7 @@ An installed directory maps source path `@/guides` and has a manifest containing
 Running a local tool creates `__pycache__/basic.pyc` and an empty `output` directory; a developer also creates `examples/new.py`.
 
 - Editing `guide.md` MUST produce a managed modification.
-- A missing `examples/basic.py` MUST be restored by installation or update when it remains selected, after the operation's protection and source checks pass.
+- A missing `examples/basic.py` MUST be protected as a local deletion; explicitly forced installation MUST restore it when it remains selected, under Updating baselines in `specs/behavior/locking.md`.
 - The cache file and new local file MUST make the entry locally modified; the empty directory alone MUST NOT change content equality.
 - Pushing the directory MUST include `examples/new.py` and the cache file automatically.
 - Ordinary removal MUST refuse to delete the modified entry; removal with explicit permission to discard local changes MUST delete the complete destination tree, including the cache file and `examples/new.py`.

@@ -1168,8 +1168,34 @@ class TestAddEntry:
             assert records[0]["code"] == runtime_errors.LocalConflict.model_fields["code"].default
             assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
 
+    @pytest.mark.parametrize("complete", [False, True])
+    def test_existing_directory_must_match_the_complete_source(
+        self, config: Path, tmp_path: Path, complete: bool
+    ) -> None:
+        source = tmp_path / "partial-source"
+        source.mkdir()
+        for name in ("a", "b"):
+            (source / name).write_bytes(b"source")
+        cache = tmp_path / "cache"
+        assert invoke_add(config, cache, "partial", source.as_uri())[0] == 0
+        installed = config.parent / "installed"
+        installed.mkdir()
+        (installed / "a").write_bytes(b"source")
+        if complete:
+            (installed / "b").write_bytes(b"source")
+        before = config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()
+
+        code, records, output = invoke_entry_add(config, cache, "partial@/", "@/installed")
+
+        assert code == (0 if complete else 3), output
+        assert (installed / "a").read_bytes() == b"source"
+        assert (installed / "b").exists() == complete
+        if not complete:
+            assert records[0]["code"] == runtime_errors.LocalConflict.model_fields["code"].default
+            assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+
     @pytest.mark.parametrize("change", ["missing", "local", "addition", "unchanged"])
-    def test_redefinition_checks_complete_local_tree_and_restores_missing_files(  # noqa: CCR001 — Local tree cases.
+    def test_redefinition_protects_complete_local_tree_including_deletions(  # noqa: CCR001 — Local tree cases.
         self, config: Path, client: GitClient, tmp_path: Path, change: str
     ) -> None:
         cache = tmp_path / "cache"
@@ -1187,10 +1213,10 @@ class TestAddEntry:
 
         code, records, output = invoke_entry_add(config, cache, "--redefine", "ci@/", "@/installed")
 
-        assert code == (3 if change in ("local", "addition") else 0), output
+        assert code == (0 if change == "unchanged" else 3), output
         assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
         if code == 0:
-            assert records[0]["outcome"] == ("unchanged" if change == "unchanged" else "installed")
+            assert records[0]["outcome"] == "unchanged"
             assert target.read_bytes() == b"original\n"
             if change == "unchanged":
                 assert target.stat().st_mtime_ns == 1
@@ -1530,8 +1556,93 @@ class TestInstallEntries:
         assert not project_config.is_set()
 
     @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("force", [False, True])
+    @pytest.mark.parametrize("change", ["missing_file", "missing_child", "edited", "addition", "type", "checkout"])
+    def test_local_changes_require_force(  # noqa: CCR001 — Complete-tree changes and overwrite variants.
+        self, config: Path, tmp_path: Path, locked: bool, force: bool, change: str
+    ) -> None:
+        cache = tmp_path / "cache"
+        assert invoke_install(config, cache)[0] == 0
+        lockfile = config.with_name("vcsinstall.lock")
+        lockfile.write_bytes(b"# Preserve existing lock bytes.\n" + lockfile.read_bytes())
+        before = config.read_bytes(), lockfile.read_bytes()
+        guide = config.parent / "z-guide.txt"
+        docs = config.parent / "a-docs"
+        if change == "missing_file":
+            guide.unlink()
+        elif change == "missing_child":
+            (docs / "nested/b").unlink()
+        elif change == "edited":
+            (docs / "a").write_bytes(b"local edit")
+        elif change == "addition":
+            (docs / ".local").write_bytes(b"local addition")
+        elif change == "type":
+            guide.unlink()
+            guide.mkdir()
+            (guide / "child").write_bytes(b"local replacement")
+        else:
+            guide.unlink()
+            (docs / "a").unlink()
+            (docs / "nested/b").unlink()
+            (docs / "nested").rmdir()
+            docs.rmdir()
+        (config.parent / "unmanaged").write_bytes(b"preserve")
+        local_before = {
+            str(path.relative_to(config.parent)): path.read_bytes()
+            for path in config.parent.rglob("*")
+            if path.is_file()
+        }
+        arguments: tuple[str, ...] = ("--locked",) if locked else ()
+        if force:
+            arguments += ("--force",)
+
+        code, records, output = invoke_install(config, cache, *arguments)
+
+        assert code == (0 if force else 3), output
+        assert (config.read_bytes(), lockfile.read_bytes()) == before
+        assert (config.parent / "unmanaged").read_bytes() == b"preserve"
+        if force:
+            assert guide.read_bytes() == b"original\n"
+            assert (docs / "a").read_bytes() == b"first"
+            assert (docs / "nested/b").read_bytes() == b"second"
+            assert not (docs / ".local").exists()
+            assert all(record["status"] == "unmodified" for record in records if record["type"] == "installation")
+        else:
+            assert any(
+                record.get("code") == runtime_errors.LocalConflict.model_fields["code"].default for record in records
+            )
+            assert {
+                str(path.relative_to(config.parent)): path.read_bytes()
+                for path in config.parent.rglob("*")
+                if path.is_file()
+            } == local_before
+
+    def test_force_preserves_unmanaged_parent_obstructions(self, config: Path, tmp_path: Path) -> None:
+        declarations = tomllib.loads(config.read_text())
+        declarations["entries"][0]["destination"] = "@/parent/guide"
+        config.write_text(tomli_w.dumps(declarations))
+        cache = tmp_path / "cache"
+        assert invoke_install(config, cache)[0] == 0
+        parent = config.parent / "parent"
+        (parent / "guide").unlink()
+        parent.rmdir()
+        parent.write_bytes(b"unmanaged obstruction")
+        before = config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()
+
+        code, records, output = invoke_install(config, cache, "--force")
+
+        assert code == 3, output
+        assert any(
+            record.get("code") == runtime_errors.LocalConflict.model_fields["code"].default for record in records
+        )
+        assert parent.read_bytes() == b"unmanaged obstruction"
+        assert (config.read_bytes(), config.with_name("vcsinstall.lock").read_bytes()) == before
+        assert (config.parent / "a-docs/a").read_bytes() == b"first"
+
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("force", [False, True])
     def test_satisfied_installation_needs_no_source_client_or_cache_access(
-        self, config: Path, tmp_path: Path, mocker: MockerFixture, locked: bool
+        self, config: Path, tmp_path: Path, mocker: MockerFixture, locked: bool, force: bool
     ) -> None:
         assert invoke_install(config, tmp_path / "cache")[0] == 0
         lockfile = config.with_name("vcsinstall.lock")
@@ -1543,7 +1654,9 @@ class TestInstallEntries:
         )
         mocker.patch.object(GitClient, "run", side_effect=AssertionError("unexpected Git access"))
 
-        code, records, output = invoke_install(config, tmp_path / "unused-cache", *(("--locked",) if locked else ()))
+        code, records, output = invoke_install(
+            config, tmp_path / "unused-cache", *(("--locked",) if locked else ()), *(("--force",) if force else ())
+        )
 
         assert code == 0, output
         assert all(record["outcome"] == "unchanged" for record in records)
@@ -1552,7 +1665,7 @@ class TestInstallEntries:
         assert (current.st_ino, current.st_mtime_ns) == (original.st_ino, original.st_mtime_ns)
         assert not (tmp_path / "unused-cache").exists()
 
-    def test_new_entries_and_restoration_use_existing_revision_without_refresh(
+    def test_new_entries_and_forced_restoration_use_existing_revision_without_refresh(
         self, config: Path, client: GitClient, tmp_path: Path
     ) -> None:
         cache = tmp_path / "cache"
@@ -1570,7 +1683,7 @@ class TestInstallEntries:
         (config.parent / "z-guide.txt").unlink()
         client.path.rename(tmp_path / "offline-source")
 
-        code, records, output = invoke_install(config, cache)
+        code, records, output = invoke_install(config, cache, "--force")
 
         assert code == 0, output
         assert all(record["revision"] == revision for record in records)
@@ -1595,7 +1708,7 @@ class TestInstallEntries:
         client.add(".").unwrap()
         client.commit("Advance source").unwrap()
 
-        code, records, output = invoke_install(config, cache, "--locked")
+        code, records, output = invoke_install(config, cache, "--locked", "--force")
 
         assert code == 0, output
         assert lockfile.read_bytes() == before
@@ -1620,8 +1733,9 @@ class TestInstallEntries:
             "reassigned",
         ],
     )
+    @pytest.mark.parametrize("force", [False, True])
     def test_locked_requires_a_complete_match_before_source_access(  # noqa: CCR001 — Independent stale-state cases.
-        self, config: Path, tmp_path: Path, mocker: MockerFixture, change: str
+        self, config: Path, tmp_path: Path, mocker: MockerFixture, change: str, force: bool
     ) -> None:
         assert invoke_install(config, tmp_path / "cache")[0] == 0
         lockfile = config.with_name("vcsinstall.lock")
@@ -1653,7 +1767,9 @@ class TestInstallEntries:
             "vcsinstall.runtime.installations.get_hosting", side_effect=AssertionError("unexpected acquisition")
         )
 
-        code, records, output = invoke_install(config, tmp_path / "unused-cache", "--locked")
+        code, records, output = invoke_install(
+            config, tmp_path / "unused-cache", "--locked", *(("--force",) if force else ())
+        )
 
         assert code == 3, output
         assert all(record["type"] == "error" for record in records)
@@ -1784,7 +1900,7 @@ class TestInstallEntries:
         (config.parent / "z-guide.txt").unlink()
         (config.parent / "a-docs/nested/b").unlink()
 
-        code, records, output = invoke_install(config, tmp_path / "cache", "--locked")
+        code, records, output = invoke_install(config, tmp_path / "cache", "--locked", "--force")
 
         assert code == 3, output
         assert any(
@@ -1914,7 +2030,7 @@ class TestInstallEntries:
         assert all(record["outcome"] == "unchanged" for record in records)
         (project / "guide").unlink()
 
-        code, records, output = invoke_install(config, cache, "--locked")
+        code, records, output = invoke_install(config, cache, "--locked", "--force")
 
         assert code == 3, output
         assert records[-1]["code"] == source_errors.RevisionMismatch.model_fields["code"].default
@@ -1956,7 +2072,7 @@ class TestInstallEntries:
         assert (tmp_path / "empty").exists() == existing
         assert not (tmp_path / "cache").exists()
 
-    def test_omitted_git_selector_preserves_the_inferred_branch_and_relative_locked_locator(
+    def test_forced_restoration_preserves_inferred_branch_and_relative_locked_locator(
         self, config: Path, client: GitClient, tmp_path: Path
     ) -> None:
         declaration = tomllib.loads(config.read_text())
@@ -1978,7 +2094,7 @@ class TestInstallEntries:
         client.commit("New default branch").unwrap()
         (config.parent / "z-guide.txt").unlink()
 
-        code, records, output = invoke_install(config, cache, "--locked")
+        code, records, output = invoke_install(config, cache, "--locked", "--force")
 
         assert code == 0, output
         assert lockfile.read_bytes() == before

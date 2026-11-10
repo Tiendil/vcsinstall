@@ -129,9 +129,13 @@ Install the complete configuration, including hand-written declarations:
 ```bash
 vcsinstall install
 vcsinstall install --locked
+vcsinstall install --force
+vcsinstall install --locked --force
 ```
 
-Install preserves matching dependency revisions, restores missing files, and resolves missing or changed dependency bindings. It prepares every entry before changing project files, protects local modifications and additions, and leaves configuration unchanged. Obsolete lock records are removed after success; content whose declaration was removed stays in place. Fully satisfied entries need no source access.
+Install preserves matching dependency revisions and resolves missing or changed dependency bindings. It prepares every entry before changing project files, protects local modifications, additions, and deletions, and leaves configuration unchanged. Each complete local entry must match its prior baseline or the selected source. Obsolete lock records are removed after success; content whose declaration was removed stays in place. Fully satisfied entries need no source access.
+
+`--force` permits full replacement of changed entry roots, including restoration of missing managed files. Use `install --locked --force` to reproduce an existing lockfile in a fresh checkout while preserving its bytes. Force retains source-integrity and containment validation and does not change revision selection.
 
 `--locked` requires an existing complete configuration match and preserves lockfile bytes. It can fetch missing immutable source content, so it does not imply offline execution. Filesystem sources retain no history: restoration fails if the live source no longer has the locked fingerprint. Put global `--cache-dir DIRECTORY` before `install` to override the Git cache root.
 
@@ -194,9 +198,12 @@ Update dependencies within their configured version selectors:
 ```bash
 vcsinstall dependency update
 vcsinstall dependency update ci formatting
+vcsinstall dependency update --force ci
 ```
 
-Update refreshes every entry of the selected dependencies and also locks dependencies without entries. It preserves configuration, restores missing files, and reflects upstream additions and deletions. Existing local files must collectively match their prior baseline or the selected source; conflicts anywhere in the selection stop preparation before files or locks change. Entries already matching the source stay untouched. Git dependencies with omitted selectors retain their recorded default branch, and revision pins remain pinned. Results report prior and selected revisions, with `updated` or `unchanged` outcomes.
+Update refreshes every entry of the selected dependencies and also locks dependencies without entries. It preserves configuration and reflects upstream additions and deletions. Each complete local entry must match its prior baseline or the selected source, including absent files; a local deletion conflicts when the selected source still contains that file. Conflicts anywhere in the selection stop preparation before files or locks change. Entries already matching the source stay untouched. Git dependencies with omitted selectors retain their recorded default branch, and revision pins remain pinned. Results report prior and selected revisions, with `updated` or `unchanged` outcomes.
+
+`--force` permits replacing local edits, additions, and deletions within the selected entry roots. Baseline, source-integrity, source-availability, and containment checks still apply. Use `install --force` to restore selected content from matching locked revisions rather than advance the dependencies.
 
 Publish local changes from one dependency:
 

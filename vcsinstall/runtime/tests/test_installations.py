@@ -152,7 +152,7 @@ class TestInstall:
         "selector",
         [None, make.selector("branch", "release"), make.selector("tag", "v1"), make.selector("revision", "old")],
     )
-    def test_restoration_preserves_binding_and_requests_locked_revision_without_refresh(
+    def test_forced_restoration_preserves_binding_and_requests_locked_revision_without_refresh(
         self,
         workspace: Workspace,
         hosting: ControlledHosting,
@@ -182,7 +182,7 @@ class TestInstall:
         mocker.patch("vcsinstall.runtime.installations.get_hosting", return_value=Ok(hosting))
 
         with workspace.scope():
-            install(locked=locked).unwrap()
+            install(locked=locked, force=True).unwrap()
 
         resolve.assert_not_called()
         assert hosting.requests == [(definition, SourceRevision("old"), False) for definition in definitions.values()]

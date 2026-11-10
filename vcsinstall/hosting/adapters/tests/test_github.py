@@ -384,7 +384,7 @@ class TestGitHubHostingAdapter:
             status, _, _ = invoke_dependency_update(config, cache, "ci")
         else:
             destination.unlink()
-            status, _, _ = invoke_install(config, cache, "--locked")
+            status, _, _ = invoke_install(config, cache, "--locked", "--force")
 
         assert status == 0 and not service.calls
         acquire.assert_called_once()

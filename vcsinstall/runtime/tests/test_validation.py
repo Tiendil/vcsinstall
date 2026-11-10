@@ -5,7 +5,7 @@ from llm_tool_cli.paths import ProjectPathId
 from vcsinstall.domain import ContentHash, DependencyName, SourceRevision
 from vcsinstall.domain.tests import make
 from vcsinstall.runtime import errors
-from vcsinstall.runtime.entities import LocalStatus
+from vcsinstall.runtime.entities import LocalContentPolicy, LocalStatus
 from vcsinstall.runtime.validation import (
     local_content_status,
     validate_entry_redefinition,
@@ -80,18 +80,18 @@ class TestValidateNoLocalContentConflicts:
     @pytest.mark.parametrize(
         "actual,valid",
         [
-            ({}, True),
+            ({}, False),
             ({"@/a": "old", "@/b": "old"}, True),
             ({"@/a": "new", "@/b": "new"}, True),
-            ({"@/a": "old"}, True),
-            ({"@/b": "new"}, True),
+            ({"@/a": "old"}, False),
+            ({"@/b": "new"}, False),
             ({"@/a": "old", "@/b": "new"}, False),
             ({"@/a": "local"}, False),
             ({"@/extra": "old"}, False),
             ({"@/": "obstruction"}, False),
         ],
     )
-    def test_complete_existing_content_scope(self, actual: dict[str, str], valid: bool) -> None:
+    def test_protects_complete_entry_content(self, actual: dict[str, str], valid: bool) -> None:
         previous = {ProjectPathId(path): ContentHash("old") for path in ("@/a", "@/b")}
         proposed = {ProjectPathId(path): ContentHash("new") for path in ("@/a", "@/b")}
         result = validate_no_local_content_conflicts(
@@ -99,10 +99,33 @@ class TestValidateNoLocalContentConflicts:
             proposed,
             files={ProjectPathId(path): ContentHash(value) for path, value in actual.items()},
             destination=ProjectPathId("@/installed"),
+            policy=LocalContentPolicy.protect,
         )
         assert result.is_ok() == valid
         if not valid:
             assert isinstance(result.unwrap_err()[0], errors.LocalConflict)
+
+    @pytest.mark.parametrize("proposed", [{}, {"@/a": "old"}])
+    def test_protect_accepts_deletions_already_in_selected_source(self, proposed: dict[str, str]) -> None:
+        selected = {ProjectPathId(path): ContentHash(value) for path, value in proposed.items()}
+
+        assert validate_no_local_content_conflicts(
+            {ProjectPathId(path): ContentHash("old") for path in ("@/a", "@/b")},
+            selected,
+            files=selected,
+            destination=ProjectPathId("@/installed"),
+            policy=LocalContentPolicy.protect,
+        ).is_ok()
+
+    @pytest.mark.parametrize("actual", [{}, {"@/a": "local"}, {"@/extra": "addition"}, {"@/": "file"}])
+    def test_overwrite_permits_replacing_local_changes(self, actual: dict[str, str]) -> None:
+        assert validate_no_local_content_conflicts(
+            {ProjectPathId("@/a"): ContentHash("old")},
+            {ProjectPathId("@/a"): ContentHash("new")},
+            files={ProjectPathId(path): ContentHash(value) for path, value in actual.items()},
+            destination=ProjectPathId("@/installed"),
+            policy=LocalContentPolicy.overwrite,
+        ).is_ok()
 
 
 class TestValidateFreshness:

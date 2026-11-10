@@ -424,7 +424,7 @@ class TestProjectCoordination:
                     pass
                 return super()._render(cells)
 
-        def operation(*, locked: bool) -> Result[None]:
+        def operation(*, locked: bool, force: bool) -> Result[None]:
             output.get().emit([operation_succeeded("Completed")]).unwrap()
             return Err([InvalidArguments(reason="Operation failed")]) if fail else Ok(None)
 

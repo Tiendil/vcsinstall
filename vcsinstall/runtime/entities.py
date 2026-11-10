@@ -18,6 +18,11 @@ class LocalStatus(StrEnum):
     unlocked = "unlocked"
 
 
+class LocalContentPolicy(StrEnum):
+    protect = "protect"
+    overwrite = "overwrite"
+
+
 class EntryPlan(BaseEntity):
     entry: Entry
     source: ContentTree

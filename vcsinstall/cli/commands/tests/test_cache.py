@@ -201,7 +201,7 @@ class TestClean:
         assert (client.path / "guide.txt").read_bytes() == b"new upstream revision"
         (project / "guide").unlink()
 
-        restored = runner.invoke(app, [*arguments, "install", "--locked"])
+        restored = runner.invoke(app, [*arguments, "install", "--locked", "--force"])
 
         assert restored.exit_code == 0, restored.output
         assert all(json.loads(line)["revision"] == revision for line in restored.stdout.splitlines())

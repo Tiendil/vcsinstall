@@ -19,7 +19,7 @@ from vcsinstall.runtime.commands import (
     _prepare_dependency_plan,
     _prepare_dependency_request,
 )
-from vcsinstall.runtime.entities import DependencyPlan, DependencyRequest
+from vcsinstall.runtime.entities import DependencyPlan, DependencyRequest, LocalContentPolicy
 from vcsinstall.sources import SourceAdapter, get_adapter
 from vcsinstall.workspace import (
     Workspace,
@@ -50,7 +50,7 @@ def _prepare_update_request(
 
 
 @unwrap_to_error
-def dependency_update(names: tuple[DependencyName, ...] = ()) -> Result[None]:
+def dependency_update(names: tuple[DependencyName, ...] = (), *, force: bool = False) -> Result[None]:
     """Refresh all selected dependencies, preparing every entry before any project write."""
     workspace = active_workspace.get()
     selected = sorted(set(names) if names else workspace.config.dependencies)
@@ -80,7 +80,13 @@ def dependency_update(names: tuple[DependencyName, ...] = ()) -> Result[None]:
             source = sources[name]
             resolved = source.resolve(definition, path).map_err(partial(_update_errors, name)).unwrap()
             plan = (
-                _prepare_dependency_plan(workspace, request, resolved, source=source)
+                _prepare_dependency_plan(
+                    workspace,
+                    request,
+                    resolved,
+                    source=source,
+                    content_policy=LocalContentPolicy.overwrite if force else LocalContentPolicy.protect,
+                )
                 .map_err(partial(_update_errors, name))
                 .unwrap()
             )

@@ -8,7 +8,7 @@ from llm_tool_cli.paths import ProjectPathId
 
 from vcsinstall.domain import ContentHash, DependencyName, SourceRevision, VersionSelector
 from vcsinstall.runtime import errors
-from vcsinstall.runtime.entities import LocalStatus
+from vcsinstall.runtime.entities import LocalContentPolicy, LocalStatus
 
 
 def validate_redefinition(name: DependencyName, *, exists: bool, redefine: bool) -> Result[None]:
@@ -84,14 +84,18 @@ def validate_no_local_content_conflicts(
     *,
     files: Mapping[ProjectPathId, ContentHash],
     destination: ProjectPathId,
+    policy: LocalContentPolicy,
 ) -> Result[None]:
-    """Require all existing local files to match either the old or proposed state.
+    """Protect local content under the operation's installation or update policy.
 
-    Example: old {a: old, b: old} and proposed {a: new, b: new} accept actual
-    {a: old} or {a: new, b: new}, but reject {a: old, b: new} and local additions.
-    Missing files may be restored; independent old/new edits are not merged.
+    Protect accepts old {a: old, b: old} or the complete proposed state, but
+    rejects actual {a: old} as a local deletion. Overwrite accepts any local
+    content; callers still validate baselines, sources, and paths.
     """
-    if not any(content_matches(expected, files=files) for expected in (previous, proposed)):
+    if policy == LocalContentPolicy.overwrite:
+        return Ok(None)
+
+    if files != previous and files != proposed:
         return Err([errors.LocalConflict(destination=destination)])
     return Ok(None)
 

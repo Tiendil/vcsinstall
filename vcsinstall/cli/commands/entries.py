@@ -10,6 +10,7 @@ from vcsinstall.cli.entities import (
     AllowOutdatedOption,
     DestinationArgument,
     EntryPathsArgument,
+    ForceOverwriteOption,
     ForceRemovalOption,
     KeepFilesOption,
     ListEntryPathsArgument,
@@ -77,7 +78,7 @@ def list_entries(context: typer.Context, entry_paths: ListEntryPathsArgument = N
         entry_list(destinations).unwrap()
 
 
-def install_entries(context: typer.Context, locked: LockedOption = False) -> None:
+def install_entries(context: typer.Context, locked: LockedOption = False, force: ForceOverwriteOption = False) -> None:
     """Install all declared entries, reusing matching dependency revisions."""
     with command_context(context) as command:
         cwd = Path.cwd()
@@ -95,4 +96,4 @@ def install_entries(context: typer.Context, locked: LockedOption = False) -> Non
                     for name in unsupported
                 ]
             ).unwrap()
-        install(locked=locked).unwrap()
+        install(locked=locked, force=force).unwrap()

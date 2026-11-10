@@ -12,6 +12,7 @@ from vcsinstall.cli.entities import (
     BranchOption,
     DependencyNameArgument,
     DependencyNamesArgument,
+    ForceOverwriteOption,
     RedefineOption,
     RepositoryArgument,
     RevisionOption,
@@ -182,10 +183,12 @@ def outdated_dependencies(context: typer.Context, names: DependencyNamesArgument
 
 
 @app.command("update")
-def update_dependencies(context: typer.Context, names: DependencyNamesArgument = None) -> None:
+def update_dependencies(
+    context: typer.Context, names: DependencyNamesArgument = None, force: ForceOverwriteOption = False
+) -> None:
     """Advance selected dependencies and refresh all their entries with local-change protection."""
     with command_context(context) as command:
         cwd = Path.cwd()
         context.with_resource(open_workspace(cwd=PathInput(cwd), path=command.config_input)).unwrap()
 
-        dependency_update(tuple(names or ())).unwrap()
+        dependency_update(tuple(names or ()), force=force).unwrap()

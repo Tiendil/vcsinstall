@@ -34,7 +34,7 @@ from vcsinstall.runtime.cells import (
     dependency_add_cells,
     entry_add_cell,
 )
-from vcsinstall.runtime.entities import DependencyPlan, DependencyRequest, EntryPlan, LocalStatus
+from vcsinstall.runtime.entities import DependencyPlan, DependencyRequest, EntryPlan, LocalContentPolicy, LocalStatus
 from vcsinstall.runtime.validation import (
     local_content_status,
     validate_entry_redefinition,
@@ -109,6 +109,7 @@ def _plan_entry(
     source: ContentTree,
     previous: InstallationBaseline | None,
     filesystem: FSClient,
+    content_policy: LocalContentPolicy,
     observed: ContentTree | None = None,
 ) -> Result[EntryPlan]:
     destination = entry.destination
@@ -121,6 +122,7 @@ def _plan_entry(
         source_hashes,
         files=observed.file_hashes,
         destination=destination,
+        policy=content_policy,
     ).unwrap()
     _validate_destination_parents(destination, filesystem=filesystem).unwrap()
 
@@ -145,7 +147,7 @@ def _plan_entry(
 
 
 @unwrap_to_error
-def _plan_entries(  # noqa: CCR001 — Share retained-entry reuse, source availability, and baseline preparation.
+def _plan_entries(  # noqa: CCR001, CFQ002 — Keep source facts and independent absence/content policies together.
     workspace: Workspace,
     request: DependencyRequest,
     *,
@@ -153,6 +155,7 @@ def _plan_entries(  # noqa: CCR001 — Share retained-entry reuse, source availa
     resolved: ResolvedSource | None,
     source: SourceAdapter,
     allow_absent: bool,
+    content_policy: LocalContentPolicy,
 ) -> Result[list[EntryPlan]]:
     plans = {plan.entry.destination: plan for plan in request.retained}
     filesystem = FSClient(root=workspace.project_root)
@@ -185,6 +188,7 @@ def _plan_entries(  # noqa: CCR001 — Share retained-entry reuse, source availa
             previous=previous,
             filesystem=filesystem,
             observed=request.observed.get(entry.destination),
+            content_policy=content_policy,
         ).unwrap()
     return Ok([plan for destination, plan in sorted(plans.items())])
 
@@ -265,6 +269,7 @@ def _prepare_dependency_plan(  # noqa: CCR001 — Keep source inspection and bas
     resolved: ResolvedSource | None,
     *,
     source: SourceAdapter,
+    content_policy: LocalContentPolicy,
     allow_absent: bool = True,
 ) -> Result[DependencyPlan]:
     """Prepare one shared lock and its entry changes without writing files or project records."""
@@ -284,6 +289,7 @@ def _prepare_dependency_plan(  # noqa: CCR001 — Keep source inspection and bas
         resolved=resolved,
         source=source,
         allow_absent=allow_absent,
+        content_policy=content_policy,
     ).unwrap()
     previous_lock = workspace.lockfile.dependencies.get(request.name) if workspace.lockfile else None
     lock = DependencyLock(**definition.model_dump(), revision=revision)
@@ -344,7 +350,9 @@ def dependency_add(  # noqa: CFQ002 — Explicit source intent and independently
     with hosting.acquire(dependency) as acquired:
         resolved = source.resolve(dependency, acquired.unwrap()).unwrap()
         request = DependencyRequest(name=name, definition=dependency)
-        plan = _prepare_dependency_plan(workspace, request, resolved, source=source).unwrap()
+        plan = _prepare_dependency_plan(
+            workspace, request, resolved, source=source, content_policy=LocalContentPolicy.protect
+        ).unwrap()
         config = workspace.config.with_dependency(name, resolved.dependency)
         lockfile = _lockfile_with_plans(workspace, [plan])
         serialized = serialize_workspace_changes(workspace, config, lockfile)
@@ -385,7 +393,9 @@ def _install_added_entry(
         )
     _validate_source_integrity(workspace, entry, tree, resolved=resolved, source=source).unwrap()
     filesystem = FSClient(root=workspace.project_root, readonly=False)
-    plan = _plan_entry(entry, source=tree, previous=previous, filesystem=filesystem).unwrap()
+    plan = _plan_entry(
+        entry, source=tree, previous=previous, filesystem=filesystem, content_policy=LocalContentPolicy.protect
+    ).unwrap()
     config = workspace.config.with_entry(entry)
     assert workspace.lockfile is not None
     lockfile = workspace.lockfile.with_baselines((plan.baseline,))
