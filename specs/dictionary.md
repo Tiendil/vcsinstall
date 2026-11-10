@@ -20,21 +20,20 @@ The following topics are out of scope:
 - `effective selector` — the source version selection used by an operation, including an inferred branch retained in a matching dependency lock.
 - `entry` — a mapping from a path within a dependency's source repository to a destination in the target project; each entry belongs to one dependency.
 - `installation baseline` — the recorded content state of an entry at its dependency's shared locked revision.
-- `file manifest` — the recorded set of selected files within a directory entry, with their literal relative paths and content hashes at one source state.
-- `managed file` — a file identified by an entry's recorded installation baseline.
-- `unmanaged content` — content in the target project outside the recorded file set, including additional files beneath a directory entry.
+- `file manifest` — the recorded set of selected files within a directory entry, with their canonical paths scoped to the entry root and content hashes at one source state.
+- `managed file` — a file within an entry's exclusively owned destination, including a local addition absent from its recorded baseline.
+- `unmanaged content` — content in the target project outside declared entry destinations.
 - `source backend` — the source kind defining repository identity, version semantics, revision resolution, and content extraction from an available repository view.
 - `repository view` — repository data and version metadata available for source inspection, using cached VCS data, a live directory, or controlled test fixtures.
-- `hosting adapter` — an integration providing repository acquisition, refresh, and supported change-delivery workflows for a compatible source backend; it may use native repository facilities or a hosting service.
+- `hosting adapter` — an integration providing repository acquisition and refresh for a compatible source backend.
 - `native repository locator` — the backend-native location or identifier for a source repository, without vcsinstall's version fragment.
 - `source repository` — the source content root accessed through a selected backend, including a VCS repository or an ordinary filesystem directory.
-- `publication repository` — the repository selected to receive a contribution, independently of the source used for installation and updates.
-- `review target` — the source repository and branch into which a hosted contribution requests integration.
-- `delivery mode` — the explicitly requested way to deliver or apply selected local changes.
+- `source path` — a canonical `@/` identifier selecting content within a dependency's source repository.
+- `dependency source reference` — a CLI `NAME@/PATH` reference combining a declared dependency name with a source path anchored at that dependency's repository root.
 - `target repository` — the repository receiving installed files.
 - `project configuration file` — `vcsinstall.toml`, the tool's configuration for a project.
 - `lockfile` — `vcsinstall.lock`, a record of shared dependency revisions, per-entry content identities, and directory file manifests used to reproduce an installation.
-- `push back` — transfer of local changes to installed files back to their source repository.
+- `synchronization` — mirroring complete locally changed entries into their source paths under an explicitly supplied local content root.
 - `protocol` — a CLI output contract selected by `--protocol`.
 - `human protocol` — output protocol optimized for terminal users.
 - `llm protocol` — output protocol optimized for coding agents invoking the tool.
@@ -42,4 +41,4 @@ The following topics are out of scope:
 - `expected error` — an operational failure handled through the project's diagnostic contract in `specs/architecture/errors.md`.
 - `warning` — a non-fatal problem discovered while processing a request.
 
-Installation, lockfile, and push-back terms describe the intended product scope; they do not prescribe command syntax or storage formats.
+Installation, lockfile, and synchronization terms describe the intended product scope; they do not prescribe command syntax or storage formats.

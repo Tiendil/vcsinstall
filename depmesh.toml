@@ -109,73 +109,16 @@ output = { type = "list", artifacts = [
   "./depmesh.toml",
 ] }
 
-# Module behavior governance covers Python code and selected fixture formats.
-# Core and domain retain the global architecture rules; add behavior scopes
-# for shared concepts when their implementations are introduced.
-
-# Project invariants and local content inspection follow the locking contract.
+# Filesystem code owns content inspection and filesystem effects.
 [[rules]]
 relation = "governed_by"
-input = { type = "any", items = [
-  { type = "glob", pattern = "./vcsinstall/project/**/*.py" },
-  { type = "glob", pattern = "./vcsinstall/filesystem/**/*.py" },
-] }
-output = { type = "list", artifacts = ["./specs/behavior/locking.md"] }
-
-[[rules]]
-relation = "governs"
-input = { type = "one_of", artifacts = ["./specs/behavior/locking.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/project/**/*.py" },
-  { type = "files", pattern = "./vcsinstall/filesystem/**/*.py" },
-] }
-
-# Shared file rules govern their consumers and the specifications adopting them.
-[[rules]]
-relation = "governed_by"
-input = { type = "any", items = [
-  { type = "glob", pattern = "./vcsinstall/project/**/*.py" },
-  { type = "glob", pattern = "./vcsinstall/filesystem/**/*.py" },
-  { type = "glob", pattern = "./vcsinstall/workspace/**/*.py" },
-  { type = "glob", pattern = "./vcsinstall/sources/**/*.py" },
-  { type = "glob", pattern = "./vcsinstall/hosting/**/*.py" },
-  { type = "glob", pattern = "./vcsinstall/cache/**/*.py" },
-  { type = "glob", pattern = "./vcsinstall/runtime/**/*.py" },
-  { type = "glob", pattern = "./specs/behavior/vcs/**/*.md" },
-  { type = "glob", pattern = "./specs/behavior/hosting/**/*.md" },
-  { type = "one_of", artifacts = [
-    "./specs/behavior/cache.md",
-    "./specs/behavior/cli.md",
-    "./specs/behavior/config.md",
-    "./specs/behavior/locking.md",
-    "./specs/behavior/lockfile.md",
-    "./specs/behavior/vcs-interaction.md",
-  ] },
-] }
+input = { type = "glob", pattern = "./vcsinstall/filesystem/**/*.py" }
 output = { type = "list", artifacts = ["./specs/behavior/files-and-directories.md"] }
 
 [[rules]]
 relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/files-and-directories.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/project/**/*.py" },
-  { type = "files", pattern = "./vcsinstall/filesystem/**/*.py" },
-  { type = "files", pattern = "./vcsinstall/workspace/**/*.py" },
-  { type = "files", pattern = "./vcsinstall/sources/**/*.py" },
-  { type = "files", pattern = "./vcsinstall/hosting/**/*.py" },
-  { type = "files", pattern = "./vcsinstall/cache/**/*.py" },
-  { type = "files", pattern = "./vcsinstall/runtime/**/*.py" },
-  { type = "files", pattern = "./specs/behavior/vcs/**/*.md" },
-  { type = "files", pattern = "./specs/behavior/hosting/**/*.md" },
-  { type = "list", artifacts = [
-    "./specs/behavior/cache.md",
-    "./specs/behavior/cli.md",
-    "./specs/behavior/config.md",
-    "./specs/behavior/locking.md",
-    "./specs/behavior/lockfile.md",
-    "./specs/behavior/vcs-interaction.md",
-  ] },
-] }
+output = { type = "files", pattern = "./vcsinstall/filesystem/**/*.py" }
 
 # Workspace code and fixtures implement the persisted project formats.
 [[rules]]
@@ -200,25 +143,24 @@ output = { type = "union", items = [
   { type = "files", pattern = "./vcsinstall/workspace/**/fixtures/**/*.toml" },
 ] }
 
-# Cache code follows the repository cache contract.
+# Repository-cache policy belongs to hosting's cache module.
 [[rules]]
 relation = "governed_by"
-input = { type = "glob", pattern = "./vcsinstall/cache/**/*.py" }
+input = { type = "one_of", artifacts = ["./vcsinstall/hosting/cache.py"] }
 output = { type = "list", artifacts = ["./specs/behavior/cache.md"] }
 
 [[rules]]
 relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/cache.md"] }
-output = { type = "files", pattern = "./vcsinstall/cache/**/*.py" }
+output = { type = "list", artifacts = ["./vcsinstall/hosting/cache.py"] }
 
-# Source and hosting code and specific specs follow the common contract.
+# Source, hosting, and VCS client code implement the common interaction boundary.
 [[rules]]
 relation = "governed_by"
 input = { type = "any", items = [
   { type = "glob", pattern = "./vcsinstall/sources/**/*.py" },
   { type = "glob", pattern = "./vcsinstall/hosting/**/*.py" },
-  { type = "glob", pattern = "./specs/behavior/vcs/**/*.md" },
-  { type = "glob", pattern = "./specs/behavior/hosting/**/*.md" },
+  { type = "glob", pattern = "./vcsinstall/vcs_clients/**/*.py" },
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/vcs-interaction.md"] }
 
@@ -228,8 +170,7 @@ input = { type = "one_of", artifacts = ["./specs/behavior/vcs-interaction.md"] }
 output = { type = "union", items = [
   { type = "files", pattern = "./vcsinstall/sources/**/*.py" },
   { type = "files", pattern = "./vcsinstall/hosting/**/*.py" },
-  { type = "files", pattern = "./specs/behavior/vcs/**/*.md" },
-  { type = "files", pattern = "./specs/behavior/hosting/**/*.md" },
+  { type = "files", pattern = "./vcsinstall/vcs_clients/**/*.py" },
 ] }
 
 # Runtime coordinates command outcomes and the project operation contracts.
@@ -239,10 +180,6 @@ input = { type = "glob", pattern = "./vcsinstall/runtime/**/*.py" }
 output = { type = "list", artifacts = [
   "./specs/behavior/cli.md",
   "./specs/behavior/locking.md",
-  "./specs/behavior/config.md",
-  "./specs/behavior/lockfile.md",
-  "./specs/behavior/cache.md",
-  "./specs/behavior/vcs-interaction.md",
 ] }
 
 [[rules]]
@@ -250,21 +187,17 @@ relation = "governs"
 input = { type = "one_of", artifacts = [
   "./specs/behavior/cli.md",
   "./specs/behavior/locking.md",
-  "./specs/behavior/config.md",
-  "./specs/behavior/lockfile.md",
-  "./specs/behavior/cache.md",
-  "./specs/behavior/vcs-interaction.md",
 ] }
 output = { type = "files", pattern = "./vcsinstall/runtime/**/*.py" }
 
-# Adapter-specific contracts govern the named implementation and its tests.
+# Adapter-specific contracts govern the named implementation.
 
-# The git source adapter follows its source contract.
+# The Git source adapter and native client follow Git object semantics.
 [[rules]]
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/sources/adapters/git.py",
-  "./vcsinstall/sources/adapters/tests/test_git.py",
+  "./vcsinstall/vcs_clients/git.py",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/vcs/git.md"] }
 
@@ -273,7 +206,7 @@ relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/vcs/git.md"] }
 output = { type = "union", items = [
   { type = "files", pattern = "./vcsinstall/sources/adapters/git.py" },
-  { type = "files", pattern = "./vcsinstall/sources/adapters/tests/test_git.py" },
+  { type = "files", pattern = "./vcsinstall/vcs_clients/git.py" },
 ] }
 
 # The filesystem source adapter follows its source contract.
@@ -281,44 +214,33 @@ output = { type = "union", items = [
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/sources/adapters/filesystem.py",
-  "./vcsinstall/sources/adapters/tests/test_filesystem.py",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/vcs/filesystem.md"] }
 
 [[rules]]
 relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/vcs/filesystem.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/sources/adapters/filesystem.py" },
-  { type = "files", pattern = "./vcsinstall/sources/adapters/tests/test_filesystem.py" },
-] }
+output = { type = "files", pattern = "./vcsinstall/sources/adapters/filesystem.py" }
 
 # The noop source adapter follows its source contract.
 [[rules]]
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/sources/adapters/noop.py",
-  "./vcsinstall/sources/adapters/tests/test_noop.py",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/vcs/noop.md"] }
 
 [[rules]]
 relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/vcs/noop.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/sources/adapters/noop.py" },
-  { type = "files", pattern = "./vcsinstall/sources/adapters/tests/test_noop.py" },
-] }
+output = { type = "files", pattern = "./vcsinstall/sources/adapters/noop.py" }
 
-# Native Git hosting also governs GitHub's delegated Git integration.
+# Native Git hosting and its client implement Git acquisition.
 [[rules]]
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/hosting/adapters/git.py",
-  "./vcsinstall/hosting/adapters/tests/test_git.py",
-  "./vcsinstall/hosting/adapters/github.py",
-  "./vcsinstall/hosting/adapters/tests/test_github.py",
-  "./specs/behavior/hosting/github.md",
+  "./vcsinstall/vcs_clients/git.py",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/hosting/git.md"] }
 
@@ -327,27 +249,7 @@ relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/hosting/git.md"] }
 output = { type = "union", items = [
   { type = "files", pattern = "./vcsinstall/hosting/adapters/git.py" },
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/tests/test_git.py" },
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/github.py" },
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/tests/test_github.py" },
-  { type = "files", pattern = "./specs/behavior/hosting/github.md" },
-] }
-
-# The github hosting adapter follows its hosting contract.
-[[rules]]
-relation = "governed_by"
-input = { type = "one_of", artifacts = [
-  "./vcsinstall/hosting/adapters/github.py",
-  "./vcsinstall/hosting/adapters/tests/test_github.py",
-] }
-output = { type = "list", artifacts = ["./specs/behavior/hosting/github.md"] }
-
-[[rules]]
-relation = "governs"
-input = { type = "one_of", artifacts = ["./specs/behavior/hosting/github.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/github.py" },
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/tests/test_github.py" },
+  { type = "files", pattern = "./vcsinstall/vcs_clients/git.py" },
 ] }
 
 # The filesystem hosting adapter follows its hosting contract.
@@ -355,34 +257,26 @@ output = { type = "union", items = [
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/hosting/adapters/filesystem.py",
-  "./vcsinstall/hosting/adapters/tests/test_filesystem.py",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/hosting/filesystem.md"] }
 
 [[rules]]
 relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/hosting/filesystem.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/filesystem.py" },
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/tests/test_filesystem.py" },
-] }
+output = { type = "files", pattern = "./vcsinstall/hosting/adapters/filesystem.py" }
 
 # The noop hosting adapter follows its hosting contract.
 [[rules]]
 relation = "governed_by"
 input = { type = "one_of", artifacts = [
   "./vcsinstall/hosting/adapters/noop.py",
-  "./vcsinstall/hosting/adapters/tests/test_noop.py",
 ] }
 output = { type = "list", artifacts = ["./specs/behavior/hosting/noop.md"] }
 
 [[rules]]
 relation = "governs"
 input = { type = "one_of", artifacts = ["./specs/behavior/hosting/noop.md"] }
-output = { type = "union", items = [
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/noop.py" },
-  { type = "files", pattern = "./vcsinstall/hosting/adapters/tests/test_noop.py" },
-] }
+output = { type = "files", pattern = "./vcsinstall/hosting/adapters/noop.py" }
 
 # CLI and skill-facing code is governed by the CLI behavior spec.
 [[rules]]

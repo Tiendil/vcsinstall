@@ -79,12 +79,15 @@ Entities SHOULD inherit it unless direct Pydantic use has a specific reason, suc
 
 Shared defaults SHOULD:
 
-- strip surrounding string whitespace.
 - validate defaults.
 - reject unknown fields.
 - prefer immutable values.
 - validate assignment when mutation is enabled.
 - avoid attribute-based construction unless a boundary needs it.
+
+String fields MUST use the shared base's stripping of leading and trailing whitespace, including spaces, before field validation unless their owning behavior contract explicitly requires literal whitespace preservation.
+Whitespace inside the remaining string MUST stay unchanged.
+File-path fields MUST follow Path-string normalization in `specs/behavior/files-and-directories.md`; selector values MUST follow whitespace stripping under Version selection in `specs/behavior/config.md`.
 
 Entities SHOULD use Pydantic fields/validators for:
 
@@ -138,6 +141,9 @@ Runtime constructors and validators SHOULD remain preferred for untrusted primit
 ## Entity ownership
 
 Reusable entity infrastructure MUST belong to `llm_tool_cli.core`.
+Version selection MUST use one optional data entity combining an enumerated kind and a nonempty literal value rather than parallel branch, tag, and revision attributes.
+The shared selector model and its kind enum MUST belong to `domain` and be reused by dependency declarations, parsed source requests, and dependency locks.
+An omitted selector MUST use `None`; unresolved input MUST use a distinct kind rather than a separate reference field.
 Entity ownership MUST follow the module responsibilities in `specs/architecture/modules_layout.md`.
 Crossing a module boundary MUST NOT by itself move an entity to `domain`.
 Public cross-module entity classes MUST be exported from, and imported through, the owning top-level package root.
@@ -146,6 +152,8 @@ Re-exports MUST keep the defining owner clear.
 ## Configuration entities
 
 Configuration and lockfile entities MAY validate parsed TOML shape or reference validated project and universal domain entities.
+They SHOULD reuse shared pure value entities rather than redeclare the same data for storage.
+Configuration and lockfile entry destinations MUST reuse the same validated canonical project-path value type.
 They SHOULD reject malformed input with Pydantic before lower layers and MUST preserve useful error context.
 Workspace conversion MUST follow Project state and operations in `specs/architecture/modules_layout.md`.
 
@@ -157,7 +165,7 @@ Normalized or validated ids/paths SHOULD use semantic types from their owning mo
 ## Command results
 
 Logic cells MUST be the primary successful runtime-to-CLI interface.
-Command-facing runtime operations MUST assemble complete result payloads and MAY submit cells to the scoped emitter provided by `llm_tool_cli`, returning `Result[None]` when no other result is useful.
+Command-facing runtime operations MUST assemble complete result payloads and MAY submit cells to the scoped emitter provided by `llm_tool_cli`.
 Reusable computations MAY return typed values, including cells and ordered collections; internal model, workspace, and adapter operations MAY retain ordinary entities.
 Cells MAY hold typed projection data, but the CLI MUST NOT inspect it or assemble domain payloads.
 

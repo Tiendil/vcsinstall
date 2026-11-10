@@ -59,22 +59,21 @@ Helpful lower-level subsections MAY appear; deep implementation details SHOULD b
 
 ### Purpose and status
 
-The README MUST explain that vcsinstall's intended purpose is installing files into a target repository from source repositories, with a lockfile and support for pushing local changes back to their source.
+The README MUST explain that vcsinstall's intended purpose is installing files into a target repository from source repositories, with a lockfile and support for synchronizing local changes into a source checkout.
 The rationale SHOULD explain why tracking the source of copied files and preserving a path for returning local changes are useful.
 It MUST NOT imply support for particular version-control systems, source hosts, or synchronization policies without corresponding behavior specifications.
-
-The scaffold's help, version output, and packaged usage documentation MUST be described as the current available interface while product operations remain unimplemented.
 
 ### Examples and quick usage
 
 The `Example` section MUST demonstrate a currently available command.
-While only the scaffold is available, it SHOULD use `vcsinstall version` as a short executable example.
+The example SHOULD be short and explain any project state or source access it requires.
 
 `Quick Usage` MUST illustrate:
 
 - `vcsinstall --help`.
 - `vcsinstall version`.
 - `vcsinstall skill usage`.
+- `vcsinstall cache clean`, once available.
 
 It MUST mention that `python -m vcsinstall` exposes the same CLI.
 It MUST explain the audiences for `human`, `llm`, and `automation` protocols, command-specific defaults, and placement of global options before subcommands.
@@ -93,9 +92,17 @@ Before a published package is available, it MUST show installation from a local 
 PyPI installation examples MUST be included only when a published distribution is available.
 Installation examples MUST make clear whether commands run on the host or through the Docker development environment.
 
-The `Configuration` section MUST explain that the currently available utility commands work without project configuration.
+The `Configuration` section MUST distinguish configuration-independent commands from commands that load or initialize a project under Application identity and project files in `specs/behavior/cli.md`.
 It MUST identify the project configuration and lockfile filenames under `specs/behavior/config.md` and `specs/behavior/lockfile.md`, linking to those owning contracts when describing implemented project configuration.
 Initialization guidance MUST follow `specs/behavior/cli.md` and its implementation status.
+
+### Local storage and coordination
+
+For implemented cache cleanup, the README MUST explain cache selection, project independence, and preservation of unrelated data under `specs/behavior/cache.md`.
+For implemented project coordination, it MUST explain the lock's scope and waiting behavior under Project operation locking in `specs/behavior/cli.md`.
+It MUST distinguish disposable cache data from persistent coordination files and the project's dependency lockfile.
+It MUST clarify that changing or cleaning the cache does not change the project coordination location and that retained coordination files do not indicate a held lock.
+Internal storage layouts and identity encodings SHOULD remain outside the README.
 
 ### Specifications and development
 

@@ -1,8 +1,8 @@
 # vcsinstall
 
-`vcsinstall` is being developed to install files into a target repository from source repositories, record their origins in a lockfile, and push local changes back to their source.
+`vcsinstall` is being developed to install files into a target repository from source repositories, record their origins in a lockfile, and synchronize local changes into a source checkout.
 
-**Development status:** initial scaffold. Help, version output, and built-in usage documentation work today. File installation, lockfile management, and push back are planned.
+**Development status:** Dependency declaration, locking, installation, inspection, updates, removal, and cache cleanup are implemented. `dependency sync-to` mirrors changed entries into a supplied local source directory. Help, version output, and built-in usage documentation are available.
 
 ## Example
 
@@ -19,20 +19,27 @@ This prints the installed package version using the default human output protoco
 Available today:
 
 - **CLI scaffold** — help, package version output, and built-in usage documentation.
+- **Project configuration** — create a starter with `init`, discover or explicitly select configuration, and validate configuration and existing lock state.
+- **Dependency locking** — add Git or filesystem sources, select branches, tags, or immutable revisions, and explicitly redefine dependencies while protecting local edits.
+- **Dependency inspection** — list declared sources, effective selectors, locked revisions, and counts of modified, missing, and unlocked entries without source or cache access.
+- **Source freshness** — check all or named dependencies for differing locked and current revisions without changing project files or installed content.
+- **Dependency updates** — advance all or named dependencies within their configured selectors and refresh every entry together while protecting local changes.
+- **Dependency removal** — remove unused dependency declarations, revision locks, and obsolete baselines while preserving installed files.
+- **Entry installation** — install files or complete directories from a dependency's locked revision, rename destinations, and explicitly redefine entries with local-change protection.
+- **Project installation** — reproduce declared entries with `install`, establish missing dependency locks, and use `install --locked` to require matching records without changing lockfile bytes.
+- **Entry inspection** — list all or selected entry roots with their owning dependency, locked revision, and local status without source or cache access.
+- **Entry removal** — remove selected entries and verified content, explicitly discard local changes with `--force`, or retain files with `--keep-files`.
+- **Cache cleanup** — clear owned shared repository data while preserving project files, original sources, and unrelated cache contents.
+- **Local synchronization** — return complete changed entry trees to a source checkout while protecting recipient changes and retaining installation baselines.
+- **Source detection** — recognize Git repositories before ordinary directories, probe unqualified remote URLs, and honor explicit backend choices.
 - **Output protocols** — human output, framed output for coding agents, and JSON Lines for programs.
 - **Python entry point** — the same commands through `vcsinstall` and `python -m vcsinstall`.
-
-Planned:
-
-- **File installation** — install files from source repositories into a target repository.
-- **Lockfile** — record source revisions and installed files to reproduce an installation.
-- **Push back** — transfer local changes to installed files back to their source repository.
 
 ## Rationale
 
 Files shared between repositories can accumulate local edits while their sources continue to change. Keeping their origins and revisions recorded makes it easier to reproduce an installation. Returning useful local changes to the source lets other repositories benefit from them too.
 
-Vcsinstall aims to support that workflow. Its product commands are still to be implemented.
+vcsinstall is building that workflow incrementally, starting with dependency declaration and locking.
 
 ## Quick Usage
 
@@ -42,6 +49,7 @@ With the package installed on your host:
 vcsinstall --help
 vcsinstall version
 vcsinstall skill usage
+vcsinstall cache clean
 ```
 
 `python -m vcsinstall` exposes the same CLI when the package is installed in that Python environment.
@@ -59,6 +67,8 @@ vcsinstall -p automation version
 ```
 
 See the [CLI specification](specs/behavior/cli.md) for command details. `vcsinstall skill usage` prints the packaged usage guide; its documentation requirements are in the [skill fixture specification](specs/behavior/skill_fixtures.md).
+
+`vcsinstall cache clean` works outside a project. To select another cache, put the global option first: `vcsinstall --cache-dir ./temporary-cache cache clean`. Cleanup takes the shared cache lock and preserves installed content, project records, original sources, and unrelated files. Missing or empty caches succeed without confirmation. See the [cache contract](specs/behavior/cache.md).
 
 ## Installation
 
@@ -80,10 +90,131 @@ For container development, follow [Development](#development).
 
 ## Configuration
 
-The available help, version, and skill commands work without project configuration. The shared `--config` option is accepted, but these commands do not load a project configuration file.
+The available help, version, skill, and cache cleanup commands work without project configuration. The shared `--config` option is accepted, but these commands do not load a project configuration file.
 
-The default project configuration filename is `vcsinstall.toml`; the lockfile filename is `vcsinstall.lock`.
-The configuration schema and lockfile format are still to be defined.
+Command setup selects the cache path from `--cache-dir` or the platform default. Selecting this path does not create cache directories or acquire cache locks; commands access cache storage only when needed.
+
+Create a starter [configuration](specs/behavior/config.md) in the current directory:
+
+```bash
+vcsinstall init
+vcsinstall --config project/custom.toml init
+```
+
+The parent directory must already exist. Init refuses to overwrite an existing file and creates no lockfile.
+
+Project commands, including initialization and inspection, hold one exclusive operation lock from before loading or creating project files through completion. Another command using the same project and user state directory waits up to 10 seconds, then reports a lock timeout. Coordination files live under the platform's user state directory, independently of `--cache-dir`, and remain after release; their existence does not mean a lock is held. These files coordinate processes and are separate from the project's dependency lockfile. Cache cleanup preserves them. This coordinates vcsinstall commands sharing that location; edits by other tools remain outside the guarantee. See the [project coordination contract](specs/behavior/cli.md#project-operation-locking) for location and failure details.
+
+Declare and lock a source dependency:
+
+```bash
+vcsinstall dependency add ci 'git+https://example.com/team/shared.git#branch=main'
+vcsinstall dependency add local-guides file:///home/user/shared-guides
+vcsinstall dependency add --redefine ci 'git+https://example.com/team/shared.git#tag=v2.0'
+```
+
+Install entries from a locked dependency:
+
+```bash
+vcsinstall add ci@/specs @/specs/shared
+vcsinstall add ci@/LICENSE @/licenses/shared.txt
+vcsinstall add --redefine ci@/guides @/docs/shared
+vcsinstall add --allow-outdated ci@/examples @/examples/shared
+```
+
+`NAME@/PATH` selects a file or directory within a declared dependency; `NAME@/` selects its repository root. The destination is the exact final path, using `@/` project identifiers or contained filesystem paths relative to the invocation directory. Add requires a matching dependency lock and preserves its revision. It checks the current source selector before installation and requires `--allow-outdated` when that selector has moved. This permission still requires a successful freshness check and availability of the locked content. An existing entry destination requires `--redefine`, including an identical mapping; redefinition preserves local-content protection and can change the owning dependency.
+
+Install the complete configuration, including hand-written declarations:
+
+```bash
+vcsinstall install
+vcsinstall install --locked
+vcsinstall install --force
+vcsinstall install --locked --force
+```
+
+Install preserves matching dependency revisions and resolves missing or changed dependency bindings. It prepares every entry before changing project files, protects local modifications, additions, and deletions, and leaves configuration unchanged. Each complete local entry must match its prior baseline or the selected source. Obsolete lock records are removed after success; content whose declaration was removed stays in place. Fully satisfied entries need no source access.
+
+`--force` permits full replacement of changed entry roots, including restoration of missing managed files. Use `install --locked --force` to reproduce an existing lockfile in a fresh checkout while preserving its bytes. Force retains source-integrity and containment validation and does not change revision selection.
+
+`--locked` requires an existing complete configuration match and preserves lockfile bytes. It can fetch missing immutable source content, so it does not imply offline execution. Filesystem sources retain no history: restoration fails if the live source no longer has the locked fingerprint. Put global `--cache-dir DIRECTORY` before `install` to override the Git cache root.
+
+Remove declared entry roots:
+
+```bash
+vcsinstall remove @/specs/shared @/licenses/shared.txt
+vcsinstall remove --keep-files @/docs/shared
+vcsinstall remove --force @/examples/shared
+```
+
+Removal checks every selected entry before changing files. Modified or unverified existing content requires `--force` for deletion. `--keep-files` preserves all content as unmanaged project files and takes precedence over `--force`. Missing installed content does not prevent removal. Dependency declarations and their shared revision locks remain, including after their last entry is removed. Removal needs no source access, Git client, or repository cache.
+
+Remove an unused dependency after removing or reassigning its entries:
+
+```bash
+vcsinstall dependency remove ci
+```
+
+Dependency removal deletes its declaration, shared revision lock, and obsolete entry baselines. It preserves installed content and unrelated records, works with missing lock state, and requires no source or cache access. A baseline still protecting a reassigned entry must be reconciled before removing its old dependency.
+
+Without `--config`, loading discovers the nearest `vcsinstall.toml` in the current directory or its parents. An explicit path overrides discovery. The selected configuration's parent is the project root, and its fixed sibling `vcsinstall.lock` is the [lockfile](specs/behavior/lockfile.md). A missing lockfile is allowed; an invalid existing lockfile fails validation. Loading changes neither file and does not access sources or installed contents.
+
+Dependency add requires existing configuration and writes both the declaration and its resolved revision. It creates no entry mappings. Git repositories share a per-user cache; global `--cache-dir DIRECTORY` selects another cache root. Dependency add resolves the cache root for every backend. Filesystem sources use their live directory and do not create cache data.
+
+When redefining a dependency with entries, each entry owns its entire destination tree. Extra local files count as local changes and can block replacement. After validation, changed entries are removed and recopied in full; entries already matching the source stay untouched. Keep generated and unrelated files outside these destinations.
+
+Configuration and locks store version selection as a kind/value object, for example `selector = { kind = "branch", value = "main" }`. The lock's separate `revision` records the resolved immutable content ID.
+
+Inspect declared dependencies and local entry statistics:
+
+```bash
+vcsinstall dependency list
+vcsinstall -p automation dependency list
+```
+
+Each dependency reports its repository, effective selector, matching locked revision, and `entries`, `modified`, `missing`, and `unlocked` counts. File and directory mappings each count as one entry. Dependencies without entries report zero counts. Missing or mismatching lock state produces a null revision and unlocked entries; malformed state fails. Listing preserves project files and installed content, requires no source access, VCS client, or cache, and does not check upstream freshness.
+
+Inspect all declared entries or select specific destination roots:
+
+```bash
+vcsinstall list
+vcsinstall list @/specs/shared
+vcsinstall -p automation list
+```
+
+Each entry reports its dependency, source mapping, matching revision, and local status: `unmodified`, `modified`, `missing`, or `unlocked`. Missing or mismatching locks or baselines produce a null revision. Directory entries include local additions when checking for changes. Explicit paths accept `@/` identifiers or contained filesystem paths and select exact entry roots, including absent destinations. Listing preserves project files and installed content and requires no source repository, VCS client, or cache. See the [CLI contract](specs/behavior/cli.md) or `vcsinstall skill usage` for details.
+
+Check whether configured source versions have moved:
+
+```bash
+vcsinstall dependency outdated
+vcsinstall dependency outdated ci formatting
+```
+
+The command checks all dependencies or the named selection, including dependencies without entries. It requires matching revision locks before accessing sources, refreshes branch and tag observations, and compares complete revisions. Immutable pins keep selecting their pinned revision; filesystem sources track their complete live fingerprint. Only outdated dependencies produce records, with `revision` and `current_revision`; finding changes still exits successfully. The check preserves configuration, lockfile bytes, and installed files, and does not verify local changes or promise that an update will succeed. It resolves the global cache location and may populate or refresh Git cache data.
+
+Update dependencies within their configured version selectors:
+
+```bash
+vcsinstall dependency update
+vcsinstall dependency update ci formatting
+vcsinstall dependency update --force ci
+```
+
+Update refreshes every entry of the selected dependencies and also locks dependencies without entries. It preserves configuration and reflects upstream additions and deletions. Each complete local entry must match its prior baseline or the selected source, including absent files; a local deletion conflicts when the selected source still contains that file. Conflicts anywhere in the selection stop preparation before files or locks change. Entries already matching the source stay untouched. Git dependencies with omitted selectors retain their recorded default branch, and revision pins remain pinned. Results report prior and selected revisions, with `updated` or `unchanged` outcomes.
+
+`--force` permits replacing local edits, additions, and deletions within the selected entry roots. Baseline, source-integrity, source-availability, and containment checks still apply. Use `install --force` to restore selected content from matching locked revisions rather than advance the dependencies.
+
+Return local changes to a source checkout:
+
+```bash
+vcsinstall dependency sync-to ci ../shared-checkout
+vcsinstall dependency sync-to --force ci ../shared-checkout
+```
+
+Sync-to selects every changed entry of the named dependency and mirrors its complete content to the original source paths beneath the supplied directory, including additions and deletions. The recipient must match the installation baseline or already match the local content; `--force` permits replacing conflicting recipient content. Unrelated paths and Git administrative data are preserved.
+
+Review, commit, and publish changes in the source checkout using your usual tools. Sync-to preserves project configuration, lockfile bytes, baselines, and installed content, so local changes remain visible. Once the configured source contains those same changes, `dependency update ci` acknowledges them without force. Use `dependency update --force ci` when you want to replace divergent local content. See `vcsinstall skill usage` and the [CLI contract](specs/behavior/cli.md) for details.
 
 ## Specifications
 
@@ -113,10 +244,10 @@ The image installs dependencies from `uv.lock` and matches the host user's UID a
 
 ### Project tools
 
-[Donna](https://github.com/Tiendil/donna) runs deterministic development workflows. Its local configuration is [donna.toml](donna.toml). Run the complete polishing workflow to format the code and check architecture, spelling, lint, types, and tests:
+[Donna](https://github.com/Tiendil/donna) runs deterministic development workflows. Its local configuration is [donna.toml](donna.toml). Run the host-installed Donna executable to format the code and check architecture, spelling, lint, types, and tests through the container helpers:
 
 ```bash
-./bin/dev.sh uv run -- donna -p llm run @/workflows/polish.donna.md
+donna -p llm run @/workflows/polish.donna.md
 ```
 
 [Depmesh](https://github.com/Tiendil/depmesh) discovers relationships between project artifacts. [depmesh.toml](depmesh.toml) connects code with its specifications, tests, imports, and callers.
@@ -125,9 +256,9 @@ Keep task-local temporary files under the ignored `.session/` directory, followi
 
 ### Shared CLI library
 
-[llm-tool-cli](https://github.com/Tiendil/llm-tool-cli) provides the reusable CLI foundations used by Vcsinstall, Donna, and Depmesh. The default setup uses its published distribution.
+[llm-tool-cli](https://github.com/Tiendil/llm-tool-cli) provides the reusable CLI foundations used by Vcsinstall, Donna, and Depmesh. The project uses the released library version pinned in [pyproject.toml](pyproject.toml).
 
-To develop with the sibling `../llm-tool-cli` checkout, uncomment the matching local-source settings in [pyproject.toml](pyproject.toml), [docker-compose.yml](docker-compose.yml), and [docker/Dockerfile](docker/Dockerfile). Then update the lockfile and rebuild the development image together:
+To develop against the sibling `../llm-tool-cli` checkout, uncomment its source in [pyproject.toml](pyproject.toml), build context and read-only mount in [docker-compose.yml](docker-compose.yml), and `COPY` in [docker/Dockerfile](docker/Dockerfile). After changing the dependency setup, update the lockfile and rebuild the development image together:
 
 ```bash
 ./bin/dev.sh uv lock

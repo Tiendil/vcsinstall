@@ -25,6 +25,13 @@ Technical identifiers MUST retain their specified spelling; the tool label for p
 Names SHOULD describe their project concept and owning module's responsibility, remain unambiguous across modules, and prefer precise project terms over generic names or confusing Python/framework terminology.
 Public names SHOULD remain stable unless their concept changes.
 
+## Variables and parameters
+
+Variable and parameter names SHOULD identify the concept they represent, including a role or state qualifier when needed to distinguish related values.
+Names MUST NOT consist solely of qualifiers such as `previous`, `current`, or `declared` when the represented concept would be ambiguous in the local context.
+
+**Example:** A function handling entry declarations and installation state should use names such as `existing_entry`, `previous_baseline`, and `dependency_lock`.
+
 ## Type names
 
 Class, enum, and type-alias names SHOULD be singular when instances or members represent one concept; plurals SHOULD identify only collections or registries.

@@ -13,13 +13,13 @@ The following are out of scope:
 - content-hash computation and installation-baseline transitions.
 - cache layout and synchronization mechanisms.
 - implementing Git protocols.
-- repository acquisition, refresh, and contribution workflows.
+- repository acquisition, refresh, and local synchronization.
 
 ## Backend and repository identity
 
 The backend name MUST be `git`.
 The common contract MUST follow `specs/behavior/vcs-interaction.md`.
-Repository acquisition, refresh, and outgoing changes MUST follow `specs/behavior/hosting/git.md` or `specs/behavior/hosting/github.md` for the selected hosting implementation.
+Repository acquisition and refresh MUST follow `specs/behavior/hosting/git.md`.
 Repository locators MUST support native Git URLs, local paths, and scp-style addresses under Repository locators and identity in `specs/behavior/vcs-interaction.md`.
 Configured locators MUST retain Git's native form under `specs/behavior/config.md`.
 
@@ -30,6 +30,8 @@ Source inspection MUST use supplied local Git data and reference metadata under 
 
 A local Git source MUST provide committed repository content; local working-tree and index changes MUST NOT be included.
 Original-repository preservation MUST follow Native client execution in `specs/behavior/vcs-interaction.md`.
+Local detection under Repository detection in that specification MUST recognize ordinary repository roots, bare repositories, and working trees whose Git metadata is referenced by a gitfile.
+An ordinary subdirectory of a repository MUST NOT be recognized as the enclosing repository's root.
 
 ## Version selectors
 
@@ -76,6 +78,7 @@ Revision consistency across entries MUST follow Version resolution and anchoring
 The content root MUST be the committed tree, excluding Git administrative data belonging to the original repository or cache.
 Ordinary and executable Git blobs MUST extract as regular files, and trees MUST extract as directories.
 File membership MUST come from the requested commit under Source file selection in `specs/behavior/files-and-directories.md`.
+Inspected file-path strings MUST apply surrounding-whitespace stripping under Path-string normalization in that specification.
 Empty-tree materialization MUST follow Directories in that specification.
 Committed executable-file metadata SHOULD be preserved where the destination filesystem supports it; local permission-only changes MUST remain outside Content identity in `specs/behavior/files-and-directories.md`.
 

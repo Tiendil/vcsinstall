@@ -1,15 +1,14 @@
-# Noop test sources
+# Noop sources
 
 ## Goal of the document
 
-This document describes a deterministic source backend for testing backend-independent behavior without native VCS clients or real publication.
+This document describes a deterministic source backend for controlled repository views without native VCS clients.
 
 ## Scope
 
-This specification covers version resolution and extraction from controlled repository views, including injected read failures at the test-source boundary.
+This specification covers declaration validation, version resolution, and extraction from controlled repository views, including injected read failures at the source boundary.
 The following are out of scope:
 
-- production source installation through this backend.
 - native VCS protocol, authentication, or real hosting-provider behavior.
 - concrete Python test-double interfaces or fixture storage formats.
 - native-client integration-test coverage.
@@ -17,9 +16,9 @@ The following are out of scope:
 ## Availability and identity
 
 The backend name MUST be `noop`.
-Test-only availability and the common source contract MUST follow `specs/behavior/vcs-interaction.md`.
+Availability and the common source contract MUST follow Backend selection and capabilities in `specs/behavior/vcs-interaction.md`.
 
-The native repository locator MUST be a nonempty fixture identifier whose spelling and case remain literal.
+The native repository locator MUST be a nonempty fixture identifier after surrounding-whitespace stripping under Repository locators and identity in `specs/behavior/vcs-interaction.md`; its remaining spelling and case MUST stay literal.
 It MUST NOT implicitly access a filesystem location or network address.
 Different fixture identifiers MUST remain isolated, and independent tests MUST NOT inherit mutable fixture state accidentally.
 
@@ -29,6 +28,9 @@ Ordinary project effects performed by the operation being tested MUST still foll
 Source and hosting responsibilities MUST follow the adapter boundaries in `specs/architecture/modules_layout.md`.
 
 ## Controlled revisions
+
+Declaration and lockfile validation MUST treat selector and revision strings as opaque nonempty identifiers and MUST NOT consult fixture state.
+Modeled revision strings MUST strip surrounding whitespace before nonempty validation; selector values MUST adopt the same stripping under Version selection in `specs/behavior/config.md`.
 
 A source fixture MUST supply an available repository view with immutable content states identified by complete nonempty revision identifiers.
 Identifiers MUST be opaque fixture values; noop MUST NOT require Git-shaped hexadecimal hashes or invent source state for an unknown identifier.
@@ -47,7 +49,8 @@ Fixture changes MUST NOT advance project locks or installation baselines except 
 ## Source content
 
 A revision MUST expose a repository-relative tree of files, directories, and absent paths.
-Files MUST retain exact supplied bytes, including binary content, and paths MUST retain literal names.
+Files MUST retain exact supplied bytes, including binary content.
+File-path strings MUST apply surrounding-whitespace stripping under Path-string normalization in `specs/behavior/files-and-directories.md`, preserving the remaining literal names.
 Fixtures MAY expose empty directories so tests can verify the structural-directory equivalence in Directories in `specs/behavior/files-and-directories.md`.
 The content root MUST be the fixture revision's root directory.
 An unknown path at an available revision MUST be reported as absent; an unavailable revision MUST remain a retrieval failure.
@@ -60,9 +63,9 @@ The test fixture mechanism MAY model such failures without prescribing a concret
 
 ## Hosting composition
 
-Acquisition, refresh, and outgoing simulations MUST follow `specs/behavior/hosting/noop.md` and MUST be supplied independently.
+Acquisition and refresh simulations MUST follow `specs/behavior/hosting/noop.md` and MUST be supplied independently.
 Source inspection MUST interpret the supplied view without simulating acquisition, refreshing references, or inventing source access.
-Source and hosting fixture repository state MAY be shared explicitly by a test; simulated delivery MUST NOT change a separately supplied source fixture implicitly.
+Source and hosting fixture repository state MAY be shared explicitly by a test; simulated refresh MUST NOT change a separately supplied source fixture implicitly.
 
 ## Failures and determinism
 

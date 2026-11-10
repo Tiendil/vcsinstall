@@ -29,7 +29,7 @@ Usage MUST describe the implemented interface under `specs/behavior/cli.md`, inc
 - placement of global options before subcommands.
 - which commands require project configuration and which interfaces remain project-independent.
 - the configuration and lockfile names.
-- the development status of installation, lockfile, and push-back functionality.
+- the development status of installation, lockfile, and local synchronization functionality.
 
 Examples MUST use implemented behavior.
 The fixture SHOULD be concise and self-contained, without requiring source or specification inspection for usage.

@@ -31,24 +31,25 @@ The index MUST be kept complete and accurate when specifications are added, remo
 ## Specification documents
 
 - `./specs/intro.md` — Index of project specifications.
-- `./specs/dictionary.md` — Shared project terminology.
-- `./specs/architecture/entities.md` — Conventions for typed project data and boundary models.
-- `./specs/architecture/errors.md` — Conventions for representing and propagating diagnostics.
-- `./specs/architecture/modules_layout.md` — Project module responsibilities and dependency boundaries.
+- `./specs/dictionary.md` — Shared terminology for dependencies, entry ownership, and project state.
+- `./specs/architecture/entities.md` — Shared data modeling and entity ownership conventions.
+- `./specs/architecture/errors.md` — Failure classification, representation, and propagation conventions.
+- `./specs/architecture/modules_layout.md` — System boundaries and ownership across vcsinstall and shared infrastructure.
 - `./specs/architecture/naming.md` — Project and code naming conventions.
+- `./specs/architecture/python.md` — General Python coding and documentation conventions.
 - `./specs/architecture/tests.md` — Requirements for project tests.
-- `./specs/behavior/cache.md` — The shared repository cache contract.
-- `./specs/behavior/cli.md` — The command invocation, selection, and result contract.
-- `./specs/behavior/config.md` — The project declaration and configuration contract.
-- `./specs/behavior/files-and-directories.md` — The file and directory management contract.
-- `./specs/behavior/locking.md` — The dependency revision and installation state contract.
-- `./specs/behavior/lockfile.md` — The persisted installation state format and file I/O contract.
+- `./specs/behavior/cache.md` — Repository-cache policy and its application of shared storage contracts.
+- `./specs/behavior/cli.md` — CLI syntax, option semantics, command behavior, and patch output failure handling.
+- `./specs/behavior/config.md` — The project declaration format and configuration contract.
+- `./specs/behavior/files-and-directories.md` — The entry destination ownership and file-tree management contract.
+- `./specs/behavior/locking.md` — The dependency state and operation lifecycle contract.
+- `./specs/behavior/lockfile.md` — The persisted revision and installation state format and file I/O contract.
 - `./specs/behavior/skill_fixtures.md` — Requirements for built-in skill documentation.
-- `./specs/behavior/vcs-interaction.md` — The shared repository access and change delivery contract.
+- `./specs/behavior/vcs-interaction.md` — Repository access, detection, and source/publication interaction contracts.
 - `./specs/behavior/vcs/git.md` — The Git source contract.
-- `./specs/behavior/vcs/filesystem.md` — The filesystem source contract.
-- `./specs/behavior/vcs/noop.md` — The test-only noop source contract.
-- `./specs/behavior/hosting/git.md` — The native Git delivery contract.
+- `./specs/behavior/vcs/filesystem.md` — The filesystem repository source contract.
+- `./specs/behavior/vcs/noop.md` — The noop source contract for controlled repository views.
+- `./specs/behavior/hosting/git.md` — Native Git repository access and delivery.
 - `./specs/behavior/hosting/github.md` — The GitHub contribution and review contract.
 - `./specs/behavior/hosting/filesystem.md` — The filesystem delivery contract.
 - `./specs/behavior/hosting/noop.md` — The test-only noop hosting contract.

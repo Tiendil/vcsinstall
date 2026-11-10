@@ -298,6 +298,7 @@ Follow the static typing suppression rules in `specs/architecture/entities.md`.
 ```toml donna
 id = "run_tests_script"
 kind = "donna.lib.run_script"
+timeout = 180
 save_stdout_to = "tests_output"
 goto_on_success = "finish"
 goto_on_failure = "fix_tests"

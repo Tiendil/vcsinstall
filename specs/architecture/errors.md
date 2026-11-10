@@ -56,6 +56,8 @@ Submodule roots MAY inherit their parent module's corresponding root.
 Category roots MUST explicitly use `EnvironmentError`/`InternalError`, not an ambiguous `Error` or boundary-only name.
 Specific errors MUST belong where useful context can be added.
 Unique cases SHOULD have subclasses.
+Mismatching relationships detected by configuration and lockfile consistency guards MUST use workspace-owned errors that identify that relationship.
+An obsolete recorded baseline without a corresponding declaration MUST remain distinguishable from a missing or unusable baseline required by an operation.
 Owners MUST export `errors` from their package initializer.
 Production errors MUST NOT live in tests; test-only errors MAY verify handling.
 
@@ -64,10 +66,8 @@ Production errors MUST NOT live in tests; test-only errors MAY verify handling.
 vcsinstall's environment-error base MUST inherit `llm_tool_cli.core.errors.EnvironmentError`, identify vcsinstall-owned failures for policy, and inherit the shared default exit status without overriding it.
 Module environment-error categories MUST derive from that project base, directly or through a parent module's category.
 Errors MUST remain presentation-independent Pydantic models, define `code`/`message`, and MUST NOT inherit `Exception`.
-They MAY add guidance and typed context.
-Leaf classes SHOULD declare messages/guidance; call sites SHOULD supply only varying context.
-Messages and guidance MAY use `{error.<field>}` formatting.
-Diagnostic data MUST follow the shared contract in `specs/architecture/errors.md` in `llm-tool-cli`.
+They MAY add typed context.
+Environment-error data and corrective guidance for vcsinstall-owned errors MUST follow the Environment errors contract under Error data in `specs/architecture/errors.md` in `llm-tool-cli`, including its `ways_to_fix` and error-construction requirements.
 Error bases MUST NOT depend on cells, formatters, or CLI output.
 
 The project internal base MUST inherit `llm_tool_cli.core.errors.InternalError` and use its shared message and details facilities.
@@ -132,6 +132,10 @@ Unexpected bugs MUST remain exceptions; blanket conversion MUST NOT hide them.
 Translation SHOULD add application meaning or recovery and SHOULD retain useful private causes.
 
 ## CLI mapping
+
+Source input validation MUST return shared `InvalidArguments` values for malformed or unsupported incoming selections.
+Runtime operations MUST propagate those errors without reclassification.
+Persisted declaration and lock validation MUST retain backend-specific diagnostics through workspace loading.
 
 `llm_tool_cli` MUST own skill failures and protocol-option validation/diagnostics.
 Before result-based execution, Typer parsing MAY use standard invalid-argument behavior, including `typer.BadParameter`, `click.UsageError`, or `typer.Exit`.
